@@ -1,0 +1,286 @@
+{
+  "project_overview": {
+    "name": "Mo baile (Mobile Element Recorder)",
+    "tagline": "Desktop UI Inspector, Live Streamer, Network Interceptor & Automated Code Generator for iOS and Android",
+    "description": "Ferramenta desktop de alta performance desenvolvida especificamente para engenheiros de automação de testes (QA / SDET), desenvolvedores mobile e analistas de dados. O software substitui o fluxo lento e travado de ferramentas clássicas (como Appium Inspector e UI Automator Viewer) ao integrar espelhamento contínuo de tela com baixíssima latência, passagem direta de toques do mouse para o dispositivo físico/emulador, escuta passiva de eventos, geração automática de código Page Objects em Appium/Python, inspeção de tráfego de rede HTTP/HTTPS em tempo real e auditoria contínua de eventos de Firebase Analytics.",
+    "target_platform": "macOS (otimizado para macOS Ventura, Sonoma e Sequoia, suporte a telas Retina / Liquid Retina)",
+    "standard_window_dimensions": {
+      "default_resolution": "1440x900 px (Proporção Apple canônica 16:10)",
+      "minimum_resolution": "1100x720 px",
+      "behavior": "Layout multi-colunas responsivo com splitters redimensionáveis, painéis colapsáveis e Modo Zen para foco"
+    },
+    "supported_mobile_platforms": [
+      {
+        "platform": "iOS",
+        "methods": "Simuladores e iPhones físicos via WebDriverAgent (WDA REST API na porta 8100) e Quartz Event Tap (macOS) para escuta passiva de cliques."
+      },
+      {
+        "platform": "Android",
+        "methods": "Emuladores e aparelhos físicos via ADB (screencap contínuo, uiautomator dump, getevent de baixo nível, túnel reverso e proxy global)."
+      }
+    ]
+  },
+
+  "core_value_propositions": [
+    {
+      "feature": "Live Screen Mirroring com Frame-Diff Settle",
+      "description": "Streaming em tempo real do dispositivo móvel sem congelar a UI. Detecta automaticamente quando a tela se estabiliza (diff_threshold) para disparar a extração da hierarquia de elementos sem intervenção do usuário."
+    },
+    {
+      "feature": "Direct Tap Forwarding (Interação Direta)",
+      "description": "Ao clicar com o mouse sobre o espelho da tela no Mac, o software calcula as coordenadas nativas do aparelho e executa o toque físico instantaneamente no aparelho/emulador."
+    },
+    {
+      "feature": "Passive Event Sniffing (Escuta Passiva)",
+      "description": "O usuário pode mexer diretamente no aparelho com o dedo ou no simulador; o app detecta as coordenadas tocadas via Quartz (macOS) ou getevent (Android), localiza o elemento na árvore e gera o código automaticamente."
+    },
+    {
+      "feature": "Dual-File Page Object Code Generation",
+      "description": "Gera código de automação limpo e desacoplado, separando em duas estruturas: Ações (métodos em pages/) e Locators/Objetos (dicionários em locators/). Suporta 3 estratégias de localizador: ID/Accessibility, XPath Relativo e Coordenadas Lógicas."
+    },
+    {
+      "feature": "Inspetor de Tráfego de Rede HTTP/HTTPS Embutido",
+      "description": "Inspirado na arquitetura do HTTP Toolkit, conta com um proxy MITM interno (MobileNetworkProxy na porta 8082). Captura requisições e respostas de backend disparadas durante as ações de tela, permitindo inspecionar headers, payloads e gerar asserções de contrato de API."
+    },
+    {
+      "feature": "Auditor de Tagueamento & Firebase Analytics",
+      "description": "Stream contínuo de logs de analytics (FA e FA-SVC via logcat no Android e Apple Unified Logging no iOS). Parseia parâmetros de eventos em tempo real, permite exportar em JSON e copiar em formato TSV estruturado para colar direto em Google Sheets (integrado com a skill /tagueamento)."
+    },
+    {
+      "feature": "Suíte de Execução Integrada (Flow Runner)",
+      "description": "Permite visualizar a lista ordenada de passos gravados, reordenar, editar valores de input e executar o fluxo de ponta a ponta em segundo plano, com validação prévia de conectividade e terminal de logs com streaming em tempo real."
+    }
+  ],
+
+  "technical_architecture": {
+    "runtime": "Python 3.9+ com Tkinter / Ttk",
+    "ui_styling_approach": "Widgets customizados como FluidPillButton (substitui os botões padrão do Tkinter eliminando bezels brancos nativos do macOS, provendo controle de hover, pressed, borders e cores Apple HIG)",
+    "video_engine": "OpenCV (cv2) + Pillow (PIL) para renderização do vídeo de splash em 60 FPS e pipeline de frames no Canvas",
+    "modules_map": {
+      "recorder/ui.py": "Módulo central da interface gráfica. Orquestra a janela principal, top bar, canvas de espelhamento, alternador de visão Page Objects vs Inspetor HTTP, fila de eventos assíncronos e alternador de temas.",
+      "recorder/http_viewer.py": "Contém HTTPInspectorFrame (componente embutido na tela principal) e HTTPViewerWindow (janela destacada). Gerencia tabelas de requisições HTTP e eventos Firebase Analytics com filtros e inspetor de payload.",
+      "recorder/automation_dialogs.py": "Diálogos secundários: AutomationStructureDialog (tabela de passos gravados, ordenação e deleção) e AutomationExecutionDialog (terminal de execução com log streaming).",
+      "recorder/stream_engine.py": "Thread RealTimeStreamEngine: streaming contínuo de tela com cálculo de MSE/diferença de frames para identificar tela estável.",
+      "recorder/passive_listener.py": "Listeners de baixo nível para capturar toques físicos: AndroidPassiveListener (adb shell getevent) e IOSPassiveListener (Quartz CGEventTap).",
+      "recorder/element_parser.py": "Parser de árvore XML (UIHierarchyParser) para Android (uiautomator dump) e iOS (WDA source XML). Calcula retângulos delimitadores (bounds), centro geométrico e nomes canônicos de elementos.",
+      "recorder/codegen.py": "Gerador de código (CodeGenerator) que transforma cliques e inputs em código Python/Appium padronizado para Page Objects.",
+      "recorder/network_interceptor.py": "Servidor proxy MITM local (MobileNetworkProxy) que roda em background na porta 8082 tratando tráfego HTTP e túneis TLS CONNECT.",
+      "recorder/analytics_listener.py": "Subprocesso de leitura contínua de logs ADB/iOS focado em tags de Firebase Analytics (FA/FA-SVC).",
+      "recorder/flow_runner.py": "Orquestrador de execução da automação: checa pré-condições de hardware/servidor, compila o script oculto .flow_runner.py e executa em subprocesso.",
+      "recorder/adb_bridge.py": "Ponte de comandos de baixo nível com o Android Debug Bridge (ADB), incluindo configuração de portas reversas e proxy do sistema.",
+      "recorder/ios_bridge.py": "Ponte de comunicação HTTP com o WebDriverAgent (WDA) do iOS.",
+      "recorder/device_watcher.py": "Monitor em segundo plano que identifica conexão e desconexão de aparelhos a cada 1.5s.",
+      "recorder/splash.py": "Player de abertura fluida que reproduz o vídeo splash_app.mp4 e transiciona suavemente para o workspace."
+    }
+  },
+
+  "current_ui_structure_and_layout": {
+    "window_type": "Desktop Mac Application com AppKit ProcessName configurado para 'Mo baile'",
+    "regions": {
+      "top_bar": {
+        "height": "48px",
+        "description": "Barra superior com controles de sistema e estado",
+        "elements": [
+          {"name": "btn_toggle_mirror", "type": "FluidPillButton", "label": "[| ] Espelho", "purpose": "Oculta ou exibe o painel de espelho da tela mobile"},
+          {"name": "platform_selector", "type": "Radiobuttons/Segment", "options": ["iOS", "Android"], "purpose": "Alterna o contexto de comandos e parsing"},
+          {"name": "device_combo", "type": "Ttk Combobox", "purpose": "Lista dispositivos detectados via ADB e WDA em tempo real"},
+          {"name": "btn_toggle_stream", "type": "FluidPillButton", "label": "Pausar/Iniciar Streaming", "purpose": "Controla a thread do espelho contínuo"},
+          {"name": "auto_status_badge", "type": "Label Badge", "states": ["Streaming Ativo (Verde)", "Streaming Pausado (Vermelho)"]},
+          {"name": "theme_selector", "type": "Radiobuttons", "options": ["Escuro (Freeform)", "Claro (Notas)"], "purpose": "Alternância dinâmica de temas"},
+          {"name": "btn_view_http", "type": "FluidPillButton", "label": "Inspetor HTTP", "purpose": "Abre o inspetor em janela flutuante independente"},
+          {"name": "btn_cap", "type": "FluidPillButton (Ação Primária)", "label": "Forçar Captura", "purpose": "Captura tela e faz dump manual da árvore de elementos"}
+        ]
+      },
+      "config_bar": {
+        "height": "40px",
+        "description": "Barra horizontal secundária de parâmetros de automação",
+        "elements": [
+          {"name": "entry_key", "type": "Text Input", "label": "Chave dos Locators", "default": "onboarding_credito_objs", "purpose": "Define o nome do dicionário no arquivo de locators"},
+          {"name": "locator_strategy", "type": "Radiobuttons", "options": ["ID / Accessibility", "XPath", "Coordenadas (Position)"], "purpose": "Define como o seletor é construído no código"},
+          {"name": "cb_passive", "type": "Checkbox", "label": "Modo Passivo (Aparelho)", "purpose": "Ativa a captura de toques físicos feitos com a mão no aparelho"},
+          {"name": "btn_zen", "type": "FluidPillButton", "label": "Modo Zen", "purpose": "Colapsa as barras de cabeçalho para focar exclusivamente na tela e no código"}
+        ]
+      },
+      "workspace_split": {
+        "type": "Horizontal PanedWindow (Splitter redimensionável)",
+        "column_left_mirror": {
+          "width_share": "~38% (min 380px)",
+          "header": {
+            "title": "ESPELHO DO IOS/ANDROID (TEMPO REAL)",
+            "actions": ["Botão Inspecionar Rápido"]
+          },
+          "canvas_container": {
+            "type": "Interactive Canvas com cursor crosshair",
+            "behavior": "Apresenta a tela do celular em streaming com aspect ratio preservado. Ao passar o mouse, exibe bounding box azul/teal do elemento sob o cursor. Ao clicar, desenha indicador de clique e gera o código.",
+            "sub_options": ["Checkbox: Repassar toque ao clicar no espelho (Direct Tap Forwarding)"]
+          }
+        },
+        "column_right_workspace": {
+          "width_share": "~62% (min 670px)",
+          "top_navigation_bar": {
+            "view_switcher": {
+              "type": "Segmented Control",
+              "tabs": ["Automação (Page Objects)", "Tráfego de Rede (HTTP)"]
+            },
+            "automation_subcontrols": {
+              "subtabs": ["Ações", "Objetos"],
+              "split_toggle": "Botão Split: Lado a Lado (permite ver ambos os arquivos ou apenas um em abas)",
+              "btn_view_structure": "Botão Estrutura (abre tabela de passos)",
+              "btn_run_automation": "Botão ▶ Rodar Automação (botão verde de execução)"
+            }
+          },
+          "view_1_automation": {
+            "actions_editor": {
+              "title": "AÇÃO (pages/)",
+              "controls": ["Copiar", "Salvar em arquivo"],
+              "editor": "ScrolledText com formatação visual de sintaxe Python (métodos def get_...)"
+            },
+            "objects_editor": {
+              "title": "OBJETOS (locators/)",
+              "controls": ["Copiar", "Salvar em arquivo", "Limpar tudo"],
+              "editor": "ScrolledText com formatação visual de dicionários de locators"
+            },
+            "footer_element_details": "Barra horizontal inferior que exibe atributos do elemento selecionado (Tag, Bounds, Texto, ID, Resource-ID)"
+          },
+          "view_2_network_and_analytics": {
+            "type": "HTTPInspectorFrame embutido",
+            "internal_tabs": [
+              {
+                "tab_name": "🌐 Tráfego HTTP/HTTPS",
+                "controls": ["Status do Proxy (porta 8082)", "Configurar Proxy no Android via ADB", "Limpar Tráfego", "Buscar URL/Endpoint"],
+                "components": [
+                  "Tabela com histórico de requisições (Método, Status Code, Host, Path, Latência/Duração)",
+                  "Painel inferior detalhado com abas de Request (Headers, Body) e Response (Headers, Body formatado em JSON)"
+                ]
+              },
+              {
+                "tab_name": "🏷️ Tagueamento Analytics",
+                "controls": ["Status do Listener (Firebase / FA)", "Filtro por nome de evento", "Copiar Selecionado em TSV (para Google Sheets)", "Exportar log_obtido.json"],
+                "components": [
+                  "Tabela em tempo real de eventos disparados (Timestamp, Nome do Evento, Qtd Parâmetros, Origem)",
+                  "Visualizador de Bundle com chave e valor de cada dimensão/métrica do analytics"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "status_bar": {
+        "height": "24px",
+        "description": "Rodapé com status de conexões, coordenadas do cursor, FPS de streaming e mensagens de diagnóstico"
+      }
+    }
+  },
+
+  "design_tokens_and_color_palettes": {
+    "current_theme_freeform_dark": {
+      "name": "Freeform Dark (Inspirado no Apple Freeform & Catppuccin)",
+      "bg_color": "#141416",
+      "panel_bg": "#18181B",
+      "surface_bg": "#222226",
+      "input_bg": "#0E0E10",
+      "fg_color": "#FFFFFF",
+      "secondary_fg": "#A1A1A6",
+      "accent_color": "#00C7BE",
+      "highlight_color": "#00C7BE",
+      "border_color": "#2C2C2E",
+      "btn_bg": "#28282C",
+      "btn_hover": "#343438",
+      "select_bg": "#323238",
+      "code_action_fg": "#38BDF8",
+      "code_object_fg": "#2DD4BF",
+      "badge_active_bg": "#064E3B",
+      "badge_active_fg": "#34D399",
+      "badge_inactive_bg": "#450A0A",
+      "badge_inactive_fg": "#F87171",
+      "danger_color": "#FF453A"
+    },
+    "current_theme_notes_light": {
+      "name": "Notas Light (Inspirado no Apple Notes)",
+      "bg_color": "#FFFFFF",
+      "panel_bg": "#FFFFFF",
+      "surface_bg": "#EFEFF4",
+      "input_bg": "#FFFFFF",
+      "fg_color": "#111111",
+      "secondary_fg": "#3C3C43",
+      "accent_color": "#FF9F0A",
+      "highlight_color": "#FF9F0A",
+      "border_color": "#D1D1D6",
+      "btn_bg": "#E5E5EA",
+      "btn_hover": "#D1D1D6",
+      "select_bg": "#D1D1D6",
+      "code_action_fg": "#0284C7",
+      "code_object_fg": "#0F766E",
+      "badge_active_bg": "#DEF7EC",
+      "badge_active_fg": "#03543F",
+      "badge_inactive_bg": "#FDE8E8",
+      "badge_inactive_fg": "#9B1C1C",
+      "danger_color": "#DC2626"
+    },
+    "designer_recommended_palette": {
+      "style": "Catppuccin Macchiato / Apple System Dark HIG",
+      "tokens": {
+        "base_background": "#1E1E2E",
+        "surface_mantle": "#181825",
+        "deep_surface_crust": "#11111B",
+        "borders_separators": "#313244",
+        "text_primary": "#CDD6F4",
+        "text_secondary": "#A6ADC8",
+        "brand_accent": "#89B4FA",
+        "success_active": "#A6E3A1",
+        "warning": "#F9E2AF",
+        "error_danger": "#F38BA8",
+        "ios_identity": "#0A84FF",
+        "android_identity": "#34C759"
+      },
+      "typography": {
+        "ui_fonts": ["SF Pro Display", "SF Pro Text", "-apple-system", "Inter"],
+        "code_fonts": ["SF Mono", "JetBrains Mono", "Menlo"]
+      }
+    }
+  },
+
+  "current_ui_pain_points_and_ux_flaws": [
+    {
+      "issue": "Duas Barras Horizontais Superiores Cumulativas",
+      "impact": "A top_bar e a config_bar somadas consomem quase 90px de altura vertical, ocupando espaço útil dos editores de código e do espelho mobile. Há muitos botões e radiobuttons horizontais soltos sem hierarquia visual clara."
+    },
+    {
+      "issue": "Falta de Árvore Visual de Elementos (UI Hierarchy Tree)",
+      "impact": "Atualmente, o usuário só inspeciona clicando no espelho visual da tela; os detalhes aparecem em uma linha simples no rodapé. Falta uma árvore hierárquica navegável em nós (com ícones para Button, Input, Container, Text) que permita navegar por acessibilidade quando elementos estiverem sobrepostos."
+    },
+    {
+      "issue": "Espelho da Tela sem Moldura ou Acabamento Moderno",
+      "impact": "O canvas da tela mobile é renderizado em um retângulo plano sem chanfro, sem notch ou bordas orgânicas de dispositivo móvel moderno, parecendo uma imagem crua flutuando."
+    },
+    {
+      "issue": "Navegação Fragmentada entre Automação, Rede e Tagueamento",
+      "impact": "Embora a alternância por Segmented Control funcione, o usuário muitas vezes precisa correlacionar o clique no botão com a requisição de rede que ele disparou. Seria ideal ter indicadores/badges numéricos de atividade em cada aba (ex: 'Rede [12]', 'Analytics [4]')."
+    },
+    {
+      "issue": "Controles de Radiobutton Tradicionais",
+      "impact": "O uso de Radiobuttons clássicos do Tkinter na seleção de plataforma e estratégia de localizador quebra a estética contemporânea do macOS, que prioriza Segmented Controls pill-shaped compactos."
+    }
+  ],
+
+  "claude_designer_deliverable_requirements": {
+    "objective": "Desenvolver uma proposta de interface moderna, limpa, refinada e ultra produtiva para o Mobile Element Recorder, adotando rigorosamente o design language do macOS (Apple Human Interface Guidelines) e ferramentas como Xcode 16, Instruments, Raycast, Linear e HTTP Toolkit.",
+    "target_resolution": "1440 x 900 px (Canvas principal de apresentação)",
+    "expected_layout_concept": {
+      "toolbar": "macOS Unified Toolbar única no topo (traffic lights nativos, seletor de plataforma [🍎 iOS | 🤖 Android] estilizado em segmented control, dropdown de dispositivo com badge pulsante de status, toggles elegantes de espelho/streaming/tap-forwarding, e ações primárias em destaque no canto direito).",
+      "main_workspace": {
+        "structure": "3 colunas redimensionáveis ou 2 colunas com drawer/painel retrátil de hierarquia",
+        "column_1_device_viewport": "Espelho do celular integrado com moldura moderna (bezel fino, cantos arredondados, aspect ratio mantido), overlays com cantos suaves ao passar o mouse, microanimação de ripple/pulso no ponto de clique, e dock inferior de ações rápidas do aparelho (Voltar, Home, Girar).",
+        "column_2_hierarchy_inspector": "Campo de busca rápida por texto/ID/XPath, árvore expansível de nós de acessibilidade com ícones específicos por tipo de componente, e painel de atributos chave-valor com botão de cópia em 1 clique.",
+        "column_3_code_and_network_suite": "Header com abas unificadas: [ Page Objects | Rede HTTP (MITM) | Analytics (Firebase) ]. Na aba Page Objects: separação clara entre Ações e Objetos, seletores de estratégia em pills compactas, syntax highlighting refinado, botão de destaque para Rodar Automação e Copiar Código."
+      },
+      "footer_status_bar": "Barra sutil no rodapé exibindo status dos daemons locais (WDA 8100, ADB Server, Proxy 8082), FPS real do stream, coordenadas do mouse em pixels lógicos e latência média."
+    },
+    "required_screen_states": [
+      "1. Estado Conectado & Inspecionando (Default State - com espelho ativo, código gerado e requisições capturadas)",
+      "2. Estado Desconectado / Vazio (Empty State - ilustração sofisticada orientando conexão via USB/WDA/ADB)",
+      "3. Estado da Aba de Tráfego de Rede (HTTP Inspector ativo com lista de requisições e visualizador de payload)",
+      "4. Modal / Diálogo de Execução da Automação (Flow Runner com terminal escuro e progresso dos passos)"
+    ]
+  }
+}

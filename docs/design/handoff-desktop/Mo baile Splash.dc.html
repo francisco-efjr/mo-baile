@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><style>
+html,body{margin:0;background:#97D5EF;overflow:hidden}
+@keyframes sp-stage{0%{opacity:0;transform:scale(1.04)}100%{opacity:1;transform:scale(1)}}
+@keyframes sp-drift{0%{opacity:0;transform:translate3d(-180px,26px,0) scale(.94)}60%{opacity:1}100%{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+@keyframes sp-bob{0%{transform:translate3d(0,0,0) rotate(-1.1deg)}50%{transform:translate3d(0,-11px,0) rotate(1.1deg)}100%{transform:translate3d(0,0,0) rotate(-1.1deg)}}
+@keyframes sp-ripple{0%{opacity:0;transform:scale(.55)}35%{opacity:.5}100%{opacity:0;transform:scale(1.35)}}
+@keyframes sp-wipe{0%{clip-path:inset(0 100% 0 0);transform:translate3d(-14px,0,0)}100%{clip-path:inset(0 0 0 0);transform:translate3d(0,0,0)}}
+@keyframes sp-rise{0%{opacity:0;transform:translate3d(0,14px,0)}100%{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes sp-bar{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+@keyframes sp-shim{0%{transform:translate3d(-40px,0,0);opacity:0}30%{opacity:.5}100%{transform:translate3d(40px,0,0);opacity:0}}
+@keyframes sp-spark{0%{opacity:0;transform:scale(.4) rotate(0deg)}45%{opacity:.9;transform:scale(1) rotate(35deg)}100%{opacity:0;transform:scale(.5) rotate(70deg)}}
+@keyframes sp-out{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.035)}}
+</style></helmet>
+<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#97D5EF;overflow:hidden">
+<div ref="{{ stageRef }}" style="width:1280px;height:720px;flex:none;transform-origin:center center">
+<div style="width:1280px;height:720px;position:relative;overflow:hidden;background:radial-gradient(120% 90% at 68% 18%,#B4E4F6 0%,#97D5EF 58%,#7FC7E6 100%);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;animation:sp-out .34s cubic-bezier(.4,0,1,1) 2.22s both">
+  <div style="position:absolute;inset:0;animation:sp-stage .38s cubic-bezier(.16,1,.3,1) both;will-change:opacity,transform">
+
+    <div style="position:absolute;left:96px;top:126px;width:580px;height:540px;animation:sp-drift .82s cubic-bezier(.16,1,.3,1) .08s both;will-change:transform,opacity">
+      <div style="position:absolute;inset:0;animation:sp-bob 3.4s ease-in-out .9s infinite;will-change:transform">
+        <img src="assets/mascot.png" alt="Mo baile" style="width:580px;height:540px;display:block;filter:drop-shadow(0 22px 26px rgba(21,32,43,.16))">
+      </div>
+      <div style="position:absolute;left:118px;top:330px;width:344px;height:150px;border-radius:50%;border:2px solid rgba(21,32,43,.35);animation:sp-ripple 2.1s ease-out .55s infinite;will-change:transform,opacity"></div>
+      <div style="position:absolute;left:70px;top:308px;width:440px;height:194px;border-radius:50%;border:2px solid rgba(21,32,43,.22);animation:sp-ripple 2.1s ease-out .95s infinite;will-change:transform,opacity"></div>
+    </div>
+
+    <div style="position:absolute;left:668px;top:250px;width:520px">
+      <div style="overflow:hidden">
+        <div style="font-size:96px;font-weight:700;letter-spacing:-.045em;color:#15202B;line-height:1;animation:sp-wipe .62s cubic-bezier(.16,1,.3,1) .42s both;will-change:clip-path,transform">Mo baile</div>
+      </div>
+      <div style="margin-top:14px;display:flex;align-items:center;gap:12px;animation:sp-rise .42s cubic-bezier(.16,1,.3,1) .74s both">
+        <div style="width:38px;height:2px;background:#E88BA5"></div>
+        <div style="font:600 15px/1 'SF Mono',Menlo,monospace;letter-spacing:.24em;color:#2E5364">VULGO, FAZ TUDO!</div>
+      </div>
+      <div style="margin-top:52px;width:392px;animation:sp-rise .4s cubic-bezier(.16,1,.3,1) .86s both">
+        <div style="height:4px;border-radius:2px;background:rgba(21,32,43,.14);overflow:hidden">
+          <div style="height:100%;border-radius:2px;background:linear-gradient(90deg,#E88BA5,#6BBF6A);transform-origin:left;animation:sp-bar 1.24s cubic-bezier(.3,.05,.2,1) .9s both;will-change:transform"></div>
+        </div>
+        <div style="margin-top:11px;height:14px;position:relative;font:11px/1 'SF Mono',Menlo,monospace;color:#2E5364;letter-spacing:.06em">
+          <span style="position: absolute; left: 0; animation: sp-rise .2s ease-out .92s both,sp-out .18s ease-in 1.32s both; display: none">iniciando ADB server</span>
+          <span style="position: absolute; left: 0; animation: sp-rise .2s ease-out 1.36s both,sp-out .18s ease-in 1.76s both; display: none">conectando WebDriverAgent · 8100</span>
+          <span style="position: absolute; left: 0; animation: sp-rise .2s ease-out 1.8s both; display: none"></span>
+          <span style="position:absolute;right:0;color:#3F8F4E;animation:sp-rise .24s cubic-bezier(.16,1,.3,1) 2.02s both">:3</span>
+        </div>
+      </div>
+      <div style="position: absolute; left: 2px; top: 118px; width: 180px; height: 2px; background: linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent); animation: sp-shim 1.1s ease-in-out .5s 2 both; display: none"></div>
+    </div>
+
+    <div style="position:absolute;left:1116px;top:118px;width:34px;height:34px;animation:sp-spark .9s ease-out 1.02s infinite">
+      <div style="position:absolute;left:15px;top:0;width:4px;height:34px;border-radius:2px;background:#fff"></div>
+      <div style="position:absolute;left:0;top:15px;width:34px;height:4px;border-radius:2px;background:#fff"></div>
+    </div>
+    <div style="position:absolute;left:640px;top:602px;width:20px;height:20px;animation:sp-spark .9s ease-out 1.48s infinite">
+      <div style="position:absolute;left:8px;top:0;width:3px;height:20px;border-radius:2px;background:#fff"></div>
+      <div style="position:absolute;left:0;top:8px;width:20px;height:3px;border-radius:2px;background:#fff"></div>
+    </div>
+
+    <div style="position:absolute;left:0;right:0;bottom:26px;text-align:center;font:10.5px/1 'SF Mono',Menlo,monospace;letter-spacing:.18em;color:rgba(21,32,43,.42);animation:sp-rise .4s ease-out 1.1s both">By. Francisco Edson Jr ·</div>
+  </div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:720}}">class Component extends DCLogic {
+  stage = React.createRef();
+  fit = () => {
+    const el = this.stage.current;
+    if (!el) return;
+    const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    el.style.transform = 'scale(' + s + ')';
+  };
+  componentDidMount() {
+    this.fit();
+    window.addEventListener('resize', this.fit);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.fit);
+  }
+  renderVals() {
+    return { stageRef: this.stage };
+  }
+}</script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+{
+  "engine.info": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "version": "2.0.0",
+      "platform": "android",
+      "device_id": null,
+      "adb_path": "adb",
+      "adb_available": true,
+      "scrcpy_available": false,
+      "wda_url": "http://localhost:8100",
+      "proxy": {
+        "host": "127.0.0.1",
+        "port": 8082,
+        "running": false
+      },
+      "methods": [
+        "analytics.clear",
+        "analytics.events",
+        "analytics.start",
+        "analytics.stop",
+        "codegen.record",
+        "codegen.reset",
+        "codegen.steps",
+        "devices.list",
+        "devices.watch_start",
+        "devices.watch_stop",
+        "diagnostics.check",
+        "emulators.boot",
+        "emulators.list",
+        "engine.info",
+        "engine.shutdown",
+        "hierarchy.dump",
+        "hierarchy.element_at",
+        "input.tap",
+        "input.text",
+        "proxy.clear",
+        "proxy.events",
+        "proxy.start",
+        "proxy.stop",
+        "screen.capture",
+        "screen.size",
+        "session.select_device",
+        "simulators.boot",
+        "simulators.list",
+        "simulators.shutdown",
+        "stream.start",
+        "stream.stats",
+        "stream.stop",
+        "wda.start",
+        "wda.status"
+      ]
+    }
+  },
+  "session.select_device": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "platform": "android",
+      "device_id": "emulator-5554"
+    }
+  },
+  "hierarchy.dump": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "count": 1,
+      "elements": [
+        {
+          "tag": "node",
+          "class_name": "android.widget.Button",
+          "resource_id": "br.app:id/btn_ok",
+          "text": "Continuar",
+          "content_desc": "Botao continuar",
+          "clickable": true,
+          "bounds": [
+            10,
+            20,
+            110,
+            70
+          ],
+          "area": 5000,
+          "package": "br.app",
+          "platform": "android",
+          "depth": 0,
+          "parent_idx": null,
+          "chip_type": "B",
+          "display_name": "Continuar"
+        }
+      ]
+    }
+  },
+  "hierarchy.element_at": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "element": {
+        "tag": "node",
+        "class_name": "android.widget.Button",
+        "resource_id": "br.app:id/btn_ok",
+        "text": "Continuar",
+        "content_desc": "Botao continuar",
+        "clickable": true,
+        "bounds": [
+          10,
+          20,
+          110,
+          70
+        ],
+        "area": 5000,
+        "package": "br.app",
+        "platform": "android",
+        "depth": 0,
+        "parent_idx": null,
+        "chip_type": "B",
+        "display_name": "Continuar"
+      }
+    }
+  },
+  "codegen.record": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "var_name": "BOTAO_CONTINUAR",
+      "object_code": "    BOTAO_CONTINUAR = (AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
+      "action_code": "    def click_continuar(self):\n        self.click_at_position(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 60, 45)\n",
+      "element": {
+        "tag": "node",
+        "class_name": "android.widget.Button",
+        "resource_id": "br.app:id/btn_ok",
+        "text": "Continuar",
+        "content_desc": "Botao continuar",
+        "clickable": true,
+        "bounds": [
+          10,
+          20,
+          110,
+          70
+        ],
+        "area": 5000,
+        "package": "br.app",
+        "platform": "android",
+        "depth": 0,
+        "parent_idx": null,
+        "chip_type": "B",
+        "display_name": "Continuar"
+      },
+      "step_count": 1
+    }
+  },
+  "codegen.steps": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "steps": [
+        {
+          "step_num": 1,
+          "action_type": "click",
+          "var_name": "BOTAO_CONTINUAR",
+          "element_name": "Continuar",
+          "class_name": "android.widget.Button",
+          "strategy": "position",
+          "locator_value": "(AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
+          "coords": [
+            60,
+            45
+          ],
+          "input_text": null,
+          "package": "br.app",
+          "platform": "android"
+        }
+      ]
+    }
+  },
+  "screen.capture": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "width": 30,
+      "height": 60,
+      "source_width": 60,
+      "source_height": 120
+    }
+  },
+  "screen.size": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "width": 1080,
+      "height": 2400
+    }
+  },
+  "stream.stats": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false
+    }
+  },
+  "proxy.events": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "events": [],
+      "total": 0
+    }
+  },
+  "devices.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "devices": []
+    }
+  },
+  "erro_dominio": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Coordenada x fora da faixa: -1",
+      "data": {
+        "code": "invalid_input",
+        "message": "Coordenada x fora da faixa: -1"
+      }
+    }
+  },
+  "diagnostics.check": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "ios": {
+        "platform": "ios",
+        "title": "iOS · WebDriverAgent",
+        "ready": false,
+        "checks": [
+          {
+            "label": "Ferramentas do Xcode",
+            "state": "ok",
+            "detail": "xcrun disponivel",
+            "action": null
+          },
+          {
+            "label": "Simulador instalado",
+            "state": "ok",
+            "detail": "2 disponiveis",
+            "action": null
+          },
+          {
+            "label": "Simulador ligado",
+            "state": "ok",
+            "detail": "iPhone 16 Pro",
+            "action": null
+          },
+          {
+            "label": "WebDriverAgent",
+            "state": "warn",
+            "detail": "Sem resposta em http://localhost:8100 (servidor parado). O espelho funciona; toque e hierarquia precisam dele.",
+            "action": "start_wda"
+          }
+        ]
+      },
+      "android": {
+        "platform": "android",
+        "title": "Android · ADB",
+        "ready": false,
+        "checks": [
+          {
+            "label": "ADB instalado",
+            "state": "ok",
+            "detail": "adb",
+            "action": null
+          },
+          {
+            "label": "Dispositivo autorizado",
+            "state": "warn",
+            "detail": "Nenhum aparelho conectado.",
+            "action": null
+          },
+          {
+            "label": "Emulador disponivel",
+            "state": "warn",
+            "detail": "2 AVD(s) parados.",
+            "action": "boot_avd"
+          }
+        ]
+      }
+    }
+  },
+  "simulators.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "simulators": [
+        {
+          "udid": "1A2B3C4D-0000-4000-8000-0000000000AA",
+          "name": "iPhone 16 Pro",
+          "state": "Booted",
+          "runtime": "iOS 18.6",
+          "booted": true
+        },
+        {
+          "udid": "1A2B3C4D-0000-4000-8000-0000000000BB",
+          "name": "iPad Air 11-inch (M3)",
+          "state": "Shutdown",
+          "runtime": "iOS 18.6",
+          "booted": false
+        }
+      ]
+    }
+  },
+  "simulators.boot": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "udid": "1A2B3C4D-0000-4000-8000-0000000000AA",
+      "message": "Simulador iniciado e janela trazida para a frente.",
+      "booted": true
+    }
+  },
+  "emulators.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "avds": [
+        "Pixel_9",
+        "Pixel_9_Pro"
+      ]
+    }
+  },
+  "emulators.boot": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "name": "Pixel_9",
+      "starting": true
+    }
+  },
+  "wda.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "wda_running": false,
+      "appium_installed": true,
+      "appium_running": false,
+      "appium_url": "http://127.0.0.1:4723",
+      "wda_url": "http://localhost:8100"
+    }
+  },
+  "wda.start": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "udid": "1A2B3C4D-0000-4000-8000-0000000000AA",
+      "message": "WebDriverAgent respondendo em http://localhost:8100.",
+      "wda_running": true
+    }
+  },
+  "notif_proxy.event": {
+    "jsonrpc": "2.0",
+    "method": "proxy.event",
+    "params": {
+      "id": 7,
+      "timestamp": 1757030000.5,
+      "time": "14:32:10.123",
+      "method": "POST",
+      "url": "https://api.exemplo.com.br/v2/credito/simulacao",
+      "host": "api.exemplo.com.br",
+      "path": "/v2/credito/simulacao",
+      "status_code": 200,
+      "status_text": "OK",
+      "request_headers": {
+        "Content-Type": "application/json",
+        "Authorization": "«redigido» (32 chars)"
+      },
+      "request_body": "{\"valor\":1000}",
+      "response_headers": {
+        "Content-Type": "application/json"
+      },
+      "response_body": "{\"parcelas\":12}",
+      "duration_ms": 182.7,
+      "protocol": "HTTP/1.1",
+      "is_tunnel": false,
+      "error": null,
+      "request_bytes": 14,
+      "response_bytes": 15,
+      "body_truncated": false
+    }
+  },
+  "notif_analytics.event": {
+    "jsonrpc": "2.0",
+    "method": "analytics.event",
+    "params": {
+      "id": 3,
+      "time": "14:32:11.001",
+      "timestamp": 1757030001.0,
+      "platform": "android",
+      "tag": "FA",
+      "event_name": "screen_view",
+      "params": {
+        "screen_name": "onboarding_credito",
+        "step": 2,
+        "first_open": true
+      },
+      "raw_log": "Logging event: screen_view"
+    }
+  }
+}

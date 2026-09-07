@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Segredos e configuracao local
+.env
+.env.local
+.env.*.local
+
+# Ferramentas
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+
+# Swift / SPM
+apps/MoBaile/.build/
+apps/MoBaile/.swiftpm/
+*.xcodeproj/
+DerivedData/
+*.xcresult/
+
+# Artefatos de empacotamento: gerados por tools/package_macos_app.sh
+*.app/
+
+# Editores
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Artefatos temporarios da automacao
+.flow_runner.py
+.automation_cache/

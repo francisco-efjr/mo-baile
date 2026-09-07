@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{background:#1E1E2E;border:1px solid rgba(0,0,0,.14);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.28);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:24px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}a{color:#2a78d6}a:hover{color:#1a5cab}</style></helmet>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Paleta “Praia” (cores da imagem) + toggles de painel no estilo IDE — só a toolbar é fixa</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Todos os painéis visíveis — toggles no canto direito da toolbar</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column;background:#F2FAFD;color:#17323F">
+
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#DCF0F8;border-bottom:1px solid #C3E2EE">
+    <div style="display:flex;gap:8px;margin-right:4px"><div style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></div><div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></div><div style="width:12px;height:12px;border-radius:50%;background:#28C840"></div></div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600;letter-spacing:-.01em">Mo baile</span><span style="font-size:11px;color:#7D9EAC">Element Recorder</span></div>
+    <div style="display:flex;padding:2px;gap:2px;background:#CBE4EE;border-radius:8px;margin-left:8px">
+      <div style="padding:4px 13px;border-radius:6px;background:#FFFFFF;font-size:11.5px;font-weight:590;box-shadow:0 1px 2px rgba(23,50,63,.14)">iOS</div>
+      <div style="padding:4px 13px;border-radius:6px;font-size:11.5px;color:#5A7C8B">Android</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#FFFFFF;border:1px solid #C3E2EE;border-radius:8px;min-width:210px">
+      <div style="width:7px;height:7px;border-radius:50%;background:#6BBF6A;box-shadow:0 0 0 3px rgba(107,191,106,.22)"></div>
+      <span style="font-size:11.5px">iPhone 15 Pro · 17.5 · Simulador</span><span style="margin-left:auto;font-size:9px;color:#8FA9B5">▾</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;margin-left:4px">
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#E88BA5;display:flex;align-items:center;justify-content:flex-end;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div><span style="font-size:11px;color:#5A7C8B">Streaming</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#CBE4EE;display:flex;align-items:center;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.18)"></div></div><span style="font-size:11px;color:#5A7C8B">Tap forward</span></div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <div style="padding:6px 14px;border-radius:8px;background:#E88BA5;color:#FFFFFF;font-size:11.5px;font-weight:640;box-shadow:0 1px 2px rgba(23,50,63,.12)">Forçar Captura</div>
+      <div style="width:1px;height:22px;background:#C3E2EE"></div>
+      <div style="display:flex;gap:2px;padding:2px;border-radius:8px;background:#CBE4EE">
+        <div style="width:26px;height:22px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.14);display:flex;align-items:center;justify-content:center"><div style="width:13px;height:11px;border:1.4px solid #17323F;border-radius:2.5px;display:flex"><div style="width:4px;background:#17323F"></div></div></div>
+        <div style="width:26px;height:22px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.14);display:flex;align-items:center;justify-content:center"><div style="width:13px;height:11px;border:1.4px solid #17323F;border-radius:2.5px;display:flex;justify-content:center"><div style="width:4px;background:#17323F"></div></div></div>
+        <div style="width:26px;height:22px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.14);display:flex;align-items:center;justify-content:center"><div style="width:13px;height:11px;border:1.4px solid #17323F;border-radius:2.5px;display:flex;justify-content:flex-end"><div style="width:4px;background:#17323F"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+    <div style="width:376px;flex:none;display:flex;flex-direction:column;background:#E7F5FA;border-right:1px solid #C3E2EE">
+      <div style="height:34px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #C3E2EE">
+        <span style="font-size:10px;letter-spacing:.09em;color:#7D9EAC;font-weight:600">ESPELHO · TEMPO REAL</span>
+        <span style="margin-left:auto;font:500 10px 'SF Mono',Menlo,monospace;color:#3F8F4E">58 FPS</span>
+        <span style="font-size:11px;color:#8FA9B5">⌥1</span>
+      </div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:18px 0">
+        <div style="width:258px;height:540px;border-radius:40px;background:#15202B;padding:7px;box-shadow:0 0 0 1px #C3E2EE,0 14px 34px rgba(23,50,63,.22)">
+          <div style="width:100%;height:100%;border-radius:33px;overflow:hidden;background:#A8E1F2;position:relative;display:flex;flex-direction:column">
+            <div style="position:absolute;top:7px;left:50%;transform:translateX(-50%);width:76px;height:20px;border-radius:11px;background:#15202B;z-index:3"></div>
+            <div style="height:44px;flex:none"></div>
+            <div style="padding:0 18px;display:flex;flex-direction:column;gap:12px">
+              <div style="height:11px;width:62%;border-radius:3px;background:rgba(23,50,63,.22)"></div>
+              <div style="height:7px;width:86%;border-radius:3px;background:rgba(23,50,63,.13)"></div>
+              <div style="height:108px;border-radius:12px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.55) 0 7px,rgba(255,255,255,.28) 7px 14px);display:flex;align-items:flex-end;padding:8px"><span style="font:9px 'SF Mono',Menlo,monospace;color:#5A7C8B">banner</span></div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="height:34px;border-radius:9px;background:#FFFFFF"></div>
+                <div style="height:34px;border-radius:9px;background:#FFFFFF"></div>
+              </div>
+              <div style="position:relative;margin-top:6px">
+                <div style="height:40px;border-radius:11px;background:#E88BA5"></div>
+                <div style="position:absolute;inset:-4px;border:2px solid #D9738F;border-radius:14px;box-shadow:0 0 0 4px rgba(217,115,143,.2)"></div>
+                <div style="position:absolute;top:-22px;left:0;padding:2px 6px;border-radius:5px;background:#D9738F;color:#fff;font:600 8.5px 'SF Mono',Menlo,monospace">btn_continuar · 44pt</div>
+                <div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid #fff"></div>
+              </div>
+              <div style="height:7px;width:50%;border-radius:3px;background:rgba(23,50,63,.13);margin:2px auto 0"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:none;padding:10px 14px 14px;display:flex;gap:8px;justify-content:center">
+        <div style="padding:6px 14px;border-radius:8px;background:#FFFFFF;border:1px solid #C3E2EE;font-size:11px;color:#17323F">‹ Voltar</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#FFFFFF;border:1px solid #C3E2EE;font-size:11px;color:#17323F">Home</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#FFFFFF;border:1px solid #C3E2EE;font-size:11px;color:#17323F">Girar</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#FFFFFF;border:1px solid #C3E2EE;font-size:11px;color:#17323F">Screenshot</div>
+      </div>
+    </div>
+
+    <div style="width:290px;flex:none;display:flex;flex-direction:column;background:#EDF7FB;border-right:1px solid #C3E2EE">
+      <div style="height:34px;flex:none;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid #C3E2EE"><span style="font-size:10px;letter-spacing:.09em;color:#7D9EAC;font-weight:600">HIERARQUIA</span><span style="margin-left:auto;font-size:11px;color:#8FA9B5">⌥2</span></div>
+      <div style="padding:10px 12px"><div style="display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:7px;background:#FFFFFF;border:1px solid #C3E2EE"><span style="font-size:10px;color:#8FA9B5">⌕</span><span style="font-size:11px;color:#8FA9B5">Buscar texto, ID ou XPath</span><span style="margin-left:auto;font:9px 'SF Mono',monospace;color:#A9C3CE">⌘F</span></div></div>
+      <div style="flex:1;padding:0 6px;font-size:11.5px">
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px"><span style="color:#8FA9B5;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#CBE4EE;color:#5A7C8B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">W</span><span>Application</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px"><span style="color:#8FA9B5;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#CBE4EE;color:#5A7C8B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">V</span><span>ScrollView</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#F6E7C1;color:#8A6A22;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#5A7C8B">StaticText “Crédito”</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#D6EFD4;color:#3F8F4E;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#5A7C8B">TextField cpf_input</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#D6EFD4;color:#3F8F4E;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#5A7C8B">TextField renda_input</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px 5px 40px;border-radius:7px;background:#FBE3EA;border:1px solid #EFB6C6"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#E88BA5;color:#fff;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">B</span><span style="font-weight:600">Button btn_continuar</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#F6E7C1;color:#8A6A22;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#5A7C8B">StaticText “Termos”</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px"><span style="color:#8FA9B5;font-size:8px">▸</span><span style="width:15px;height:15px;border-radius:4px;background:#CBE4EE;color:#5A7C8B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">V</span><span style="color:#5A7C8B">TabBar</span></div>
+      </div>
+      <div style="flex:none;border-top:1px solid #C3E2EE;background:#E7F5FA;padding:11px 13px;display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;align-items:center"><span style="font-size:10px;letter-spacing:.08em;color:#7D9EAC;font-weight:600">ATRIBUTOS</span><span style="margin-left:auto;font-size:10px;color:#D9738F">Copiar tudo</span></div>
+        <div style="display:grid;grid-template-columns:82px 1fr;gap:5px 8px;font:10.5px 'SF Mono',Menlo,monospace">
+          <span style="color:#8FA9B5">type</span><span>XCUIElementTypeButton</span>
+          <span style="color:#8FA9B5">name</span><span style="color:#3F8F4E">btn_continuar</span>
+          <span style="color:#8FA9B5">label</span><span>Continuar</span>
+          <span style="color:#8FA9B5">bounds</span><span>[24,612][366,668]</span>
+          <span style="color:#8FA9B5">center</span><span>(195, 640)</span>
+          <span style="color:#8FA9B5">enabled</span><span style="color:#3F8F4E">true</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF">
+      <div style="height:40px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #C3E2EE;background:#F7FCFE">
+        <div style="display:flex;gap:2px;padding:2px;background:#E7F5FA;border-radius:8px">
+          <div style="padding:5px 13px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.14);font-size:11.5px;font-weight:590;white-space:nowrap">Page Objects</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#5A7C8B;white-space:nowrap">Rede HTTP<span style="padding:1px 5px;border-radius:5px;background:#CBE4EE;font:600 9px 'SF Mono',monospace;color:#17323F">12</span></div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#5A7C8B;white-space:nowrap">Analytics<span style="padding:1px 5px;border-radius:5px;background:#F6E7C1;font:600 9px 'SF Mono',monospace;color:#8A6A22">4</span></div>
+        </div>
+        <div style="display:flex;gap:2px;padding:2px;background:#E7F5FA;border-radius:8px;margin-left:6px">
+          <div style="padding:4px 10px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.12);font-size:10.5px">ID</div>
+          <div style="padding:4px 10px;border-radius:6px;font-size:10.5px;color:#5A7C8B">XPath</div>
+          <div style="padding:4px 10px;border-radius:6px;font-size:10.5px;color:#5A7C8B">Coords</div>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 11px;border:1px solid #C3E2EE;border-radius:8px;font-size:11px;color:#17323F;white-space:nowrap">Estrutura</div>
+          <div style="padding:6px 14px;border-radius:8px;background:#6BBF6A;color:#fff;font-size:11.5px;font-weight:640;white-space:nowrap">▶ Rodar</div>
+                  </div>
+      </div>
+      <div style="flex:1;display:flex;min-height:0">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #C3E2EE">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE">
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#2E7FA6">pages/onboarding_credito.py</span>
+            <span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span><span style="font-size:10px;color:#8FA9B5">Salvar</span>
+          </div>
+          <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
+            <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16</div>
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#17323F"><span style="color:#C2557A">from</span> locators.credito <span style="color:#C2557A">import</span> objs
+<span style="color:#C2557A">from</span> base.page <span style="color:#C2557A">import</span> BasePage
+
+
+<span style="color:#C2557A">class</span> <span style="color:#7B62B8">OnboardingCredito</span>(BasePage):
+
+    <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">preencher_cpf</span>(self, valor: <span style="color:#7B62B8">str</span>):
+        self.type(objs[<span style="color:#3F8F4E">"cpf_input"</span>], valor)
+
+    <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">preencher_renda</span>(self, valor: <span style="color:#7B62B8">str</span>):
+        self.type(objs[<span style="color:#3F8F4E">"renda_input"</span>], valor)
+
+    <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">tocar_continuar</span>(self):
+        <span style="color:#8FA9B5"># escuta passiva · 14:22:07</span>
+        self.click(objs[<span style="color:#3F8F4E">"btn_continuar"</span>])
+        <span style="color:#C2557A">return</span> self</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE">
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#D9738F">locators/onboarding_credito.py</span>
+            <span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span><span style="font-size:10px;color:#8FA9B5">Salvar</span>
+          </div>
+          <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
+            <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14</div>
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#17323F">onboarding_credito_objs = {
+
+    <span style="color:#3F8F4E">"cpf_input"</span>: {
+        <span style="color:#3F8F4E">"ios"</span>: (<span style="color:#3F8F4E">"a11y"</span>, <span style="color:#3F8F4E">"cpf_input"</span>),
+        <span style="color:#3F8F4E">"android"</span>: (<span style="color:#3F8F4E">"id"</span>, <span style="color:#3F8F4E">"app:id/cpf"</span>),
+    },
+
+    <span style="color:#3F8F4E">"btn_continuar"</span>: {
+        <span style="color:#3F8F4E">"ios"</span>: (<span style="color:#3F8F4E">"a11y"</span>, <span style="color:#3F8F4E">"btn_cont"</span>),
+        <span style="color:#3F8F4E">"android"</span>: (<span style="color:#3F8F4E">"id"</span>, <span style="color:#3F8F4E">"app:id/next"</span>),
+        <span style="color:#3F8F4E">"center"</span>: (<span style="color:#C97A2E">195</span>, <span style="color:#C97A2E">640</span>),
+    },
+}</div>
+          </div>
+        </div>
+      </div>
+      <div style="height:38px;flex:none;display:flex;align-items:center;gap:20px;padding:0 14px;background:#F7FCFE;border-top:1px solid #C3E2EE;font:10.5px 'SF Mono',Menlo,monospace;color:#5A7C8B">
+        <span><span style="color:#8FA9B5">passo</span> 07</span><span><span style="color:#8FA9B5">ação</span> tap</span><span><span style="color:#8FA9B5">elemento</span> btn_continuar</span><span style="margin-left:auto;color:#3F8F4E">código sincronizado</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:26px;flex:none;display:flex;align-items:center;gap:18px;padding:0 14px;background:#DCF0F8;border-top:1px solid #C3E2EE;font:10px 'SF Mono',Menlo,monospace;color:#5A7C8B">
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#6BBF6A"></span>WDA 8100</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#6BBF6A"></span>ADB server</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#E88BA5"></span>Proxy MITM 8082</span>
+    <span style="margin-left:auto">x 195 · y 640</span><span>58 fps</span><span>latência 118 ms</span>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Espelho e hierarquia ocultos — trilhos colapsados, só a toolbar fixa</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column;background:#F2FAFD;color:#17323F">
+
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#DCF0F8;border-bottom:1px solid #C3E2EE">
+    <div style="display:flex;gap:8px;margin-right:4px"><div style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></div><div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></div><div style="width:12px;height:12px;border-radius:50%;background:#28C840"></div></div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600">Mo baile</span><span style="font-size:11px;color:#7D9EAC">Element Recorder</span></div>
+    <div style="display:flex;padding:2px;gap:2px;background:#CBE4EE;border-radius:8px;margin-left:8px">
+      <div style="padding:4px 13px;border-radius:6px;background:#FFFFFF;font-size:11.5px;font-weight:590;box-shadow:0 1px 2px rgba(23,50,63,.14)">iOS</div>
+      <div style="padding:4px 13px;border-radius:6px;font-size:11.5px;color:#5A7C8B">Android</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#FFFFFF;border:1px solid #C3E2EE;border-radius:8px;min-width:210px">
+      <div style="width:7px;height:7px;border-radius:50%;background:#6BBF6A;box-shadow:0 0 0 3px rgba(107,191,106,.22)"></div>
+      <span style="font-size:11.5px">iPhone 15 Pro · 17.5 · Simulador</span><span style="margin-left:auto;font-size:9px;color:#8FA9B5">▾</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:7px;margin-left:4px"><div style="width:34px;height:20px;border-radius:10px;background:#E88BA5;display:flex;align-items:center;justify-content:flex-end;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div><span style="font-size:11px;color:#5A7C8B">Streaming</span></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <div style="padding:6px 14px;border-radius:8px;background:#E88BA5;color:#FFFFFF;font-size:11.5px;font-weight:640">Forçar Captura</div>
+      <div style="width:1px;height:22px;background:#C3E2EE"></div>
+      <div style="display:flex;gap:2px;padding:2px;border-radius:8px;background:#CBE4EE">
+        <div style="width:26px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center"><div style="width:13px;height:11px;border:1.4px solid #8FA9B5;border-radius:2.5px;display:flex"><div style="width:4px;background:#8FA9B5"></div></div></div>
+        <div style="width:26px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center"><div style="width:13px;height:11px;border:1.4px solid #8FA9B5;border-radius:2.5px;display:flex;justify-content:center"><div style="width:4px;background:#8FA9B5"></div></div></div>
+        <div style="width:26px;height:22px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.14);display:flex;align-items:center;justify-content:center"><div style="width:13px;height:11px;border:1.4px solid #17323F;border-radius:2.5px;display:flex;justify-content:flex-end"><div style="width:4px;background:#17323F"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+    <div style="width:30px;flex:none;display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0;background:#E7F5FA;border-right:1px solid #C3E2EE">
+      <span style="font-size:10px;color:#5A7C8B">›</span>
+      <span style="writing-mode:vertical-rl;font:600 9.5px 'SF Mono',Menlo,monospace;letter-spacing:.1em;color:#7D9EAC">ESPELHO ⌥1</span>
+      <span style="width:6px;height:6px;border-radius:50%;background:#6BBF6A;margin-top:auto"></span>
+    </div>
+    <div style="width:30px;flex:none;display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0;background:#EDF7FB;border-right:1px solid #C3E2EE">
+      <span style="font-size:10px;color:#5A7C8B">›</span>
+      <span style="writing-mode:vertical-rl;font:600 9.5px 'SF Mono',Menlo,monospace;letter-spacing:.1em;color:#7D9EAC">HIERARQUIA ⌥2</span>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF">
+      <div style="height:40px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #C3E2EE;background:#F7FCFE">
+        <div style="display:flex;gap:2px;padding:2px;background:#E7F5FA;border-radius:8px">
+          <div style="padding:5px 13px;border-radius:6px;background:#FFFFFF;box-shadow:0 1px 2px rgba(23,50,63,.14);font-size:11.5px;font-weight:590;white-space:nowrap">Page Objects</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#5A7C8B;white-space:nowrap">Rede HTTP<span style="padding:1px 5px;border-radius:5px;background:#CBE4EE;font:600 9px 'SF Mono',monospace">12</span></div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#5A7C8B;white-space:nowrap">Analytics<span style="padding:1px 5px;border-radius:5px;background:#F6E7C1;font:600 9px 'SF Mono',monospace;color:#8A6A22">4</span></div>
+        </div>
+        <span style="font-size:11px;color:#8FA9B5;margin-left:4px">Foco no código · ⌥⌘F restaura</span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 11px;border:1px solid #C3E2EE;border-radius:8px;font-size:11px;white-space:nowrap">Estrutura</div>
+          <div style="padding:6px 14px;border-radius:8px;background:#6BBF6A;color:#fff;font-size:11.5px;font-weight:640;white-space:nowrap">▶ Rodar</div>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;min-height:0">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #C3E2EE">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE"><span style="font:600 10px 'SF Mono',Menlo,monospace;color:#2E7FA6">pages/onboarding_credito.py</span><span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span></div>
+          <div style="flex:1;display:flex;font:12.5px/1.9 'SF Mono',Menlo,monospace;overflow:hidden">
+            <div style="width:36px;flex:none;text-align:right;padding:12px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16</div>
+            <div style="flex:1;min-width:0;overflow:hidden;padding:12px 14px;white-space:pre;color:#17323F"><span style="color:#C2557A">from</span> locators.credito <span style="color:#C2557A">import</span> objs
+<span style="color:#C2557A">from</span> base.page <span style="color:#C2557A">import</span> BasePage
+
+
+<span style="color:#C2557A">class</span> <span style="color:#7B62B8">OnboardingCredito</span>(BasePage):
+
+    <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">preencher_cpf</span>(self, valor: <span style="color:#7B62B8">str</span>):
+        self.type(objs[<span style="color:#3F8F4E">"cpf_input"</span>], valor)
+
+    <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">preencher_renda</span>(self, v: <span style="color:#7B62B8">str</span>):
+        self.type(objs[<span style="color:#3F8F4E">"renda_input"</span>], v)
+
+    <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">tocar_continuar</span>(self):
+        <span style="color:#8FA9B5"># escuta passiva · 14:22:07</span>
+        self.click(objs[<span style="color:#3F8F4E">"btn_continuar"</span>])
+        <span style="color:#C2557A">return</span> self</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE"><span style="font:600 10px 'SF Mono',Menlo,monospace;color:#D9738F">locators/onboarding_credito.py</span><span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span></div>
+          <div style="flex:1;display:flex;font:12.5px/1.9 'SF Mono',Menlo,monospace;overflow:hidden">
+            <div style="width:36px;flex:none;text-align:right;padding:12px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14</div>
+            <div style="flex:1;min-width:0;overflow:hidden;padding:12px 14px;white-space:pre;color:#17323F">onboarding_credito_objs = {
+
+    <span style="color:#3F8F4E">"cpf_input"</span>: {
+        <span style="color:#3F8F4E">"ios"</span>: (<span style="color:#3F8F4E">"a11y"</span>, <span style="color:#3F8F4E">"cpf"</span>),
+        <span style="color:#3F8F4E">"android"</span>: (<span style="color:#3F8F4E">"id"</span>, <span style="color:#3F8F4E">"app:id/cpf"</span>),
+    },
+
+    <span style="color:#3F8F4E">"btn_continuar"</span>: {
+        <span style="color:#3F8F4E">"ios"</span>: (<span style="color:#3F8F4E">"a11y"</span>, <span style="color:#3F8F4E">"btn"</span>),
+        <span style="color:#3F8F4E">"android"</span>: (<span style="color:#3F8F4E">"id"</span>, <span style="color:#3F8F4E">"app:id/next"</span>),
+        <span style="color:#3F8F4E">"center"</span>: (<span style="color:#C97A2E">195</span>, <span style="color:#C97A2E">640</span>),
+    },
+}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:26px;flex:none;display:flex;align-items:center;gap:18px;padding:0 14px;background:#DCF0F8;border-top:1px solid #C3E2EE;font:10px 'SF Mono',Menlo,monospace;color:#5A7C8B">
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#6BBF6A"></span>WDA 8100</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#E88BA5"></span>Proxy MITM 8082</span>
+    <span style="margin-left:auto">espelho oculto · streaming em segundo plano</span><span>58 fps</span>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Tente em seguida: “aplique a paleta de <a class="dv-oid" href="#2a">2a</a> nas telas de rede e Flow Runner” · “versão escura dessa paleta” · “em <a class="dv-oid" href="#2b">2b</a>, mostre o espelho oculto e o código em tela cheia”</p>
+</section>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Mo baile — 4 estados de tela, 1440×900, linguagem macOS (Xcode / Instruments)</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Conectado &amp; Inspecionando — toolbar unificada, 3 colunas</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column;color:#CDD6F4">
+
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#181825;border-bottom:1px solid #313244">
+    <div style="display:flex;gap:8px;margin-right:4px"><div style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></div><div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></div><div style="width:12px;height:12px;border-radius:50%;background:#28C840"></div></div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600;letter-spacing:-.01em">Mo baile</span><span style="font-size:11px;color:#6C7086">Element Recorder</span></div>
+    <div style="display:flex;padding:2px;gap:2px;background:#11111B;border:1px solid #313244;border-radius:8px;margin-left:8px">
+      <div style="padding:4px 13px;border-radius:6px;background:#313244;font-size:11.5px;font-weight:590;box-shadow:0 1px 2px rgba(0,0,0,.35)">iOS</div>
+      <div style="padding:4px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8">Android</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#11111B;border:1px solid #313244;border-radius:8px;min-width:210px">
+      <div style="width:7px;height:7px;border-radius:50%;background:#A6E3A1;box-shadow:0 0 0 3px rgba(166,227,161,.18)"></div>
+      <span style="font-size:11.5px">iPhone 15 Pro · 17.5 · Simulador</span>
+      <span style="margin-left:auto;font-size:9px;color:#6C7086">▾</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;margin-left:4px">
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#89B4FA;display:flex;align-items:center;justify-content:flex-end;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div><span style="font-size:11px;color:#A6ADC8">Espelho</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#89B4FA;display:flex;align-items:center;justify-content:flex-end;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div><span style="font-size:11px;color:#A6ADC8">Streaming</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#313244;display:flex;align-items:center;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#7F849C"></div></div><span style="font-size:11px;color:#A6ADC8">Tap forward</span></div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11.5px;color:#A6ADC8">Modo Passivo</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11.5px;color:#A6ADC8">Zen</div>
+      <div style="padding:6px 14px;border-radius:8px;background:#89B4FA;color:#11111B;font-size:11.5px;font-weight:640">Forçar Captura</div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="width:384px;flex:none;display:flex;flex-direction:column;background:#181825;border-right:1px solid #313244">
+      <div style="height:34px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #313244">
+        <span style="font-size:10px;letter-spacing:.09em;color:#6C7086;font-weight:600">ESPELHO · TEMPO REAL</span>
+        <span style="margin-left:auto;font:500 10px 'SF Mono',Menlo,monospace;color:#A6E3A1">58 FPS</span>
+      </div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:18px 0;position:relative">
+        <div style="width:264px;height:552px;border-radius:40px;background:#0B0B12;border:1px solid #313244;box-shadow:0 0 0 7px #11111B,0 12px 30px rgba(0,0,0,.45);padding:7px;position:relative">
+          <div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);width:78px;height:20px;border-radius:11px;background:#11111B;z-index:3"></div>
+          <div style="width:100%;height:100%;border-radius:33px;overflow:hidden;background:#151520;display:flex;flex-direction:column;position:relative">
+            <div style="height:44px;flex:none"></div>
+            <div style="padding:0 18px;display:flex;flex-direction:column;gap:12px">
+              <div style="height:11px;width:64%;border-radius:3px;background:#313244"></div>
+              <div style="height:7px;width:88%;border-radius:3px;background:#26263a"></div>
+              <div style="height:112px;border-radius:12px;background:repeating-linear-gradient(135deg,#1f1f30 0 7px,#26263a 7px 14px);display:flex;align-items:flex-end;padding:8px"><span style="font:9px 'SF Mono',Menlo,monospace;color:#6C7086">banner</span></div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="height:34px;border-radius:9px;background:#1f1f30;border:1px solid #313244"></div>
+                <div style="height:34px;border-radius:9px;background:#1f1f30;border:1px solid #313244"></div>
+              </div>
+              <div style="position:relative;margin-top:6px">
+                <div style="height:40px;border-radius:11px;background:#89B4FA;opacity:.9"></div>
+                <div style="position:absolute;inset:-4px;border:2px solid #89B4FA;border-radius:14px;box-shadow:0 0 0 4px rgba(137,180,250,.14)"></div>
+                <div style="position:absolute;top:-22px;left:0;padding:2px 6px;border-radius:5px;background:#89B4FA;color:#11111B;font:600 8.5px 'SF Mono',Menlo,monospace">btn_continuar · 44pt</div>
+                <div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid #fff;opacity:.85"></div>
+              </div>
+              <div style="height:7px;width:52%;border-radius:3px;background:#26263a;margin:2px auto 0"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:none;padding:10px 14px 14px;display:flex;gap:8px;justify-content:center">
+        <div style="padding:6px 14px;border-radius:8px;background:#11111B;border:1px solid #313244;font-size:11px;color:#A6ADC8">‹ Voltar</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#11111B;border:1px solid #313244;font-size:11px;color:#A6ADC8">Home</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#11111B;border:1px solid #313244;font-size:11px;color:#A6ADC8">Girar</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#11111B;border:1px solid #313244;font-size:11px;color:#A6ADC8">Screenshot</div>
+      </div>
+    </div>
+
+    <div style="width:296px;flex:none;display:flex;flex-direction:column;background:#1E1E2E;border-right:1px solid #313244">
+      <div style="height:34px;flex:none;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid #313244"><span style="font-size:10px;letter-spacing:.09em;color:#6C7086;font-weight:600">HIERARQUIA DE ACESSIBILIDADE</span></div>
+      <div style="padding:10px 12px"><div style="display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:7px;background:#11111B;border:1px solid #313244"><span style="font-size:10px;color:#6C7086">⌕</span><span style="font-size:11px;color:#6C7086">Buscar texto, ID ou XPath</span><span style="margin-left:auto;font:9px 'SF Mono',Menlo,monospace;color:#45475A">⌘F</span></div></div>
+      <div style="flex:1;overflow:hidden;padding:0 6px;font-size:11.5px">
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px"><span style="color:#6C7086;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#313244;color:#A6ADC8;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">W</span><span>Application</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px"><span style="color:#6C7086;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#313244;color:#A6ADC8;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">V</span><span>ScrollView</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#F9E2AF;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#A6ADC8">StaticText “Crédito”</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#A6E3A1;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#A6ADC8">TextField cpf_input</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#A6E3A1;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#A6ADC8">TextField renda_input</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px 5px 40px;border-radius:7px;background:rgba(137,180,250,.16);border:1px solid rgba(137,180,250,.35)"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#89B4FA;color:#11111B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">B</span><span style="font-weight:600">Button btn_continuar</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#F9E2AF;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#A6ADC8">StaticText “Termos”</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px"><span style="color:#6C7086;font-size:8px">▸</span><span style="width:15px;height:15px;border-radius:4px;background:#313244;color:#A6ADC8;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">V</span><span style="color:#A6ADC8">TabBar</span></div>
+      </div>
+      <div style="flex:none;border-top:1px solid #313244;background:#181825;padding:11px 13px;display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;align-items:center"><span style="font-size:10px;letter-spacing:.08em;color:#6C7086;font-weight:600">ATRIBUTOS</span><span style="margin-left:auto;font-size:10px;color:#89B4FA">Copiar tudo</span></div>
+        <div style="display:grid;grid-template-columns:82px 1fr;gap:5px 8px;font:10.5px 'SF Mono',Menlo,monospace">
+          <span style="color:#6C7086">type</span><span>XCUIElementTypeButton</span>
+          <span style="color:#6C7086">name</span><span style="color:#A6E3A1">btn_continuar</span>
+          <span style="color:#6C7086">label</span><span>Continuar</span>
+          <span style="color:#6C7086">bounds</span><span>[24,612][366,668]</span>
+          <span style="color:#6C7086">center</span><span>(195, 640)</span>
+          <span style="color:#6C7086">enabled</span><span style="color:#A6E3A1">true</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#1E1E2E">
+      <div style="height:40px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #313244">
+        <div style="display:flex;gap:2px;padding:2px;background:#11111B;border:1px solid #313244;border-radius:8px">
+          <div style="padding:5px 13px;border-radius:6px;background:#313244;font-size:11.5px;font-weight:590;white-space:nowrap">Page Objects</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8;white-space:nowrap">Rede HTTP<span style="padding:1px 5px;border-radius:5px;background:#26263a;font:600 9px 'SF Mono',monospace;color:#89B4FA">12</span></div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8;white-space:nowrap">Analytics<span style="padding:1px 5px;border-radius:5px;background:#26263a;font:600 9px 'SF Mono',monospace;color:#F9E2AF">4</span></div>
+        </div>
+        <div style="display:flex;gap:2px;padding:2px;background:#11111B;border:1px solid #313244;border-radius:8px;margin-left:6px">
+          <div style="padding:4px 10px;border-radius:6px;background:#313244;font-size:10.5px">ID</div>
+          <div style="padding:4px 10px;border-radius:6px;font-size:10.5px;color:#A6ADC8">XPath</div>
+          <div style="padding:4px 10px;border-radius:6px;font-size:10.5px;color:#A6ADC8">Coords</div>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11px;color:#A6ADC8;white-space:nowrap">Estrutura</div>
+          <div style="padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11px;color:#A6ADC8;white-space:nowrap">Split</div>
+          <div style="padding:6px 14px;border-radius:8px;background:#A6E3A1;color:#11111B;font-size:11.5px;font-weight:640;white-space:nowrap">▶ Rodar</div>
+        </div>
+      </div>
+
+      <div style="flex:1;display:flex;min-height:0">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #313244">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#181825;border-bottom:1px solid #313244">
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#89B4FA">pages/onboarding_credito.py</span>
+            <span style="margin-left:auto;font-size:10px;color:#6C7086">Copiar</span><span style="font-size:10px;color:#6C7086">Salvar</span>
+          </div>
+          <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
+            <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#45475A;background:#181825">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16</div>
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#CDD6F4"><span style="color:#CBA6F7">from</span> locators.credito <span style="color:#CBA6F7">import</span> objs
+<span style="color:#CBA6F7">from</span> base.page <span style="color:#CBA6F7">import</span> BasePage
+
+
+<span style="color:#CBA6F7">class</span> <span style="color:#F9E2AF">OnboardingCredito</span>(BasePage):
+
+    <span style="color:#CBA6F7">def</span> <span style="color:#89B4FA">preencher_cpf</span>(self, valor: <span style="color:#F9E2AF">str</span>):
+        self.type(objs[<span style="color:#A6E3A1">"cpf_input"</span>], valor)
+
+    <span style="color:#CBA6F7">def</span> <span style="color:#89B4FA">preencher_renda</span>(self, valor: <span style="color:#F9E2AF">str</span>):
+        self.type(objs[<span style="color:#A6E3A1">"renda_input"</span>], valor)
+
+    <span style="color:#CBA6F7">def</span> <span style="color:#89B4FA">tocar_continuar</span>(self):
+        <span style="color:#6C7086"># escuta passiva · 14:22:07</span>
+        self.click(objs[<span style="color:#A6E3A1">"btn_continuar"</span>])
+        <span style="color:#CBA6F7">return</span> self</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#181825;border-bottom:1px solid #313244">
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#94E2D5">locators/onboarding_credito.py</span>
+            <span style="margin-left:auto;font-size:10px;color:#6C7086">Copiar</span><span style="font-size:10px;color:#6C7086">Salvar</span><span style="font-size:10px;color:#F38BA8">Limpar</span>
+          </div>
+          <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
+            <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#45475A;background:#181825">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14</div>
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#CDD6F4">onboarding_credito_objs = {
+
+    <span style="color:#A6E3A1">"cpf_input"</span>: {
+        <span style="color:#A6E3A1">"ios"</span>: (<span style="color:#A6E3A1">"a11y"</span>, <span style="color:#A6E3A1">"cpf_input"</span>),
+        <span style="color:#A6E3A1">"android"</span>: (<span style="color:#A6E3A1">"id"</span>, <span style="color:#A6E3A1">"app:id/cpf"</span>),
+    },
+
+    <span style="color:#A6E3A1">"btn_continuar"</span>: {
+        <span style="color:#A6E3A1">"ios"</span>: (<span style="color:#A6E3A1">"a11y"</span>, <span style="color:#A6E3A1">"btn_cont"</span>),
+        <span style="color:#A6E3A1">"android"</span>: (<span style="color:#A6E3A1">"id"</span>, <span style="color:#A6E3A1">"app:id/next"</span>),
+        <span style="color:#A6E3A1">"center"</span>: (<span style="color:#FAB387">195</span>, <span style="color:#FAB387">640</span>),
+    },
+}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:38px;flex:none;display:flex;align-items:center;gap:20px;padding:0 14px;background:#181825;border-top:1px solid #313244;font:10.5px 'SF Mono',Menlo,monospace;color:#A6ADC8">
+        <span><span style="color:#6C7086">passo</span> 07</span><span><span style="color:#6C7086">ação</span> tap</span><span><span style="color:#6C7086">elemento</span> btn_continuar</span><span><span style="color:#6C7086">estratégia</span> accessibility id</span><span style="margin-left:auto;color:#A6E3A1">código sincronizado</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:26px;flex:none;display:flex;align-items:center;gap:18px;padding:0 14px;background:#11111B;border-top:1px solid #313244;font:10px 'SF Mono',Menlo,monospace;color:#7F849C">
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#A6E3A1"></span>WDA 8100</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#A6E3A1"></span>ADB server</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#89B4FA"></span>Proxy MITM 8082</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#F9E2AF"></span>FA listener</span>
+    <span style="margin-left:auto">x 195 · y 640</span><span>58 fps</span><span>settle 42 ms</span><span>latência 118 ms</span>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Estado vazio — nenhum dispositivo conectado</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column;color:#CDD6F4">
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#181825;border-bottom:1px solid #313244">
+    <div style="display:flex;gap:8px;margin-right:4px"><div style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></div><div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></div><div style="width:12px;height:12px;border-radius:50%;background:#28C840"></div></div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600">Mo baile</span><span style="font-size:11px;color:#6C7086">Element Recorder</span></div>
+    <div style="display:flex;padding:2px;gap:2px;background:#11111B;border:1px solid #313244;border-radius:8px;margin-left:8px">
+      <div style="padding:4px 13px;border-radius:6px;background:#313244;font-size:11.5px;font-weight:590">iOS</div>
+      <div style="padding:4px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8">Android</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#11111B;border:1px solid #313244;border-radius:8px;min-width:210px">
+      <div style="width:7px;height:7px;border-radius:50%;background:#F38BA8;box-shadow:0 0 0 3px rgba(243,139,168,.16)"></div>
+      <span style="font-size:11.5px;color:#A6ADC8">Nenhum dispositivo</span><span style="margin-left:auto;font-size:9px;color:#6C7086">▾</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;opacity:.4">
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#313244;display:flex;align-items:center;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#7F849C"></div></div><span style="font-size:11px;color:#A6ADC8">Espelho</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><div style="width:34px;height:20px;border-radius:10px;background:#313244;display:flex;align-items:center;padding:0 2px"><div style="width:16px;height:16px;border-radius:50%;background:#7F849C"></div></div><span style="font-size:11px;color:#A6ADC8">Streaming</span></div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <div style="padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11.5px;color:#45475A">Zen</div>
+      <div style="padding:6px 14px;border-radius:8px;background:#26263a;color:#585B70;font-size:11.5px;font-weight:640">Forçar Captura</div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:40px">
+    <div style="width:720px;display:flex;flex-direction:column;align-items:center;gap:26px">
+      <div style="width:150px;height:300px;border-radius:30px;border:1.5px dashed #45475A;background:repeating-linear-gradient(135deg,rgba(49,50,68,.35) 0 8px,transparent 8px 16px);display:flex;align-items:center;justify-content:center"><span style="font:10px 'SF Mono',Menlo,monospace;color:#585B70">sem sinal</span></div>
+      <div style="text-align:center;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:19px;font-weight:640;letter-spacing:-.015em">Conecte um dispositivo para começar</div>
+        <div style="font-size:12.5px;color:#7F849C;max-width:440px;text-wrap:pretty">O Mo baile detecta simuladores, emuladores e aparelhos físicos automaticamente a cada 1,5 s.</div>
+      </div>
+      <div style="width:100%;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="padding:16px 18px;border:1px solid #313244;border-radius:12px;background:#181825;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#0A84FF"></span><span style="font-size:12px;font-weight:620">iOS · WebDriverAgent</span></div>
+          <div style="display:flex;flex-direction:column;gap:7px;font-size:11.5px;color:#A6ADC8">
+            <div style="display:flex;gap:8px"><span style="color:#A6E3A1">✓</span>Xcode Command Line Tools</div>
+            <div style="display:flex;gap:8px"><span style="color:#A6E3A1">✓</span>Simulador iPhone 15 Pro disponível</div>
+            <div style="display:flex;gap:8px"><span style="color:#F38BA8">✕</span>WDA não responde na porta 8100</div>
+          </div>
+          <div style="margin-top:2px;padding:6px 12px;border-radius:8px;background:#89B4FA;color:#11111B;font-size:11px;font-weight:640;align-self:flex-start">Iniciar WDA</div>
+        </div>
+        <div style="padding:16px 18px;border:1px solid #313244;border-radius:12px;background:#181825;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#34C759"></span><span style="font-size:12px;font-weight:620">Android · ADB</span></div>
+          <div style="display:flex;flex-direction:column;gap:7px;font-size:11.5px;color:#A6ADC8">
+            <div style="display:flex;gap:8px"><span style="color:#A6E3A1">✓</span>adb server ativo (5037)</div>
+            <div style="display:flex;gap:8px"><span style="color:#F9E2AF">!</span>Nenhum aparelho autorizado</div>
+            <div style="display:flex;gap:8px"><span style="color:#6C7086">·</span>Conecte via USB e aceite a depuração</div>
+          </div>
+          <div style="margin-top:2px;padding:6px 12px;border-radius:8px;border:1px solid #45475A;color:#CDD6F4;font-size:11px;font-weight:600;align-self:flex-start">adb devices</div>
+        </div>
+      </div>
+      <div style="font:10.5px 'SF Mono',Menlo,monospace;color:#585B70">procurando dispositivos… · último scan 14:21:58</div>
+    </div>
+  </div>
+
+  <div style="height:26px;flex:none;display:flex;align-items:center;gap:18px;padding:0 14px;background:#11111B;border-top:1px solid #313244;font:10px 'SF Mono',Menlo,monospace;color:#7F849C">
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#F38BA8"></span>WDA 8100</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#A6E3A1"></span>ADB server</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#6C7086"></span>Proxy MITM 8082</span>
+    <span style="margin-left:auto">— fps</span><span>aguardando dispositivo</span>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Aba Rede HTTP — proxy MITM + visualizador de payload</div>
+<div class="dv-card" style="width:1440px;height:900px;display:flex;flex-direction:column;color:#CDD6F4">
+  <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#181825;border-bottom:1px solid #313244">
+    <div style="display:flex;gap:8px;margin-right:4px"><div style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></div><div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></div><div style="width:12px;height:12px;border-radius:50%;background:#28C840"></div></div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600">Mo baile</span><span style="font-size:11px;color:#6C7086">Element Recorder</span></div>
+    <div style="display:flex;padding:2px;gap:2px;background:#11111B;border:1px solid #313244;border-radius:8px;margin-left:8px">
+      <div style="padding:4px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8">iOS</div>
+      <div style="padding:4px 13px;border-radius:6px;background:#313244;font-size:11.5px;font-weight:590">Android</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:#11111B;border:1px solid #313244;border-radius:8px;min-width:210px">
+      <div style="width:7px;height:7px;border-radius:50%;background:#A6E3A1;box-shadow:0 0 0 3px rgba(166,227,161,.18)"></div>
+      <span style="font-size:11.5px">Pixel 8 · API 34 · emulator-5554</span><span style="margin-left:auto;font-size:9px;color:#6C7086">▾</span>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11px;color:#A6ADC8"><span style="width:6px;height:6px;border-radius:50%;background:#89B4FA"></span>Proxy 8082 ativo</div>
+      <div style="padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11px;color:#A6ADC8">Configurar proxy via ADB</div>
+      <div style="padding:6px 14px;border-radius:8px;background:#89B4FA;color:#11111B;font-size:11.5px;font-weight:640">Forçar Captura</div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+    <div style="width:280px;flex:none;display:flex;flex-direction:column;background:#181825;border-right:1px solid #313244">
+      <div style="height:34px;flex:none;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid #313244"><span style="font-size:10px;letter-spacing:.09em;color:#6C7086;font-weight:600">ESPELHO · COMPACTO</span></div>
+      <div style="flex:none;display:flex;justify-content:center;padding:16px 0">
+        <div style="width:186px;height:390px;border-radius:30px;background:#0B0B12;border:1px solid #313244;box-shadow:0 0 0 6px #11111B;padding:6px">
+          <div style="width:100%;height:100%;border-radius:25px;background:#151520;overflow:hidden;padding:30px 14px;display:flex;flex-direction:column;gap:9px">
+            <div style="height:9px;width:60%;border-radius:3px;background:#313244"></div>
+            <div style="height:70px;border-radius:10px;background:repeating-linear-gradient(135deg,#1f1f30 0 7px,#26263a 7px 14px)"></div>
+            <div style="height:26px;border-radius:8px;background:#1f1f30;border:1px solid #313244"></div>
+            <div style="height:30px;border-radius:9px;background:#89B4FA;opacity:.85;position:relative"><div style="position:absolute;inset:-3px;border:2px solid #89B4FA;border-radius:11px"></div></div>
+            <div style="height:6px;width:44%;border-radius:3px;background:#26263a"></div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;border-top:1px solid #313244;padding:12px 14px;display:flex;flex-direction:column;gap:9px">
+        <span style="font-size:10px;letter-spacing:.08em;color:#6C7086;font-weight:600">CORRELAÇÃO</span>
+        <div style="padding:10px 11px;border-radius:9px;background:#11111B;border:1px solid #313244;display:flex;flex-direction:column;gap:5px">
+          <span style="font:10.5px 'SF Mono',Menlo,monospace;color:#89B4FA">tap · btn_continuar</span>
+          <span style="font-size:11px;color:#A6ADC8">disparou 3 requisições</span>
+          <span style="font-size:11px;color:#A6ADC8">e 2 eventos de analytics</span>
+        </div>
+        <div style="padding:6px 11px;border-radius:8px;border:1px solid #45475A;font-size:11px;text-align:center">Gerar asserção de contrato</div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="height:40px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #313244">
+        <div style="display:flex;gap:2px;padding:2px;background:#11111B;border:1px solid #313244;border-radius:8px">
+          <div style="padding:5px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8;white-space:nowrap">Page Objects</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;background:#313244;font-size:11.5px;font-weight:590;white-space:nowrap">Rede HTTP<span style="padding:1px 5px;border-radius:5px;background:#11111B;font:600 9px 'SF Mono',monospace;color:#89B4FA">12</span></div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:11.5px;color:#A6ADC8;white-space:nowrap">Analytics<span style="padding:1px 5px;border-radius:5px;background:#26263a;font:600 9px 'SF Mono',monospace;color:#F9E2AF">4</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:7px;background:#11111B;border:1px solid #313244;min-width:230px;margin-left:6px"><span style="font-size:10px;color:#6C7086">⌕</span><span style="font-size:11px;color:#6C7086">Filtrar host, path ou status</span></div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <div style="padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11px;color:#A6ADC8">Exportar HAR</div>
+          <div style="padding:5px 11px;border:1px solid #313244;border-radius:8px;font-size:11px;color:#F38BA8">Limpar tráfego</div>
+        </div>
+      </div>
+
+      <div style="flex:none;height:296px;display:flex;flex-direction:column;border-bottom:1px solid #313244">
+        <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;gap:0;padding:7px 14px;background:#181825;border-bottom:1px solid #313244;font:600 9.5px 'SF Mono',Menlo,monospace;color:#6C7086;letter-spacing:.06em">
+          <span>MÉTODO</span><span>STATUS</span><span>HOST</span><span>PATH</span><span style="text-align:right">TAMANHO</span><span style="text-align:right">TEMPO</span>
+        </div>
+        <div style="flex:1;overflow:hidden;font:11px 'SF Mono',Menlo,monospace">
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>api.banco.com.br</span><span>/v2/onboarding/config</span><span style="text-align:right">4.1 kB</span><span style="text-align:right">86 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>cdn.banco.com.br</span><span>/assets/banner-credito.webp</span><span style="text-align:right">88 kB</span><span style="text-align:right">142 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid rgba(137,180,250,.35);background:rgba(137,180,250,.14);color:#CDD6F4"><span style="color:#F9E2AF;font-weight:600">POST</span><span style="color:#A6E3A1;font-weight:600">201</span><span style="font-weight:600">api.banco.com.br</span><span style="font-weight:600">/v2/credito/simulacao</span><span style="text-align:right">2.6 kB</span><span style="text-align:right">311 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#F9E2AF">POST</span><span style="color:#F38BA8">422</span><span>api.banco.com.br</span><span>/v2/credito/documentos</span><span style="text-align:right">640 B</span><span style="text-align:right">204 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>firebaseinstallations.googleapis.com</span><span>/v1/projects/mobaile</span><span style="text-align:right">1.2 kB</span><span style="text-align:right">98 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#94E2D5">CONNECT</span><span style="color:#7F849C">—</span><span>app-measurement.com</span><span>tunnel TLS</span><span style="text-align:right">—</span><span style="text-align:right">12 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#F9E2AF">304</span><span>api.banco.com.br</span><span>/v2/feature-flags</span><span style="text-align:right">0 B</span><span style="text-align:right">41 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;color:#A6ADC8"><span style="color:#F9E2AF">PUT</span><span style="color:#A6E3A1">200</span><span>api.banco.com.br</span><span>/v2/usuario/perfil</span><span style="text-align:right">910 B</span><span style="text-align:right">176 ms</span></div>
+        </div>
+      </div>
+
+      <div style="flex:1;display:flex;min-height:0">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #313244">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:12px;padding:0 13px;background:#181825;border-bottom:1px solid #313244;font-size:11px"><span style="font-weight:620">Request</span><span style="color:#6C7086">Headers</span><span style="color:#CDD6F4;border-bottom:1.5px solid #89B4FA;padding-bottom:6px">Body</span></div>
+          <div style="flex:1;padding:12px 14px;font:11px/1.8 'SF Mono',Menlo,monospace;white-space:pre;color:#CDD6F4;overflow:hidden"><span style="color:#6C7086">POST /v2/credito/simulacao HTTP/1.1</span>
+{
+  <span style="color:#89B4FA">"cpf"</span>: <span style="color:#A6E3A1">"***.***.***-12"</span>,
+  <span style="color:#89B4FA">"renda_mensal"</span>: <span style="color:#FAB387">7400.00</span>,
+  <span style="color:#89B4FA">"prazo_meses"</span>: <span style="color:#FAB387">24</span>,
+  <span style="color:#89B4FA">"origem"</span>: <span style="color:#A6E3A1">"onboarding_credito"</span>
+}</div>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:12px;padding:0 13px;background:#181825;border-bottom:1px solid #313244;font-size:11px"><span style="font-weight:620">Response</span><span style="color:#6C7086">Headers</span><span style="color:#CDD6F4;border-bottom:1.5px solid #89B4FA;padding-bottom:6px">Body</span><span style="margin-left:auto;color:#6C7086;font:10px 'SF Mono',monospace">201 · 311 ms</span></div>
+          <div style="flex:1;padding:12px 14px;font:11px/1.8 'SF Mono',Menlo,monospace;white-space:pre;color:#CDD6F4;overflow:hidden">{
+  <span style="color:#89B4FA">"simulacao_id"</span>: <span style="color:#A6E3A1">"sim_9f2c41"</span>,
+  <span style="color:#89B4FA">"limite_aprovado"</span>: <span style="color:#FAB387">18500.00</span>,
+  <span style="color:#89B4FA">"taxa_am"</span>: <span style="color:#FAB387">1.99</span>,
+  <span style="color:#89B4FA">"status"</span>: <span style="color:#A6E3A1">"PRE_APROVADO"</span>
+}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:26px;flex:none;display:flex;align-items:center;gap:18px;padding:0 14px;background:#11111B;border-top:1px solid #313244;font:10px 'SF Mono',Menlo,monospace;color:#7F849C">
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#A6E3A1"></span>ADB server</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#89B4FA"></span>Proxy MITM 8082 · 12 req</span>
+    <span style="margin-left:auto">latência média 152 ms</span><span>1 erro 4xx</span><span>54 fps</span>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Flow Runner — diálogo de execução com terminal</div>
+<div class="dv-card" style="width:1440px;height:900px;position:relative;color:#CDD6F4;background:#1E1E2E">
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;filter:saturate(.7)">
+    <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#181825;border-bottom:1px solid #313244">
+      <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:50%;background:#3f3f48"></div><div style="width:12px;height:12px;border-radius:50%;background:#3f3f48"></div><div style="width:12px;height:12px;border-radius:50%;background:#3f3f48"></div></div>
+      <span style="font-size:13px;font-weight:600;color:#7F849C">Mo baile</span>
+      <div style="margin-left:auto;padding:6px 14px;border-radius:8px;background:#26263a;color:#585B70;font-size:11.5px;font-weight:640;white-space:nowrap">▶ Rodar</div>
+    </div>
+    <div style="flex:1;display:flex">
+      <div style="width:384px;border-right:1px solid #313244;background:#181825;display:flex;align-items:center;justify-content:center"><div style="width:200px;height:420px;border-radius:32px;background:#0B0B12;border:1px solid #313244;padding:6px"><div style="width:100%;height:100%;border-radius:27px;background:#151520;padding:34px 16px;display:flex;flex-direction:column;gap:10px"><div style="height:9px;width:58%;border-radius:3px;background:#26263a"></div><div style="height:80px;border-radius:10px;background:repeating-linear-gradient(135deg,#1b1b28 0 7px,#212130 7px 14px)"></div><div style="height:30px;border-radius:9px;background:#26263a"></div><div style="height:30px;border-radius:9px;background:#26263a"></div></div></div></div>
+      <div style="flex:1;padding:16px;font:11px/1.9 'SF Mono',Menlo,monospace;color:#45475A;white-space:pre">class OnboardingCredito(BasePage):
+
+    def preencher_cpf(self, valor: str):
+        self.type(objs["cpf_input"], valor)
+
+    def tocar_continuar(self):
+        self.click(objs["btn_continuar"])</div>
+    </div>
+    <div style="height:26px;flex:none;background:#11111B;border-top:1px solid #313244"></div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(17,17,27,.62)"></div>
+
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:860px;border-radius:14px;background:#1E1E2E;border:1px solid #45475A;box-shadow:0 32px 80px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column">
+    <div style="height:44px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;background:#181825;border-bottom:1px solid #313244">
+      <span style="font-size:13px;font-weight:640">Executar fluxo · onboarding_credito</span>
+      <span style="padding:2px 8px;border-radius:6px;background:rgba(166,227,161,.14);color:#A6E3A1;font:600 10px 'SF Mono',monospace">EM EXECUÇÃO</span>
+      <span style="margin-left:auto;font-size:11px;color:#6C7086">iPhone 15 Pro · WDA 8100 ✓ · Proxy 8082 ✓</span>
+    </div>
+    <div style="flex:none;padding:12px 16px 0;display:flex;align-items:center;gap:12px">
+      <div style="flex:1;height:5px;border-radius:3px;background:#313244;overflow:hidden"><div style="width:57%;height:100%;background:#A6E3A1"></div></div>
+      <span style="font:600 10.5px 'SF Mono',Menlo,monospace;color:#A6ADC8">passo 4 / 7</span>
+    </div>
+    <div style="flex:1;display:flex;min-height:0;padding:14px 16px 16px;gap:14px">
+      <div style="width:334px;flex:none;display:flex;flex-direction:column;gap:6px">
+        <span style="font-size:10px;letter-spacing:.08em;color:#6C7086;font-weight:600;margin-bottom:2px">PASSOS GRAVADOS</span>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;background:#181825;border:1px solid #313244"><span style="color:#A6E3A1;font-size:11px">✓</span><span style="font:10.5px 'SF Mono',monospace;color:#6C7086">01</span><span style="font-size:11.5px">abrir_app</span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;background:#181825;border:1px solid #313244"><span style="color:#A6E3A1;font-size:11px">✓</span><span style="font:10.5px 'SF Mono',monospace;color:#6C7086">02</span><span style="font-size:11.5px">preencher_cpf</span><span style="margin-left:auto;font:10px 'SF Mono',monospace;color:#7F849C">“12345678912”</span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;background:#181825;border:1px solid #313244"><span style="color:#A6E3A1;font-size:11px">✓</span><span style="font:10.5px 'SF Mono',monospace;color:#6C7086">03</span><span style="font-size:11.5px">preencher_renda</span><span style="margin-left:auto;font:10px 'SF Mono',monospace;color:#7F849C">“7400”</span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;background:rgba(137,180,250,.14);border:1px solid rgba(137,180,250,.4)"><span style="color:#89B4FA;font-size:11px">◐</span><span style="font:10.5px 'SF Mono',monospace;color:#89B4FA">04</span><span style="font-size:11.5px;font-weight:620">tocar_continuar</span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;border:1px solid #26263a;color:#7F849C"><span style="font-size:11px">·</span><span style="font:10.5px 'SF Mono',monospace">05</span><span style="font-size:11.5px">validar_simulacao</span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;border:1px solid #26263a;color:#7F849C"><span style="font-size:11px">·</span><span style="font:10.5px 'SF Mono',monospace">06</span><span style="font-size:11.5px">enviar_documento</span></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;border:1px solid #26263a;color:#7F849C"><span style="font-size:11px">·</span><span style="font:10.5px 'SF Mono',monospace">07</span><span style="font-size:11.5px">assert_evento_fa</span></div>
+      </div>
+      <div style="flex:1;min-width:0;border-radius:10px;background:#0B0B12;border:1px solid #313244;display:flex;flex-direction:column;overflow:hidden">
+        <div style="height:28px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #26263a;font:10px 'SF Mono',Menlo,monospace;color:#6C7086"><span>.flow_runner.py</span><span style="margin-left:auto">stdout · streaming</span></div>
+        <div style="flex:1;padding:11px 12px;font:10.5px/1.75 'SF Mono',Menlo,monospace;white-space:pre-wrap;color:#A6ADC8"><span style="color:#585B70">14:22:01</span> <span style="color:#89B4FA">INFO</span>  sessão WDA criada (bundle br.app.banco)
+<span style="color:#585B70">14:22:02</span> <span style="color:#89B4FA">INFO</span>  proxy global apontado para 127.0.0.1:8082
+<span style="color:#585B70">14:22:03</span> <span style="color:#A6E3A1">PASS</span>  01 abrir_app · 1.2 s
+<span style="color:#585B70">14:22:05</span> <span style="color:#A6E3A1">PASS</span>  02 preencher_cpf · 0.8 s
+<span style="color:#585B70">14:22:06</span> <span style="color:#A6E3A1">PASS</span>  03 preencher_renda · 0.6 s
+<span style="color:#585B70">14:22:07</span> <span style="color:#89B4FA">RUN</span>   04 tocar_continuar
+<span style="color:#585B70">14:22:07</span> <span style="color:#6C7086">·</span>     aguardando settle (diff &lt; 0.4%)…
+<span style="color:#585B70">14:22:08</span> <span style="color:#F9E2AF">HTTP</span>  POST /v2/credito/simulacao → 201 (311 ms)
+<span style="color:#585B70">14:22:08</span> <span style="color:#F9E2AF">FA</span>    simulacao_concluida {origem, valor}
+<span style="color:#585B70">14:22:08</span> <span style="color:#6C7086">·</span>     tela estável · extraindo hierarquia</div>
+      </div>
+    </div>
+    <div style="height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;background:#181825;border-top:1px solid #313244">
+      <span style="font-size:11px;color:#7F849C">3 aprovados · 0 falhas · tempo 7,4 s</span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <div style="padding:6px 14px;border-radius:8px;border:1px solid #45475A;font-size:11.5px">Abrir log</div>
+        <div style="padding:6px 14px;border-radius:8px;border:1px solid #45475A;font-size:11.5px;color:#F38BA8">Interromper</div>
+        <div style="padding:6px 14px;border-radius:8px;background:#26263a;color:#585B70;font-size:11.5px;font-weight:640">Concluir</div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Tente em seguida: “versão clara (Notas) de <a class="dv-oid" href="#1a">1a</a>” · “em <a class="dv-oid" href="#1a">1a</a>, coluna de hierarquia como drawer retrátil” · “adicione a tela da aba Analytics/Tagueamento”</p>
+</section>
+</x-dc>
+</body>
+</html>

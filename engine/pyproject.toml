@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mobaile-engine"
+version = "2.0.0"
+description = "Motor headless de inspecao, automacao e interceptacao mobile do Mo baile"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "QA Automation Team" }]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "Pillow>=10.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+# Somente para a escuta passiva de toques no macOS. O motor sobe sem isso.
+macos = ["pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.4.0",
+    "bandit>=1.7.0",
+    "pip-audit>=2.7.0",
+]
+
+[project.scripts]
+# O front SwiftUI sobe este comando e conversa por stdin/stdout.
+mobaile-engine = "mobaile.rpc.server:serve"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mobaile*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: exercita socket/porta local, mais lento que o unitario",
+    "requires_device: precisa de aparelho ou simulador conectado (pulado em CI)",
+]
+
+[tool.coverage.run]
+source = ["src/mobaile"]
+branch = true

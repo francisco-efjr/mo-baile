@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mobaile-tk"
+version = "2.0.0"
+description = "Interface Tkinter do Mo baile (camada de transicao para o front SwiftUI)"
+requires-python = ">=3.10"
+dependencies = [
+    "mobaile-engine",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+mobaile-tk = "mobaile_tk.main_window:launch_app"
+
+[tool.setuptools.packages.find]
+include = ["mobaile_tk*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

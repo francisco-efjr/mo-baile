@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Motor (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Instalar o motor
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "engine[dev]"
+
+      # O motor roda sem servidor gráfico e sem aparelho de propósito. Foi o
+      # que permitiu tirar a suite do estado em que ela sequer era coletada.
+      - name: Testes
+        run: cd engine && python -m pytest --cov --cov-report=term-missing
+
+      - name: Lint
+        run: python -m ruff check engine apps tools
+
+      - name: Padrões inseguros (bandit)
+        run: python -m bandit -q -r engine/src -ll
+
+      - name: Vulnerabilidades conhecidas nas dependências
+        run: python -m pip_audit --skip-editable
+        continue-on-error: true
+
+  contrato:
+    name: Contrato Python/Swift em dia
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e "engine[dev]"
+
+      # As fixtures consumidas pela suite Swift são geradas pelo motor. Se
+      # alguém mudar um campo do contrato e esquecer de regerar, o front quebra
+      # em execução; aqui quebra no PR.
+      - name: Regerar fixtures e conferir se houve mudança
+        run: |
+          python tools/generate_fixtures.py
+          if ! git diff --quiet -- apps/MoBaile/Tests/MoBaileTests/Fixtures; then
+            echo "::error::As fixtures do contrato estão desatualizadas. Rode 'make fixtures' e faça o commit."
+            git diff -- apps/MoBaile/Tests/MoBaileTests/Fixtures
+            exit 1
+          fi
+
+  front:
+    name: Front nativo (macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versão do Swift
+        run: swift --version
+      - name: Build
+        run: cd apps/MoBaile && swift build
+      - name: Testes
+        run: cd apps/MoBaile && swift test

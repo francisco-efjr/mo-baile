@@ -1,0 +1,30 @@
+# Configuracao unica para o motor e para a UI legada.
+line-length = 110
+target-version = "py310"
+extend-exclude = [".git", "__pycache__", "build", "dist"]
+
+[lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "W",    # warnings
+    "I",    # ordem de imports
+    "B",    # bugbear: armadilhas reais
+    "C4",   # comprehensions
+    "UP",   # sintaxe moderna
+    "SIM",  # simplificacoes
+    "RUF",  # regras do proprio ruff
+]
+ignore = [
+    "E501",    # comprimento tratado pelo formatador, nao por erro de lint
+    "SIM105",  # contextlib.suppress nem sempre fica mais legivel
+]
+
+[lint.per-file-ignores]
+# A UI legada e codigo em transicao: nao vale reescrever o que vai sair.
+"apps/tk-legacy/**" = ["B", "SIM", "UP", "C4", "RUF", "E741"]
+# Testes podem repetir e usar nomes longos.
+"**/tests/**" = ["B011"]
+
+[lint.isort]
+known-first-party = ["mobaile", "mobaile_tk"]
