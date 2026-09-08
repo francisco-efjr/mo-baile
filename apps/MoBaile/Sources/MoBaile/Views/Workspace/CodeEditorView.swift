@@ -1,33 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// Editor de código com Python colorido e numeração de linha real.
-///
-/// A versão anterior mostrava tudo numa cor só e tinha ao lado uma coluna que
-/// desenhava `1` fixo — qualquer arquivo aparecia com uma linha, e o número não
-/// acompanhava a rolagem. Como o produto inteiro existe para gerar Python, ler
-/// o resultado sem isso era trabalho a mais no artefato final.
+/// Editor de código com Python colorido e numeração de linha real no estilo IDE.
 struct CodeEditorView: NSViewRepresentable {
     @Binding var text: String
     @Environment(ThemeManager.self) var themeManager
 
     private static let fonte = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
+    func makeNSView(context: Context) -> IDEEditorContainerView {
+        let container = IDEEditorContainerView()
+        let textView = container.textView
 
-        let textView = CodeTextView()
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
-        scrollView.documentView = textView
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
@@ -36,16 +20,12 @@ struct CodeEditorView: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.font = Self.fonte
         textView.backgroundColor = .clear
-        // A margem esquerda abre espaço para a numeração desenhada pelo
-        // próprio text view.
-        textView.textContainerInset = NSSize(width: textView.larguraDaGutter + 6, height: 12)
 
-
-        return scrollView
+        return container
     }
 
-    func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? CodeTextView else { return }
+    func updateNSView(_ container: IDEEditorContainerView, context: Context) {
+        let textView = container.textView
         let tema = themeManager.current
 
         context.coordinator.aplicando = true
@@ -62,13 +42,19 @@ struct CodeEditorView: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: min(selecao.location, limite), length: 0))
         }
 
-        textView.backgroundColor = NSColor(tema.bgContent)
-        nsView.backgroundColor = NSColor(tema.bgContent)
+        let bgEditor = NSColor(tema.bgContent)
+        textView.backgroundColor = bgEditor
+        container.scrollView.backgroundColor = bgEditor
         textView.insertionPointColor = NSColor(tema.textPrimary)
 
-        textView.corDoNumero = NSColor(tema.syntaxGutter)
-        textView.corDaGutter = NSColor(tema.syntaxGutterBg)
-        textView.needsDisplay = true
+        // Configuração visual da barra lateral de linhas (IDE Gutter)
+        container.gutterView.gutterBackgroundColor = NSColor(tema.syntaxGutterBg)
+        container.gutterView.separatorColor = NSColor(tema.borderSubtle)
+        container.gutterView.textColor = NSColor(tema.textTertiary)
+
+        let lineCount = text.split(separator: "\n", omittingEmptySubsequences: false).count
+        container.updateGutterWidth(forLineCount: lineCount)
+        container.gutterView.needsDisplay = true
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -83,6 +69,11 @@ struct CodeEditorView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard !aplicando, let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
+            if let container = textView.superview?.superview?.superview as? IDEEditorContainerView {
+                let lineCount = textView.string.split(separator: "\n", omittingEmptySubsequences: false).count
+                container.updateGutterWidth(forLineCount: lineCount)
+                container.gutterView.needsDisplay = true
+            }
         }
     }
 }

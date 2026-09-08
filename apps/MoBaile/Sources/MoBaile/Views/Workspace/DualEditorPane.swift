@@ -11,28 +11,40 @@ struct DualEditorPane: View {
         
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                // Left Editor
+                // Left Editor: Pages
                 VStack(spacing: 0) {
-                    editorHeader(
-                        title: "pages/\(chaveDoArquivo).py",
-                        color: themeManager.current.fileTitleActions ?? Color.blue,
-                        conteudo: appState.actionsCode
+                    ideHeader(
+                        folder: "pages",
+                        file: "\(chaveDoArquivo).py",
+                        accentColor: themeManager.current.fileTitleActions ?? Color.blue,
+                        conteudo: appState.actionsCode,
+                        onCopy: { copiar(appState.actionsCode) },
+                        onSave: { Task { await session.saveCode() } },
+                        onClear: { Task { await session.clearSteps() } },
+                        canSave: !appState.actionsCode.isEmpty || !appState.locatorsCode.isEmpty,
+                        canClear: !appState.steps.isEmpty || !appState.actionsCode.isEmpty
                     )
                     CodeEditorContainer(text: $state.actionsCode)
                 }
                 
                 if appState.splitEditors {
-                Divider().background(themeManager.current.border ?? Color.gray)
-                
-                // Right Editor
-                VStack(spacing: 0) {
-                    editorHeader(
-                        title: "locators/\(chaveDoArquivo).py",
-                        color: themeManager.current.fileTitleLocators ?? Color.orange,
-                        conteudo: appState.locatorsCode
-                    )
-                    CodeEditorContainer(text: $state.locatorsCode)
-                }
+                    Divider().background(themeManager.current.border ?? Color.gray)
+                    
+                    // Right Editor: Locators
+                    VStack(spacing: 0) {
+                        ideHeader(
+                            folder: "locators",
+                            file: "\(chaveDoArquivo).py",
+                            accentColor: themeManager.current.fileTitleLocators ?? Color.orange,
+                            conteudo: appState.locatorsCode,
+                            onCopy: { copiar(appState.locatorsCode) },
+                            onSave: { Task { await session.saveCode() } },
+                            onClear: { Task { await session.clearSteps() } },
+                            canSave: !appState.actionsCode.isEmpty || !appState.locatorsCode.isEmpty,
+                            canClear: !appState.steps.isEmpty || !appState.locatorsCode.isEmpty
+                        )
+                        CodeEditorContainer(text: $state.locatorsCode)
+                    }
                 }
             }
             
@@ -43,73 +55,159 @@ struct DualEditorPane: View {
     }
     
     private func contagemDeLinhas(_ texto: String) -> String {
-        let linhas = texto.split(separator: "\n", omittingEmptySubsequences: false).count - 1
-        return linhas == 1 ? "1 linha" : "\(linhas) linhas"
+        guard !texto.isEmpty else { return "0 linhas" }
+        let linhas = texto.split(separator: "\n", omittingEmptySubsequences: false)
+        let total = (linhas.last?.isEmpty == true && linhas.count > 1) ? (linhas.count - 1) : linhas.count
+        return total == 1 ? "1 linha" : "\(total) linhas"
     }
 
     /// O nome do arquivo carrega a chave do Page Object, que é o que dá nome
-    /// aos arquivos gravados. Era "feature.py" fixo, o que não correspondia ao
-    /// que o Salvar escreve em disco.
+    /// aos arquivos gravados.
     private var chaveDoArquivo: String {
         session.engineInfo?.pageObjectsKey ?? "feature"
     }
 
-    /// Copiar é do sistema, não do motor: área de transferência é da máquina de
-    /// quem está usando, e não do processo do motor.
+    /// Copiar para a área de transferência nativa do macOS.
     private func copiar(_ texto: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(texto, forType: .string)
         appState.statusMessage = "Copiado para a área de transferência"
     }
 
-    /// O `conteudo` entra aqui de propósito, e não só pelo `Binding` do editor.
-    ///
-    /// `$state.actionsCode` cria um Binding sem **ler** o valor, e o
-    /// `@Observable` só registra dependência no que o corpo lê. Sem esta
-    /// leitura, gravar um passo mudava o estado e a coluna não redesenhava: o
-    /// código só aparecia quando alguma outra coisa forçasse o redesenho.
-    ///
-    /// A contagem de linhas é útil por si só, e é o que torna a leitura
-    /// honesta em vez de um acesso solto só para enganar o observador.
+    /// Cabeçalho com abas no estilo autêntico de IDE (VS Code / Xcode).
     @ViewBuilder
-    func editorHeader(title: String, color: Color, conteudo: String) -> some View {
-        HStack {
-            // O caminho do arquivo e o que pode ceder espaco aqui; os rotulos
-            // dos botoes, nao. Sem isto "Copiar" quebrava em "Copi" / "ar".
-            Text(title)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(color)
-                .lineLimit(1)
-                .truncationMode(.head)
+    func ideHeader(
+        folder: String,
+        file: String,
+        accentColor: Color,
+        conteudo: String,
+        onCopy: @escaping () -> Void,
+        onSave: @escaping () -> Void,
+        onClear: @escaping () -> Void,
+        canSave: Bool,
+        canClear: Bool
+    ) -> some View {
+        HStack(spacing: 0) {
+            // Aba Ativa da IDE
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(accentColor)
 
-            if !conteudo.isEmpty {
-                Text(contagemDeLinhas(conteudo))
-                    .font(.system(size: 10))
-                    .foregroundColor(themeManager.current.textTertiary ?? Color.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.leading, 8)
+                Text(folder)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(themeManager.current.textSecondary)
+
+                Text("/")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(themeManager.current.textTertiary)
+
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(accentColor)
+
+                Text(file)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(themeManager.current.textPrimary)
+
+                if !conteudo.isEmpty {
+                    Text(contagemDeLinhas(conteudo))
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .foregroundColor(themeManager.current.textTertiary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(themeManager.current.bgControlTrack)
+                        )
+                }
             }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(themeManager.current.bgContent)
+            .overlay(
+                Rectangle()
+                    .frame(height: 2)
+                    .foregroundColor(accentColor),
+                alignment: .top
+            )
+            .overlay(
+                Rectangle()
+                    .frame(width: 1)
+                    .foregroundColor(themeManager.current.borderSubtle),
+                alignment: .trailing
+            )
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 8) {
-                Button("Copiar") { copiar(conteudo) }
-                    .disabled(conteudo.isEmpty)
-                Button("Salvar") { Task { await session.saveCode() } }
-                    .disabled(appState.actionsCode.isEmpty && appState.locatorsCode.isEmpty)
-                Button("Limpar") { Task { await session.clearSteps() } }
-                    .disabled(appState.steps.isEmpty && conteudo.isEmpty)
+            // Botões de Ação da IDE
+            HStack(spacing: 6) {
+                IDEActionButton(
+                    title: "Copiar",
+                    icon: "doc.on.doc",
+                    disabled: conteudo.isEmpty,
+                    action: onCopy
+                )
+                IDEActionButton(
+                    title: "Salvar",
+                    icon: "arrow.down.doc",
+                    disabled: !canSave,
+                    action: onSave
+                )
+                IDEActionButton(
+                    title: "Limpar",
+                    icon: "trash",
+                    disabled: !canClear,
+                    action: onClear
+                )
             }
-            .font(.system(size: 10))
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .buttonStyle(.plain)
-            .foregroundColor(themeManager.current.textSecondary ?? Color.secondary)
+            .padding(.trailing, 10)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 30)
-        .background(themeManager.current.bgSubtle ?? Color.clear)
+        .frame(height: 32)
+        .background(themeManager.current.bgToolbar)
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(themeManager.current.borderSubtle),
+            alignment: .bottom
+        )
+    }
+}
+
+/// Botão de ação estilizado para a barra superior da IDE.
+struct IDEActionButton: View {
+    let title: String
+    let icon: String
+    let disabled: Bool
+    let action: () -> Void
+    @Environment(ThemeManager.self) var themeManager
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .medium))
+                Text(title)
+                    .font(.system(size: 10.5, weight: .medium))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3.5)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered && !disabled ? themeManager.current.borderSubtle : Color.clear)
+            )
+            .foregroundColor(
+                disabled
+                    ? themeManager.current.textDisabled
+                    : (isHovered ? themeManager.current.textPrimary : themeManager.current.textSecondary)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
@@ -118,9 +216,6 @@ struct CodeEditorContainer: View {
     @Environment(ThemeManager.self) var themeManager
     
     var body: some View {
-        // A numeração de linha virou régua do próprio scroll do editor, então
-        // ela rola junto e conta as linhas de verdade. O `CodeGutter`, que
-        // desenhava um "1" fixo ao lado, saiu.
         CodeEditorView(text: $text)
     }
 }

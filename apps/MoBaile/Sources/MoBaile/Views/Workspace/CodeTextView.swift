@@ -1,65 +1,178 @@
 import AppKit
 
-/// `NSTextView` que desenha a numeração de linha na própria margem esquerda.
+/// Componente de numeração de linha (gutter) no padrão de IDEs profissionais.
 ///
-/// A primeira tentativa usou `NSRulerView`, que é o caminho idiomático do
-/// AppKit. Dentro do `HSplitView` da janela ele quebrou o layout inteiro:
-/// ligar `rulersVisible` fazia o `NSScrollView` pedir uma altura enorme, e o
-/// `VStack` da coluna dava tudo a ele — a barra de abas e os cabeçalhos dos
-/// editores eram espremidos a zero e a coluna parecia vazia.
+/// É desacoplado do `NSTextView` para evitar os problemas clássicos do AppKit:
+/// 1. Clipping incorreto quando apenas o texto é redesenhado.
+/// 2. Sobrescrita de fundo causada pelo preenchimento nativo do `NSTextView`.
+/// 3. Invasão de seleção ou cliques do cursor na margem de numeração.
 ///
-/// O sintoma não aparecia em teste de renderização isolada, porque o
-/// `ImageRenderer` não desenha view do AppKit: só na janela real.
-///
-/// Desenhar na margem do próprio text view não mexe em nenhuma métrica de
-/// layout, e a numeração rola junto com o texto de graça.
-final class CodeTextView: NSTextView {
-    var larguraDaGutter: CGFloat = 34
-    var corDoNumero: NSColor = .secondaryLabelColor
-    var corDaGutter: NSColor = .clear
-    var fonteDoNumero: NSFont = .monospacedSystemFont(ofSize: 10, weight: .regular)
+/// Sincroniza a rolagem com o `NSScrollView` via `boundsDidChangeNotification`.
+final class IDEGutterView: NSView {
+    weak var textView: NSTextView?
+    weak var scrollView: NSScrollView?
+
+    var gutterBackgroundColor: NSColor = .clear
+    var textColor: NSColor = .secondaryLabelColor
+    var separatorColor: NSColor = .separatorColor
+    var font: NSFont = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    func attach(to scrollView: NSScrollView, textView: NSTextView) {
+        self.scrollView = scrollView
+        self.textView = textView
+
+        NotificationCenter.default.removeObserver(self)
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(contentViewDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+    }
+
+    @objc private func contentViewDidScroll(_ notification: Notification) {
+        needsDisplay = true
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        scrollView?.scrollWheel(with: event)
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        corDaGutter.setFill()
-        NSRect(x: 0, y: dirtyRect.minY, width: larguraDaGutter, height: dirtyRect.height).fill()
-        super.draw(dirtyRect)
-        desenharNumeros(em: dirtyRect)
-    }
+        gutterBackgroundColor.setFill()
+        bounds.fill()
 
-    private func desenharNumeros(em rect: NSRect) {
-        guard let layout = layoutManager, let container = textContainer else { return }
-        let texto = string as NSString
-        let recuo = textContainerInset.height
+        separatorColor.setFill()
+        NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height).fill()
 
-        var linha = 1
-        var inicio = 0
-        while inicio <= texto.length {
-            let faixa = texto.lineRange(for: NSRange(location: inicio, length: 0))
-            let glifos = layout.glyphRange(forCharacterRange: faixa, actualCharacterRange: nil)
-            let caixa = layout.boundingRect(forGlyphRange: glifos, in: container)
-            let y = caixa.minY + recuo
+        guard let tv = textView, let sv = scrollView,
+              let lm = tv.layoutManager, let tc = tv.textContainer else { return }
 
-            if y + caixa.height >= rect.minY, y <= rect.maxY {
-                desenhar(numero: linha, emY: y)
+        lm.ensureLayout(for: tc)
+        let str = tv.string as NSString
+        let scrollY = sv.contentView.bounds.origin.y
+        let topInset = tv.textContainerInset.height
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor
+        ]
+
+        if str.length == 0 {
+            let label = NSAttributedString(string: "1", attributes: attrs)
+            let x = bounds.width - label.size().width - 8
+            label.draw(at: NSPoint(x: max(4, x), y: topInset - scrollY))
+            return
+        }
+
+        var lineNum = 1
+        lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { rect, _, _, glyphRange, _ in
+            let charRange = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+            let isLineStart = charRange.location == 0 || str.character(at: charRange.location - 1) == 0x0a
+            if isLineStart {
+                let y = rect.minY + topInset - scrollY
+                if y + rect.height >= 0 && y <= self.bounds.height {
+                    let label = NSAttributedString(string: "\(lineNum)", attributes: attrs)
+                    let x = self.bounds.width - label.size().width - 8
+                    label.draw(at: NSPoint(x: max(4, x), y: y))
+                }
+                lineNum += 1
             }
-
-            linha += 1
-            let proximo = NSMaxRange(faixa)
-            if proximo <= inicio { break }
-            inicio = proximo
         }
 
-        // Documento vazio ainda tem a linha 1.
-        if texto.length == 0 {
-            desenhar(numero: 1, emY: recuo)
+        if lm.extraLineFragmentRect.height > 0 {
+            let y = lm.extraLineFragmentRect.minY + topInset - scrollY
+            if y + lm.extraLineFragmentRect.height >= 0 && y <= self.bounds.height {
+                let label = NSAttributedString(string: "\(lineNum)", attributes: attrs)
+                let x = bounds.width - label.size().width - 8
+                label.draw(at: NSPoint(x: max(4, x), y: y))
+            }
         }
     }
+}
 
-    private func desenhar(numero: Int, emY y: CGFloat) {
-        let rotulo = NSAttributedString(
-            string: "\(numero)",
-            attributes: [.font: fonteDoNumero, .foregroundColor: corDoNumero]
-        )
-        rotulo.draw(at: NSPoint(x: larguraDaGutter - rotulo.size().width - 8, y: y))
+/// Contêiner que une o Gutter lateral à área de texto com rolagem.
+final class IDEEditorContainerView: NSView {
+    let gutterView = IDEGutterView()
+    let scrollView = NSScrollView()
+    let textView = CodeTextView()
+
+    private var gutterWidthConstraint: NSLayoutConstraint?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
     }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainerInset = NSSize(width: 8, height: 12)
+        scrollView.documentView = textView
+
+        gutterView.attach(to: scrollView, textView: textView)
+
+        gutterView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(gutterView)
+        addSubview(scrollView)
+
+        let widthConstraint = gutterView.widthAnchor.constraint(equalToConstant: 38)
+        self.gutterWidthConstraint = widthConstraint
+
+        NSLayoutConstraint.activate([
+            gutterView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            gutterView.topAnchor.constraint(equalTo: topAnchor),
+            gutterView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            widthConstraint,
+
+            scrollView.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    func updateGutterWidth(forLineCount count: Int) {
+        let digits = max(2, String(count).count)
+        let neededWidth = CGFloat(digits) * 7.5 + 20
+        if gutterWidthConstraint?.constant != neededWidth {
+            gutterWidthConstraint?.constant = neededWidth
+            needsLayout = true
+        }
+    }
+}
+
+/// `NSTextView` especializado para edição de código no MoBaile.
+class CodeTextView: NSTextView {
+    // Mantém compatibilidade com referências existentes.
 }
