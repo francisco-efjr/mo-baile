@@ -243,10 +243,21 @@ class ADBBridge:
         return None
 
     def get_ui_hierarchy(self, device_id: str) -> str | None:
-        """Dump da hierarquia via caminho privado do app, removido em seguida."""
+        """Dump da hierarquia via comando encadeado com fallback seguro."""
         remote = self._dump_remote_path
         try:
             args = self._device_args(device_id)
+            # Tenta executar dump + cat em uma única sessão para evitar overhead de subprocessos adicionais
+            ret, stdout, _ = self._run_cmd(
+                [*args, "shell", f"uiautomator dump {remote} >/dev/null 2>&1 && cat {remote}"],
+                timeout=9,
+            )
+            if ret == 0 and stdout:
+                xml_str = stdout.decode("utf-8", errors="ignore").strip()
+                if "<hierarchy" in xml_str:
+                    return xml_str
+
+            # Fallback seguro para chamadas individuais caso o shell composto nao responda
             self._run_cmd([*args, "shell", "uiautomator", "dump", remote], timeout=8)
             ret, stdout, _ = self._run_cmd([*args, "shell", "cat", remote], timeout=5)
             if ret == 0 and stdout:

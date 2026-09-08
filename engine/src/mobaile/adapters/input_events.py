@@ -187,7 +187,7 @@ class AndroidPassiveListener:
                 elif "SYN_REPORT" in line:
                     if touch_down and not tap_committed and current_raw_x is not None and current_raw_y is not None:
                         now = time.time()
-                        if now - last_tap_time >= 0.35:
+                        if now - last_tap_time >= 0.15:
                             screen_w, screen_h = self.screen_size
                             if self.max_x and self.max_x > 0:
                                 target_x = min(screen_w, max(0, int((current_raw_x / self.max_x) * screen_w)))

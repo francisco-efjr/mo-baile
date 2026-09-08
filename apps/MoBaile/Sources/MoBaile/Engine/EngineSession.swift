@@ -127,6 +127,7 @@ final class EngineSession {
             state.daemonStatus.adb = info.adbAvailable ? .ok : .error
             state.daemonStatus.proxy = info.proxy.running ? .ok : .off
             state.proxyRunning = info.proxy.running
+            state.scrcpyAvailable = info.scrcpyAvailable
         }
 
         if let wda: EngineDTO.WDAStatus = try? await client.call("wda.status") {
@@ -321,6 +322,42 @@ final class EngineSession {
         try? await client.callIgnoringResult("stream.stop")
         state.streamActive = false
         state.fps = 0
+    }
+
+    // MARK: - Scrcpy (Espelho Nativo 60 FPS)
+
+    func startScrcpy() async {
+        guard let client, state.selectedDevice != nil else { return }
+        do {
+            let res: EngineDTO.ScrcpyStatus = try await client.call("scrcpy.start", params: [
+                "fps": .int(60),
+                "max_size": .int(1080),
+                "always_on_top": .bool(true),
+            ])
+            state.scrcpyRunning = res.running
+            state.statusMessage = res.running ? "Espelho scrcpy 60 FPS ativo" : "Falha ao iniciar scrcpy"
+        } catch {
+            report(error)
+        }
+    }
+
+    func stopScrcpy() async {
+        guard let client else { return }
+        do {
+            let res: EngineDTO.ScrcpyStatus = try await client.call("scrcpy.stop")
+            state.scrcpyRunning = res.running
+            state.statusMessage = "Espelho scrcpy encerrado"
+        } catch {
+            report(error)
+        }
+    }
+
+    func toggleScrcpy() async {
+        if state.scrcpyRunning {
+            await stopScrcpy()
+        } else {
+            await startScrcpy()
+        }
     }
 
     func captureNow() async {
@@ -671,6 +708,10 @@ final class EngineSession {
                 state.statusMessage = "Dispositivo conectado"
             } else {
                 await stopStream()
+                if state.scrcpyRunning {
+                    await stopScrcpy()
+                }
+                state.scrcpyRunning = false
                 state.hierarchyElements = []
                 state.selectedElement = nil
                 state.currentFrame = nil
@@ -758,6 +799,7 @@ final class EngineSession {
     private func applyDaemonStatus(from info: EngineDTO.EngineInfo) {
         state.daemonStatus.adb = info.adbAvailable ? .ok : .error
         state.daemonStatus.proxy = info.proxy.running ? .ok : .off
+        state.scrcpyAvailable = info.scrcpyAvailable
     }
 
     private func report(_ error: Error) {

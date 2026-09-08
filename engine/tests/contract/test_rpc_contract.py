@@ -84,6 +84,7 @@ class TestSuperficie(ContractBase):
         "emulators.list", "emulators.boot", "wda.start", "wda.status",
         "screen.capture", "screen.size", "hierarchy.dump", "hierarchy.element_at",
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",
+        "scrcpy.start", "scrcpy.stop", "scrcpy.status",
         "proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
         "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
         "codegen.record", "codegen.steps", "codegen.reset",
@@ -394,9 +395,20 @@ class TestStreamingPorNotificacao(ContractBase):
         self.assertTrue(estatisticas["running"])
         self.assertGreater(estatisticas["frames_captured"], 0)
 
-    def test_stream_stop_e_idempotente(self):
-        self.assertTrue(self.ok("stream.stop")["stopped"])
-        self.assertTrue(self.ok("stream.stop")["stopped"])
+class TestScrcpy(ContractBase):
+    def test_scrcpy_status_responde_com_disponibilidade(self):
+        status = self.ok("scrcpy.status")
+        self.assertIn("available", status)
+        self.assertIn("running", status)
+
+    def test_scrcpy_start_exige_dispositivo(self):
+        erro = self.erro("scrcpy.start")
+        self.assertEqual(erro["data"]["code"], "invalid_input")
+
+    def test_scrcpy_stop_e_idempotente(self):
+        resultado = self.ok("scrcpy.stop")
+        self.assertTrue(resultado["stopped"])
+        self.assertFalse(resultado["running"])
 
 
 if __name__ == "__main__":

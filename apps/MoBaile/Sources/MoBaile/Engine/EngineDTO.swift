@@ -509,6 +509,18 @@ enum EngineDTO {
         }
     }
 
+    struct ScrcpyStatus: Decodable, Sendable {
+        let running: Bool
+        let available: Bool?
+        let started: Bool?
+        let deviceId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case running, available, started
+            case deviceId = "device_id"
+        }
+    }
+
     struct ProxyState: Decodable {
         let running: Bool
         let started: Bool?

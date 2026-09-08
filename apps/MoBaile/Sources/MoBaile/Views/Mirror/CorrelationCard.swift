@@ -36,9 +36,10 @@ struct CorrelationCard: View {
                 icon: "doc.text.magnifyingglass",
                 style: .secondary
             ) {
-                // Action
+                gerarAssercaoDeContrato()
             }
             .padding(.top, 4)
+            .help("Gera código de asserção de contrato HTTP correlacionando o passo atual com o tráfego interceptado")
         }
         .padding(16)
         .background(theme.bgPanel)
@@ -47,5 +48,31 @@ struct CorrelationCard: View {
             RoundedRectangle(cornerRadius: 9)
                 .stroke(theme.border, lineWidth: 1)
         )
+    }
+
+    private func gerarAssercaoDeContrato() {
+        let snippet: String
+        if let lastReq = appState.httpRequests.last {
+            let path = URL(string: lastReq.url)?.path ?? lastReq.url
+            let cleanPath = path.isEmpty ? "/" : path
+            let status = lastReq.statusCode ?? 200
+            snippet = """
+
+        # Asserção de contrato de API correlacionada (MITM)
+        response = self.network_interceptor.wait_for_request('\(cleanPath)', timeout=5.0)
+        assert response.status_code == \(status)
+
+"""
+        } else {
+            snippet = """
+
+        # Asserção de contrato de API correlacionada (MITM)
+        response = self.network_interceptor.wait_for_request('/v2/credito/simulacao', timeout=5.0)
+        assert response.status_code == 200
+
+"""
+        }
+        appState.actionsCode += snippet
+        appState.statusMessage = "Asserção de contrato gerada e inserida no código!"
     }
 }

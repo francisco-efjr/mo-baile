@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 
 struct NetworkToolbar: View {
     @Environment(AppState.self) private var appState
+    @Environment(EngineSession.self) private var session
     @Environment(ThemeManager.self) private var theme
     
     var body: some View {
@@ -39,14 +41,31 @@ struct NetworkToolbar: View {
             
             // Buttons
             HStack(spacing: 8) {
-                FluidPillButton(text: "Configurar proxy", style: .secondary) {
-                    // Action for proxy configuration
+                FluidPillButton(
+                    text: appState.proxyRunning ? "Parar proxy" : "Configurar proxy",
+                    icon: "network",
+                    style: appState.proxyRunning ? .primary : .secondary
+                ) {
+                    Task {
+                        await session.toggleProxy()
+                    }
                 }
-                FluidPillButton(text: "Exportar HAR", style: .secondary) {
-                    // Action for exporting HAR
+                .help(appState.proxyRunning ? "Encerra o proxy e desfaz a rota reversa no aparelho" : "Inicia o proxy MITM e configura a rota reversa no aparelho")
+
+                FluidPillButton(
+                    text: "Exportar HAR",
+                    icon: "square.and.arrow.up",
+                    style: .secondary
+                ) {
+                    exportHAR()
                 }
+                .disabled(appState.httpRequests.isEmpty)
+                .help("Exporta o tráfego HTTP capturado no formato HAR 1.2")
+
                 FluidPillButton(text: "Limpar tráfego", style: .destructiveText) {
-                    appState.clearHTTPTraffic()
+                    Task {
+                        await session.clearTraffic()
+                    }
                 }
             }
         }
@@ -59,5 +78,28 @@ struct NetworkToolbar: View {
                 .foregroundColor(theme.current.border),
             alignment: .bottom
         )
+    }
+
+    private func exportHAR() {
+        if appState.httpRequests.isEmpty {
+            appState.statusMessage = "Nenhuma requisição para exportar"
+            return
+        }
+        guard let data = HARExporter.generateHAR(from: appState.httpRequests) else {
+            appState.statusMessage = "Erro ao gerar arquivo HAR"
+            return
+        }
+        let panel = NSSavePanel()
+        panel.title = "Exportar Tráfego HAR"
+        panel.nameFieldStringValue = "network_traffic.har"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try data.write(to: url)
+                appState.statusMessage = "✓ HAR salvo em: \(url.lastPathComponent)"
+            } catch {
+                appState.statusMessage = "Erro ao salvar HAR: \(error.localizedDescription)"
+            }
+        }
     }
 }

@@ -87,6 +87,10 @@ class AppState {
 
     var screenRecording: Bool = false
     var screenRecordingPath: String?
+
+    // --- Scrcpy (60 FPS Native Mirror) ---
+    var scrcpyAvailable: Bool = false
+    var scrcpyRunning: Bool = false
     
     // MARK: - Computed Properties
     

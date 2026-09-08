@@ -110,4 +110,52 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(state.mirrorVisible)
         XCTAssertTrue(state.hierarchyVisible)
     }
+
+    func testHARExporterGeneratesValidJSON() throws {
+        let event = NetworkEvent(
+            id: 1,
+            timestamp: Date(),
+            timeStr: "12:00:00",
+            method: "GET",
+            url: "https://api.example.com/items",
+            host: "api.example.com",
+            path: "/items",
+            statusCode: 200,
+            statusText: "OK",
+            requestHeaders: ["Accept": "application/json"],
+            requestBody: "",
+            responseHeaders: ["Content-Type": "application/json"],
+            responseBody: "{\"items\": []}",
+            durationMs: 45,
+            protocol: "HTTP/1.1",
+            isTunnel: false
+        )
+        guard let data = HARExporter.generateHAR(from: [event]) else {
+            XCTFail("Falha ao gerar HAR")
+            return
+        }
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNotNil(json)
+        let log = json?["log"] as? [String: Any]
+        XCTAssertEqual(log?["version"] as? String, "1.2")
+        let entries = log?["entries"] as? [[String: Any]]
+        XCTAssertEqual(entries?.count, 1)
+        let firstEntry = entries?.first
+        let req = firstEntry?["request"] as? [String: Any]
+        XCTAssertEqual(req?["method"] as? String, "GET")
+        XCTAssertEqual(req?["url"] as? String, "https://api.example.com/items")
+        let resp = firstEntry?["response"] as? [String: Any]
+        XCTAssertEqual(resp?["status"] as? Int, 200)
+    }
+
+    func testScrcpyStatusDecoding() throws {
+        let json = """
+        {"running": true, "available": true, "started": true, "device_id": "emulator-5554"}
+        """.data(using: .utf8)!
+        let status = try JSONDecoder().decode(EngineDTO.ScrcpyStatus.self, from: json)
+        XCTAssertTrue(status.running)
+        XCTAssertEqual(status.available, true)
+        XCTAssertEqual(status.started, true)
+        XCTAssertEqual(status.deviceId, "emulator-5554")
+    }
 }

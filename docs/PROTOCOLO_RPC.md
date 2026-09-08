@@ -89,7 +89,7 @@ a interface usa para decidir entre exibir diálogo e apenas registrar.
 |---|---|---|
 | `screen.capture` | `max_width` | PNG em base64, com dimensões de origem e de saída |
 | `screen.size` | — | resolução real do alvo |
-| `hierarchy.dump` | — | árvore de acessibilidade já normalizada entre Android e iOS |
+| `hierarchy.dump` | `force` (opcional) | árvore de acessibilidade já normalizada entre Android e iOS (usa cache <1.2s se recente) |
 | `hierarchy.element_at` | `x`, `y` | menor elemento que contém o ponto |
 
 ### Interação
@@ -106,6 +106,9 @@ a interface usa para decidir entre exibir diálogo e apenas registrar.
 | `stream.start` | `fps`, `max_width` | confirma o início |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
+| `scrcpy.start` | `fps`, `max_size`, `title`, `always_on_top` | inicia janela nativa a 60 FPS com baixíssima latência |
+| `scrcpy.stop` | — | encerra o espelhamento scrcpy |
+| `scrcpy.status` | — | `{available, running}` |
 
 ### Rede e tagueamento
 

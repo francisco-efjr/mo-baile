@@ -131,6 +131,24 @@ struct UnifiedToolbar: View {
 
             Spacer().frame(width: 8)
 
+            if appState.platform == .android {
+                FluidPillButton(
+                    text: appState.scrcpyRunning ? "60 FPS (Ativo)" : "60 FPS",
+                    icon: "bolt.fill",
+                    style: appState.scrcpyRunning ? .primary : .secondary
+                ) {
+                    Task {
+                        await session.toggleScrcpy()
+                    }
+                }
+                .disabled(!appState.isDeviceConnected || !appState.scrcpyAvailable)
+                .help(appState.scrcpyAvailable
+                      ? (appState.scrcpyRunning ? "Desativar espelho nativo 60 FPS (scrcpy)" : "Abrir espelho nativo ultra-rápido a 60 FPS (scrcpy)")
+                      : "scrcpy não encontrado. Instale com 'brew install scrcpy' para ter espelhamento a 60 FPS.")
+
+                Spacer().frame(width: 8)
+            }
+
             Rectangle()
                 .fill(theme.borderStrong)
                 .frame(width: 1, height: 28)
