@@ -133,6 +133,21 @@ def build() -> dict:
         fixtures["emulators.list"] = call("emulators.list")
         fixtures["emulators.boot"] = call("emulators.boot", {"name": AVDS[0]})
         fixtures["wda.status"] = call("wda.status")
+        fixtures["recording.status"] = call("recording.status")
+        with patch.object(server.recorder, "start", return_value={
+            "recording": True,
+            "path": "/Users/qa/Movies/Mo baile/mobaile-android-20260908-101500.mp4",
+            "platform": "android",
+            "limit_s": 180,
+        }):
+            fixtures["recording.start"] = call("recording.start")
+        with patch.object(server.recorder, "stop", return_value={
+            "recording": False,
+            "path": "/Users/qa/Movies/Mo baile/mobaile-android-20260908-101500.mp4",
+            "size_bytes": 1_482_310,
+            "duration_s": 12.4,
+        }):
+            fixtures["recording.stop"] = call("recording.stop")
         fixtures["wda.start"] = call("wda.start", {"udid": SIMULADORES[0]["udid"]})
 
     traffic = NetworkEvent(

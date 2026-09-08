@@ -303,3 +303,33 @@ extension EngineContractTests {
         XCTAssertFalse(start.message.isEmpty)
     }
 }
+
+// MARK: - Gravacao de video da tela
+
+extension EngineContractTests {
+
+    func testRecordingStartTrazCaminhoELimite() throws {
+        let inicio = try decodeResult("recording.start", as: EngineDTO.RecordingState.self)
+        XCTAssertTrue(inicio.recording)
+        XCTAssertEqual(inicio.platform, "android")
+        XCTAssertNotNil(inicio.path)
+        // `screenrecord` para sozinho ao atingir o limite; a interface avisa
+        // antes em vez de o vídeo terminar sem explicação.
+        XCTAssertEqual(inicio.limitSeconds, 180)
+    }
+
+    func testRecordingStopTrazTamanhoEDuracao() throws {
+        let fim = try decodeResult("recording.stop", as: EngineDTO.RecordingResult.self)
+        XCTAssertFalse(fim.recording)
+        XCTAssertEqual(fim.sizeBytes, 1_482_310)
+        XCTAssertEqual(fim.durationSeconds, 12.4, accuracy: 0.01)
+        XCTAssertTrue(try XCTUnwrap(fim.path).hasSuffix(".mp4"))
+    }
+
+    func testRecordingStatusParadoNaoTrazCaminho() throws {
+        let estado = try decodeResult("recording.status", as: EngineDTO.RecordingState.self)
+        XCTAssertFalse(estado.recording)
+        XCTAssertNil(estado.path)
+        XCTAssertNil(estado.platform)
+    }
+}

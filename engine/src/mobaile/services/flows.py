@@ -356,6 +356,11 @@ def run_flow_in_background(
                 [sys.executable, script_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                # DEVNULL de proposito: sem isto o filho herda o stdin do
+                # motor, que e o canal JSON-RPC, e passa a consumir as
+                # linhas do protocolo. O sintoma e a chamada seguinte nunca
+                # responder — no app, janela travada sem erro.
+                stdin=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,
                 universal_newlines=True,

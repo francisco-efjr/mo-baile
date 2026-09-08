@@ -8,6 +8,9 @@ public struct FluidPillButton: View {
         case secondary
         case run
         case destructiveText
+        /// Preenchido de vermelho: para estado em curso que precisa ser óbvio
+        /// de longe, como a gravação de tela ligada.
+        case recording
         case disabled
     }
     
@@ -31,6 +34,7 @@ public struct FluidPillButton: View {
         case .secondary: return theme.current.textPrimary
         case .run: return Color.white
         case .destructiveText: return theme.current.danger
+        case .recording: return Color.white
         case .disabled: return theme.current.textDisabled
         }
     }
@@ -43,7 +47,12 @@ public struct FluidPillButton: View {
                 } else if let icon = icon {
                     Image(systemName: icon)
                 }
+                // Rotulo de botao nao pode quebrar: "Forçar Captura" virava
+                // duas linhas e "Copiar" virava "Copi" / "ar" assim que a
+                // coluna apertava.
                 Text(text)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .font(.system(size: 11.5, weight: .semibold))
             .foregroundColor(foregroundColor)
@@ -82,6 +91,7 @@ struct FluidPillButtonStyle: ButtonStyle {
         case .secondary: return Color.clear
         case .run: return theme.current.success
         case .destructiveText: return Color.clear
+        case .recording: return theme.current.danger
         case .disabled: return theme.current.bgPlaceholder
         }
     }

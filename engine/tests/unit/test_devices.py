@@ -95,6 +95,37 @@ class TestDeteccao(unittest.TestCase):
         self.assertIsNone(watcher(platform="symbian").poll_once())
 
 
+class TestFerramentaIndisponivel(unittest.TestCase):
+    """adb presente mas inutilizável.
+
+    Encontrado em QA: o binário existia e não tinha bit de execução. O
+    PermissionError subia cru até a fronteira RPC, que devolvia erro interno
+    com stack trace em vez de dizer o que estava errado.
+    """
+
+    def test_adb_sem_permissao_vira_erro_tipado(self):
+        from unittest.mock import patch
+
+        from mobaile.adapters.adb import ADBBridge
+        from mobaile.domain.errors import ToolNotFoundError
+
+        bridge = ADBBridge(adb_path="/caminho/adb")
+        with patch("subprocess.run", side_effect=PermissionError(13, "Permission denied")), \
+             self.assertRaises(ToolNotFoundError) as ctx:
+            bridge._run_cmd(["devices"])
+        self.assertIn("permissão de execução", str(ctx.exception))
+
+    def test_listagem_degrada_sem_derrubar(self):
+        from unittest.mock import patch
+
+        from mobaile.adapters.adb import ADBBridge
+
+        bridge = ADBBridge(adb_path="/caminho/adb")
+        with patch("subprocess.run", side_effect=PermissionError(13, "Permission denied")):
+            self.assertEqual(bridge.list_devices(), [])
+            self.assertEqual(bridge.list_devices_typed(), [])
+
+
 class TestCicloDeVida(unittest.TestCase):
     def test_start_e_stop(self):
         w = watcher()
@@ -144,3 +175,73 @@ class TestCicloDeVida(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestProntidaoDeBoot(unittest.TestCase):
+    """O `adb` diz `device` antes de a interface do Android subir.
+
+    Regressao: com um emulador recem-iniciado, `devices.list` devolvia
+    `ready: true` assim que o `adbd` respondia. A interface entao selecionava o
+    alvo, lia `screen.size` e capturava a tela nesse intervalo. O resultado
+    observado foi tamanho errado (1080x1088 num aparelho de 1080x2400) e quadro
+    rasgado no espelho, sem nada reler depois.
+    """
+
+    def bridge(self, estado_adb, boot_completed):
+        from mobaile.adapters.adb import ADBBridge
+
+        ponte = ADBBridge(adb_path="adb")
+        ponte.list_devices = lambda: [("emulator-5554", estado_adb)]
+        ponte.get_device_model = lambda _serial: "Pixel_9"
+        ponte.is_boot_completed = lambda _serial: boot_completed
+        return ponte
+
+    def test_emulador_ainda_subindo_nao_conta_como_pronto(self):
+        alvo = self.bridge("device", boot_completed=False).list_devices_typed()[0]
+        self.assertEqual(alvo.state, "booting")
+        self.assertFalse(alvo.is_ready)
+
+    def test_com_boot_concluido_o_alvo_fica_pronto(self):
+        alvo = self.bridge("device", boot_completed=True).list_devices_typed()[0]
+        self.assertEqual(alvo.state, "device")
+        self.assertTrue(alvo.is_ready)
+
+    def test_estado_que_ja_nao_era_device_passa_intacto(self):
+        """`unauthorized` e `offline` tem diagnostico proprio na interface e nao
+        podem ser reescritos como `booting`."""
+        alvo = self.bridge("unauthorized", boot_completed=False).list_devices_typed()[0]
+        self.assertEqual(alvo.state, "unauthorized")
+
+
+class TestLeituraDeBootCompleted(unittest.TestCase):
+    def ponte_com_saida(self, retorno):
+        from mobaile.adapters.adb import ADBBridge
+
+        ponte = ADBBridge(adb_path="adb")
+        ponte._run_cmd = lambda *a, **k: retorno
+        return ponte
+
+    def test_um_significa_concluido(self):
+        self.assertTrue(self.ponte_com_saida((0, b"1\n", b"")).is_boot_completed("emulator-5554"))
+
+    def test_zero_significa_ainda_subindo(self):
+        self.assertFalse(self.ponte_com_saida((0, b"0\n", b"")).is_boot_completed("emulator-5554"))
+
+    def test_saida_vazia_significa_ainda_subindo(self):
+        self.assertFalse(self.ponte_com_saida((0, b"", b"")).is_boot_completed("emulator-5554"))
+
+    def test_falha_de_leitura_conta_como_concluido(self):
+        """Aparelho fisico que nao responde ao getprop no tempo esperado nao
+        pode sumir da lista por causa disso: dos dois modos de errar, este e o
+        menos danoso."""
+        import subprocess
+
+        from mobaile.adapters.adb import ADBBridge
+
+        ponte = ADBBridge(adb_path="adb")
+
+        def estoura(*_a, **_k):
+            raise subprocess.TimeoutExpired(cmd="adb", timeout=5)
+
+        ponte._run_cmd = estoura
+        self.assertTrue(ponte.is_boot_completed("emulator-5554"))

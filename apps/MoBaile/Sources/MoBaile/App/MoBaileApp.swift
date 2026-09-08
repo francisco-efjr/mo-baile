@@ -70,7 +70,7 @@ struct MoBaileCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
 
-            Button("Forcar captura") {
+            Button("Atualizar tela") {
                 Task { await session.captureNow() }
             }
             .keyboardShortcut("k", modifiers: .command)

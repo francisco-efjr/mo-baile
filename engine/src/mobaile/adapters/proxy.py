@@ -338,7 +338,12 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                     url=target if target.startswith("http") else f"http://{host}:{port}{path}",
                     host=host, path=path, status_code=status_code, status_text=status_text,
                     request_headers=redact_headers(headers), request_body=request_body_str,
-                    response_headers=resp_headers, response_body=response_body_str,
+                    # Encontrado em QA: só a requisição era redigida. O
+                    # `Set-Cookie` da resposta carrega o cookie de sessão que o
+                    # servidor acabou de emitir, e ele aparecia inteiro na
+                    # tabela e na exportação HAR.
+                    response_headers=redact_headers(resp_headers),
+                    response_body=response_body_str,
                     duration_ms=(time.time() - start_time) * 1000, protocol=protocol,
                     is_tunnel=False, error=error_msg,
                     request_bytes=len(body_bytes), response_bytes=resp_len,

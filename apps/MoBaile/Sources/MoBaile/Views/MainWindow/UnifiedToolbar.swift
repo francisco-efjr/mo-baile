@@ -14,7 +14,36 @@ struct UnifiedToolbar: View {
 
     private var theme: any ThemeTokens { themeManager.current }
 
+    /// Abaixo desta largura a barra nao cabe inteira e passa a esconder o que
+    /// e decorativo: o subtitulo e parte da largura reservada ao nome do
+    /// aparelho. O conteudo somado pede cerca de 1380 pontos; sem isto, os
+    /// controles das pontas eram cortados pela borda da janela.
+    private static let larguraParaBarraCompleta: CGFloat = 1400
+
+    /// Largura medida da barra, usada só para decidir o modo compacto.
+    @State private var largura: CGFloat = 1440
+
     var body: some View {
+        conteudo(compacto: largura < Self.larguraParaBarraCompleta)
+            .frame(height: 52)
+            .background(theme.bgToolbar)
+            // A medição vai no `background` de propósito. Envolver a barra num
+            // `GeometryReader` a deixa sem altura intrínseca e ela some do
+            // `VStack` da janela — foi o que aconteceu quando o modo compacto
+            // entrou. No fundo, o leitor recebe o tamanho já resolvido e não
+            // participa do layout.
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { largura = geo.size.width }
+                        .onChange(of: geo.size.width) { _, nova in largura = nova }
+                }
+            )
+            .overlay(Divider().background(theme.border), alignment: .bottom)
+    }
+
+    @ViewBuilder
+    private func conteudo(compacto: Bool) -> some View {
         @Bindable var state = appState
 
         HStack(alignment: .center, spacing: 0) {
@@ -25,9 +54,15 @@ struct UnifiedToolbar: View {
                 Text("Mo baile")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(theme.textPrimary)
-                Text("Element Recorder")
-                    .font(.system(size: 11))
-                    .foregroundColor(theme.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                if !compacto {
+                    Text("Element Recorder")
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.textTertiary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
             .accessibilityElement(children: .combine)
 
@@ -38,26 +73,61 @@ struct UnifiedToolbar: View {
 
             Spacer().frame(width: 14)
 
-            deviceMenu
+            deviceMenu(compacto: compacto)
 
             Spacer().frame(width: 14)
 
-            CanvasSwitch(label: "Espelho", isOn: Bindable(state).mirrorVisible)
-            CanvasSwitch(label: "Streaming", isOn: streamingBinding)
-
-            Spacer().frame(width: 10)
-
+            // "Espelho" e "Streaming" saíram daqui. O primeiro só mostrava e
+            // escondia a coluna, o que os botões de painel à direita já fazem;
+            // o segundo era opção para algo que hoje começa sozinho ao conectar
+            // um aparelho. Os dois nomes eram parecidos e faziam coisas
+            // diferentes, o que sobrava como armadilha e não como controle.
             interactionPicker
 
             Spacer()
 
+            // Escuta passiva: grava o que a pessoa faz direto no aparelho.
+            // É o modo em que não se clica no espelho, então precisa de um
+            // controle próprio e de um estado visível de longe.
             FluidPillButton(
-                text: "Forçar Captura",
-                style: appState.isDeviceConnected ? .primary : .disabled,
-                action: { Task { await session.captureNow() } }
+                text: appState.passiveListening
+                    ? (compacto ? "Parar" : "Parar captura")
+                    : (compacto ? "Do aparelho" : "Gravar do aparelho"),
+                icon: appState.passiveListening ? "stop.circle" : "hand.tap",
+                style: botaoDeEscutaPassiva
+            ) {
+                Task {
+                    if appState.passiveListening {
+                        await session.stopPassive()
+                    } else {
+                        await session.startPassive()
+                    }
+                }
+            }
+            .disabled(!appState.isDeviceConnected)
+            .help(appState.passiveListening
+                  ? "Para de gravar os toques feitos no aparelho"
+                  : "Grava o que você fizer direto no aparelho, sem clicar no espelho")
+
+            Spacer().frame(width: 8)
+
+            FluidPillButton(
+                text: appState.screenRecording ? "Parar de gravar" : "Gravar a tela",
+                style: botaoDeGravacao,
+                action: {
+                    Task {
+                        if appState.screenRecording {
+                            await session.stopScreenRecording()
+                        } else {
+                            await session.startScreenRecording()
+                        }
+                    }
+                }
             )
             .disabled(!appState.isDeviceConnected)
-            .help("Captura a tela e recarrega a hierarquia (⌘K)")
+            .help(appState.screenRecording
+                  ? "Encerra a gravação e salva o vídeo"
+                  : "Grava vídeo da tela do aparelho")
 
             Spacer().frame(width: 8)
 
@@ -67,7 +137,7 @@ struct UnifiedToolbar: View {
 
             Spacer().frame(width: 8)
 
-            PanelToggleGroup(
+            PanelToggles(
                 mirrorVisible: Bindable(state).mirrorVisible,
                 hierarchyVisible: Bindable(state).hierarchyVisible,
                 workspaceVisible: Bindable(state).workspaceVisible
@@ -75,9 +145,7 @@ struct UnifiedToolbar: View {
 
             Spacer().frame(width: 16)
         }
-        .frame(height: 52)
-        .background(theme.bgToolbar)
-        .overlay(Divider().background(theme.border), alignment: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Ligacoes com a sessao
@@ -93,23 +161,20 @@ struct UnifiedToolbar: View {
         )
     }
 
-    private var streamingBinding: Binding<Bool> {
-        Binding(
-            get: { appState.streamActive },
-            set: { shouldStream in
-                Task {
-                    if shouldStream {
-                        await session.startStream()
-                    } else {
-                        await session.stopStream()
-                    }
-                }
-            }
-        )
+    /// Vermelho enquanto grava: é estado que precisa ser óbvio de longe, porque
+    /// esquecer a gravação ligada custa espaço em disco e privacidade.
+    private var botaoDeEscutaPassiva: FluidPillButton.Style {
+        guard appState.isDeviceConnected else { return .disabled }
+        return appState.passiveListening ? .recording : .secondary
+    }
+
+    private var botaoDeGravacao: FluidPillButton.Style {
+        guard appState.isDeviceConnected else { return .disabled }
+        return appState.screenRecording ? .recording : .primary
     }
 
     @ViewBuilder
-    private var deviceMenu: some View {
+    private func deviceMenu(compacto: Bool) -> some View {
         Menu {
             if appState.availableDevices.isEmpty {
                 Text("Nenhum dispositivo")
@@ -135,7 +200,7 @@ struct UnifiedToolbar: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }
-            .frame(minWidth: 210, alignment: .leading)
+            .frame(minWidth: compacto ? 132 : 210, alignment: .leading)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Dispositivo selecionado")
@@ -150,31 +215,40 @@ struct UnifiedToolbar: View {
         return match?.name.isEmpty == false ? match!.name : selected
     }
 
-    /// Substitui o interruptor "Tap forward".
+    /// Seletor do que o clique no espelho faz.
     ///
     /// Um clique no espelho pode significar tres coisas diferentes, e um
     /// interruptor de duas posicoes escondia a terceira. Com tres estados
-    /// visiveis, o usuario sabe o que o proximo clique vai fazer, que e o
-    /// principio de feedback do HIG.
-    @ViewBuilder
+    /// visiveis, o usuario sabe o que o proximo clique vai fazer.
+    ///
+    /// Era um `Picker(.segmented)`, controle do AppKit, preso a
+    /// `.frame(width: 150)`. Os três rótulos ("Inspecionar", "Repassar toque",
+    /// "Gravar") precisam de mais que o dobro disso, e o AppKit não comprime
+    /// texto para caber: ele desenha para fora da moldura. O layout reservava
+    /// 150 pontos e o controle pintava por cima do interruptor "Streaming" à
+    /// esquerda e do botão "Forçar Captura" à direita.
+    ///
+    /// O `SegmentedControl` da casa é SwiftUI puro e se dimensiona pelo
+    /// conteúdo, então a barra volta a ser uma conta que fecha.
     private var interactionPicker: some View {
-        Picker("Clique no espelho", selection: interactionBinding) {
-            ForEach(InteractionMode.allCases) { mode in
-                Label(mode.displayName, systemImage: mode.symbolName).tag(mode)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(width: 150)
+        SegmentedControl(
+            items: InteractionMode.allCases.map(\.displayName),
+            selectedIndex: interactionIndexBinding
+        )
         .disabled(!appState.isDeviceConnected)
+        .opacity(appState.isDeviceConnected ? 1 : 0.5)
         .help("Define o que acontece ao clicar no espelho")
         .accessibilityLabel("Acao do clique no espelho")
     }
 
-    private var interactionBinding: Binding<InteractionMode> {
+    private var interactionIndexBinding: Binding<Int> {
         Binding(
-            get: { appState.interactionMode },
-            set: { appState.interactionMode = $0 }
+            get: { InteractionMode.allCases.firstIndex(of: appState.interactionMode) ?? 0 },
+            set: { index in
+                guard InteractionMode.allCases.indices.contains(index) else { return }
+                appState.interactionMode = InteractionMode.allCases[index]
+            }
         )
     }
+
 }

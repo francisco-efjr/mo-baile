@@ -128,11 +128,12 @@ struct ScreenCanvas: View {
 
         let devicePoint = projection.toDevice(location)
         switch appState.interactionMode {
-        case .inspect:
-            Task { await session.selectElement(at: devicePoint) }
         case .forward:
             Task { await session.tap(at: devicePoint) }
         case .record:
+            // Gravar tambem toca no aparelho: gravar um fluxo exige navegar
+            // por ele, e alternar de modo a cada passo tornava a gravacao
+            // inviavel na pratica.
             Task { await session.record(at: devicePoint) }
         }
     }

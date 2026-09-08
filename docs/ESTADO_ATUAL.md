@@ -460,3 +460,741 @@ Precisa de olho humano na janela do app, porque falta permissão de tela:
 
 Não testado: aparelho Android **físico** com desconexão a quente. A validação
 usou emulador, que não cobre cabo removido nem o estado `unauthorized`.
+
+---
+
+## Correção: a tela conectava com o espelho em branco (07/09, noite)
+
+A validação anterior deu o espelho como funcionando. Estava certa sobre o
+motor e errada sobre o aplicativo, e a diferença só apareceu quando alguém
+olhou a janela.
+
+**Por que a suíte não pegou:** nenhum dos 45 testes Swift instanciava o `body`
+de uma View ou observava o que a sessão pede ao motor. `ThemeTests` importa
+SwiftUI, mas só verifica tokens de cor. A cobertura terminava na fronteira RPC.
+
+### Bug 1: selecionar dispositivo não pedia quadro
+
+`select(deviceID:)` chamava `screen.size` e `hierarchy.dump`, e nenhuma
+captura. Conectar enchia a árvore de acessibilidade e deixava a moldura preta
+até alguém ligar o streaming ou clicar em "Forçar Captura".
+
+Mesma falta em `device.changed`, o caminho de quando o aparelho é plugado com o
+app já aberto.
+
+### Bug 2: quadro do aparelho anterior sobrevivia à troca
+
+`select` limpava hierarquia e seleção, mas não o quadro. Trocar de alvo deixava
+na moldura a tela do aparelho antigo — pior que moldura vazia, porque parece
+dado atual.
+
+### Bug 3: rótulo quebrando no meio da palavra
+
+Sem `lineLimit(1)`, o SwiftUI quebrava os rótulos quando a barra apertava:
+"Streaming" virava "Streamin" / "g", "Forçar Captura" ia para duas linhas e
+"Copiar" virava "Copi" / "ar". Corrigido em `CanvasSwitch`, `FluidPillButton` e
+no cabeçalho do `DualEditorPane`.
+
+### A costura que faltava para testar
+
+`EngineSession` guardava um `EngineClient` concreto criado dentro do próprio
+`connect()`. Não havia como observar as chamadas da sessão sem subir um
+processo Python, e foi por isso que o espelho em branco atravessou 45 testes
+verdes.
+
+O protocolo `EngineCalling` abre essa costura. Em produção quem conforma é o
+`EngineClient`; no teste, um duplo que responde com as fixtures reais do motor —
+então o teste da sessão continua amarrado ao contrato de verdade.
+
+Três testes novos, todos verificados por mutação: com a correção desfeita, os
+três falham, e a lista de chamadas registrada mostra o problema direto
+(`["session.select_device", "screen.size", "hierarchy.dump"]`, sem captura).
+
+Suíte Swift: 45 para 48.
+
+### O que continua fachada nessa tela, e é a tarefa 3
+
+O que se vê de quebrado além dos três bugs acima já estava catalogado e não foi
+tocado: a `WorkspaceTabBar` ainda é `Text("Tabs: Page Objects | Rede HTTP |
+Analytics")` literal, a árvore de hierarquia ainda é lista plana com recuo
+simulado, e os botões Copiar/Salvar/Limpar continuam com corpo vazio.
+
+### Limite que permanece
+
+Não existe teste de renderização. As correções 1 e 2 estão amarradas por teste;
+a correção 3, de layout, foi verificada a olho e continua sem rede de proteção.
+Enquanto não houver teste de snapshot, quebra de layout só aparece quando
+alguém abre a janela.
+
+---
+
+## Layout e gravação (07/09, noite)
+
+### Como passou a dar para enxergar a tela
+
+O ambiente não tem permissão de Gravação de Tela, então a janela não podia ser
+observada. `ImageRenderer` desenha uma View sem janela e sem permissão nenhuma,
+e é isso que `LayoutSnapshotTests` faz: renderiza a barra e a janela em larguras
+escolhidas e grava PNG. Roda só com `MOBAILE_SNAPSHOT_DIR` definido, para não
+gerar arquivo em CI.
+
+Limite conhecido: `ImageRenderer` não desenha controle com base em AppKit
+(`Menu`, `Picker`), que sai como bloco amarelo. Serve para conferir a conta do
+layout, não para validar pixel.
+
+### Bug: o seletor de interação pintava por cima dos vizinhos
+
+`interactionPicker` era um `Picker(.segmented)` — controle do AppKit — preso a
+`.frame(width: 150)`. Os três rótulos ("Inspecionar", "Repassar toque", "Gravar
+passo") precisam de mais que o dobro disso, e o AppKit não comprime texto para
+caber: desenha para fora da moldura. O layout reservava 150 pontos e o controle
+pintava por cima do interruptor "Streaming" à esquerda e do botão "Forçar
+Captura" à direita.
+
+Trocado pelo `SegmentedControl` da casa, SwiftUI puro, que se dimensiona pelo
+conteúdo.
+
+### Bug: a barra não cabia na largura mínima da janela
+
+Somada, a barra pede cerca de 1380 pontos. O mínimo da janela era 1100, ou seja,
+dava para arrastar a janela até um estado em que o título sumia à esquerda e o
+grupo de painéis era cortado à direita.
+
+Duas mudanças: a barra ganhou modo compacto abaixo de 1400 (esconde o subtítulo
+e encolhe a largura reservada ao nome do aparelho) e o mínimo da janela subiu
+para 1320. Conferido por snapshot nas duas larguras.
+
+### Bug: clique fora de qualquer elemento recusava a gravação
+
+`codegen.record` levantava "Nenhum elemento encontrado nessa coordenada" quando
+o ponto não caía em nó nenhum. Área vazia, canvas de jogo e componente desenhado
+à mão não aparecem na árvore de acessibilidade, e é justamente aí que o passo
+por coordenada é a única saída. No front nativo isso virava clique que não faz
+nada.
+
+A interface Tk já sintetizava esse elemento por conta própria (`pos_x_y`), ou
+seja, a regra existia num lugar só e o outro front falhava em silêncio — o caso
+exato que a regra de disciplina do ARQUITETURA.md descreve. A síntese passou
+para o motor, então as duas interfaces usam a mesma.
+
+### Bug: toque repassado com streaming desligado deixava tudo parado
+
+`tap(at:)` só chamava `input.tap`. Com o espelho ao vivo ligado, quem manda
+reler é o `stream.settled`; desligado, ninguém manda.
+
+O efeito ruim não é o visual. O passo gravado logo depois é resolvido contra a
+árvore velha, então o toque navega a tela e a gravação aponta para o elemento
+que não está mais lá.
+
+### Cobertura
+
+Motor 156 → 158, front 45 → 54 (4 são os snapshots, pulados sem a variável de
+ambiente). Todas as correções verificadas por mutação: desfeita a correção, o
+teste correspondente falha.
+
+### Continua em aberto
+
+Os três modos de clique são exclusivos, então gravar um fluxo obriga a alternar
+entre "Gravar passo" e "Repassar toque" a cada passo. Na interface Tk gravação e
+repasse são independentes: `auto_forward_tap` é caixa de seleção separada, e o
+clique grava e navega de uma vez. É decisão de produto, não bug, e não foi
+mexida.
+
+---
+
+## Gravação que não aparecia e emulador lido cedo demais (07/09, noite)
+
+### Bug: ação no aparelho não virava código na tela
+
+`AppState.actionsCode` e `AppState.locatorsCode` **nunca eram escritos por
+ninguém**. Nasciam vazios e só apareciam em `clearSteps()`. Os dois editores da
+coluna de workspace ficavam permanentemente em branco.
+
+O dado sempre esteve lá: `codegen.record` já devolve `object_code` e
+`action_code`. Faltava a sessão escrever. Clicar no elemento e não ver o Page
+Object aparecer é o ciclo inteiro do produto falhando em silêncio.
+
+A gravação agora acrescenta a cada passo, que é exatamente o que
+`_record_element` da interface Tk faz — as duas precisam produzir o mesmo
+arquivo.
+
+### Bug: o alvo era dado como pronto antes de o Android subir
+
+O `adb` responde `device` assim que o `adbd` sobe, o que num emulador acontece
+bem antes da interface. `devices.list` repassava isso como `ready: true`, e a
+interface então selecionava o alvo, lia `screen.size` e capturava a tela nesse
+intervalo.
+
+Observado na prática: `1080x1088` num aparelho de 1080x2400, e quadro rasgado
+no espelho, com o rodapé ainda dizendo "Emulador iniciando…". Nada relia depois.
+
+`list_devices_typed` agora rebaixa o estado para `booting` enquanto
+`sys.boot_completed` não confirma. Falha de leitura conta como concluído: um
+aparelho físico que não responde ao getprop no tempo esperado não pode sumir da
+lista por isso. Estado que já não era `device` (`unauthorized`, `offline`) passa
+intacto, porque tem diagnóstico próprio.
+
+### Barra superior: não reproduzido
+
+Relato de que a barra some da janela. Não foi possível reproduzir. A hipótese
+inicial era o `GeometryReader` introduzido com o modo compacto, mas a mutação
+desmentiu: com e sem ele, a barra desenha igual, empilhada e isolada.
+
+O `GeometryReader` foi trocado por medição no `background` mesmo assim, porque é
+estritamente mais seguro — envolver a barra a deixa sem altura intrínseca, ainda
+que aqui isso não tenha se manifestado.
+
+`ToolbarLayoutTests` passou a afirmar de verdade, lendo os pixels do desenho: a
+faixa da barra tem de conter vários tons (controles presentes) e a faixa abaixo,
+um só (a barra não invadiu o conteúdo). Diferente de `LayoutSnapshotTests`, que
+só grava PNG para inspeção e não falha sozinho.
+
+### Cobertura
+
+Motor 158 → 170, front 54 → 59 (5 são snapshots, pulados sem a variável de
+ambiente). Correções verificadas por mutação, uma a uma.
+
+### Continua faltando para fechar o ciclo do produto
+
+Gravar já aparece na tela. **Salvar em disco e reexecutar continuam ausentes**:
+o botão "Salvar" tem corpo vazio e não existe `flow.*` no contrato, então os
+passos seguem morrendo com o processo.
+
+---
+
+## O espelho rasgado era o transporte (07/09, noite)
+
+Duas tentativas anteriores erraram o diagnóstico. A primeira culpou o tamanho
+do aparelho lido cedo demais; a segunda, o `GeometryReader` da barra. Nenhuma
+das duas era a causa do espelho rasgado, e a mutação desmentiu a segunda.
+
+O que fechou a questão foi comparar os dois lados. O motor, chamado direto,
+produz o PNG **perfeito**: 1080x2424, tela inteira, ícones legíveis. O mesmo
+quadro chegava rasgado na janela. Logo, o defeito estava no transporte.
+
+### A causa
+
+```swift
+stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+    let chunk = handle.availableData
+    Task { await self?.ingest(chunk) }   // uma Task nova por pedaço
+}
+```
+
+Cada pedaço do stdout virava uma `Task` independente, e **`Task` não garante
+ordem de execução**. Resposta curta cabe num pedaço só e nunca deu problema —
+por isso hierarquia, lista de dispositivos e diagnóstico sempre funcionaram.
+
+Um quadro do espelho passa de 400 KB em base64 e atravessa o cano em vários
+pedaços, que eram remontados embaralhados. O JSON continuava decodificando,
+porque a troca caía dentro da string base64, e o PNG saía parcial: certo no
+topo, uma faixa de lixo e o resto preto.
+
+Corrigido com `AsyncStream`, que preserva a ordem do `yield`, mais um único
+consumidor aplicando os pedaços em sequência.
+
+### O modo de falhar era pior do que parecia
+
+Reintroduzido o bug, o teste de integração **travou** em vez de falhar: com a
+linha corrompida o JSON não decodifica, `route` descarta, e a continuação da
+chamada nunca é resumida. No app isso é a janela congelada, não um erro na tela.
+
+O teste ganhou prazo próprio para falhar limpo. Fica registrado que `call` não
+tem prazo nenhum: qualquer linha malformada pendura a chamada para sempre. Não
+foi mexido porque um prazo fixo quebraria `wda.start`, que legitimamente leva
+minutos.
+
+### Por que nenhum teste pegava
+
+O erro não está na lógica de nenhuma função — `ingest` monta linha certo, e
+`route` despacha certo. Está na concorrência entre o cano e o ator, que só
+aparece com payload grande o bastante para chegar picotado.
+
+`EngineClientStreamTests` sobe o motor de verdade, captura a 900 de largura
+(o mesmo do espelho em produção) e confere que o PNG decodificado tem a altura
+declarada e a proporção do aparelho. Precisa de aparelho, então roda só com
+`MOBAILE_DEVICE_TESTS=1`.
+
+### Cobertura
+
+Front 59 → 61 (7 pulados: 5 snapshots e 2 de integração). Motor em 170.
+
+### Segue sem causa: a barra superior
+
+O relato de que a barra some da janela continua sem reprodução. Renderizada
+isolada e empilhada, com e sem o `GeometryReader`, ela desenha correta e
+completa. Não foi possível observar a janela real: falta permissão de tela.
+
+---
+
+## Barra reorganizada e gravação de vídeo (08/09)
+
+Pedidos do usuário, com o que cada um implicou.
+
+### Saiu o modo "Inspecionar"
+
+Eram três modos de clique. O painel de atributos já é preenchido em qualquer
+modo — `handleTap` guarda o elemento antes de decidir o que fazer com o clique —
+então "Inspecionar" não fazia nada que os outros dois não fizessem, e obrigava a
+trocar de modo à toa.
+
+### "Gravar passo" passou a tocar no aparelho
+
+Os modos eram exclusivos, então gravar um fluxo exigia alternar entre "Gravar
+passo" e "Repassar toque" a cada clique: vinte passos viravam quarenta trocas de
+modo. Um fluxo só avança navegando por ele.
+
+A ordem importa e está coberta por teste: grava primeiro, resolvendo o elemento
+contra a árvore da tela atual, e só depois toca, que é o que leva para a próxima.
+
+### Saíram "Espelho" e "Streaming"
+
+Dois nomes parecidos que faziam coisas diferentes — um escondia a coluna, o
+outro ligava a captura. Dava para desligar "Espelho" com "Streaming" ligado e
+ficar capturando sem ver.
+
+A coluna agora é escondida pelos botões de painel, que já faziam isso, e o
+espelho ao vivo começa sozinho ao selecionar um aparelho.
+
+### "Forçar Captura" virou "Gravar a tela"
+
+Gravação de vídeo de verdade, nova no motor: `adb shell screenrecord` no
+Android, `xcrun simctl io recordVideo` no iOS. A escolha da ferramenta é do
+motor; a interface só pede "grava".
+
+Três métodos novos no contrato: `recording.start`, `recording.stop`,
+`recording.status`. Vídeos vão para `~/Movies/Mo baile/`.
+
+Dois detalhes que decidem se funciona:
+
+**Encerramento por SIGINT.** Matar com SIGKILL deixaria o MP4 sem índice final e
+o arquivo não abriria em lugar nenhum.
+
+**Limite de 180 s no Android.** É o teto do `screenrecord`, que para sozinho ao
+atingi-lo. A interface avisa no início, em vez de o vídeo terminar sem
+explicação.
+
+Verificado com aparelho físico (moto g55 5G): 5 s de gravação, MP4 h264 de
+1080x2400 válido.
+
+### Bug encontrado ao ligar isso: filho roubando o canal do protocolo
+
+`recording.start` respondia e `recording.status` logo depois nunca respondia.
+
+O `adb shell screenrecord` herdava o **stdin do motor** — que é o canal
+JSON-RPC — e passava a consumir as linhas das chamadas seguintes.
+
+Seis dos sete `subprocess.Popen` do motor tinham o mesmo defeito: scrcpy,
+logcat, escuta de toques, emulador, execução de fluxo e a gravação nova. Só o
+Appium isolava. No app o sintoma é janela travada, sem erro nenhum.
+
+Todos passaram a receber `stdin=subprocess.DEVNULL`. Como o modo de falhar é
+silencioso e difícil de ligar à causa, a regra virou guarda de código:
+`test_todo_subprocesso_do_motor_isola_o_stdin` varre a fonte e reprova qualquer
+`Popen` sem `stdin` explícito.
+
+### Botões de painel trocados
+
+Os três glifos abstratos em alvos de 26x22 saíram. Eram menores que o mínimo
+confortável do HIG e não diziam qual coluna era qual — só se descobria clicando.
+
+`PanelToggles` usa 32x28, ícone que nomeia a coluna (aparelho, lista, chaves) e
+dica com o atalho. O `contentShape` faz a área toda receber o clique, e não só o
+traço do ícone.
+
+### O código agora aparece enquanto se clica
+
+`$state.actionsCode` cria um `Binding` **sem ler** o valor, e o `@Observable` só
+registra dependência no que o corpo lê. A coluna não redesenhava: o código só
+aparecia se outra coisa forçasse o redesenho.
+
+O cabeçalho passou a mostrar a contagem de linhas, que é útil por si só e é a
+leitura que registra a dependência.
+
+### Cobertura
+
+Motor 170 → 180, front 61 → 66. Fixtures 21 → 24, conferidas como estáveis.
+
+---
+
+## Android, espelho e rodapé (08/09)
+
+### Por que o Android não gerava código e o iOS gerava
+
+`codegen.record` precisa de `current_xml`. No iOS ele vem do WebDriverAgent; no
+Android, de `uiautomator dump`.
+
+No Motorola g55 físico do time, `uiautomator dump` é **morto com SIGKILL**
+(exit 137) e devolve vazio. Sem hierarquia não há elemento para resolver, e a
+gravação de passo do Android ficava silenciosa enquanto a do iOS funcionava.
+
+Medido também: a sessão UiAutomator2 do Appium falhava com
+`IllegalStateException: UiAutomation not connected` — ou seja, o serviço do
+próprio Android estava travado, e não a ferramenta. As duas rotas dependem do
+mesmo UiAutomation.
+
+**A causa raiz era a conexão USB.** No meio da investigação o aparelho sumiu do
+`adb devices`. Depois de reconectar, `hierarchy.dump` passou a devolver 66
+elementos e a gravação passou a gerar código normalmente:
+
+```
+BOTAO_0_OU_1 = (AppiumBy.ID, "uds_text_id")
+def click_0_ou_1(self):
+```
+
+### O que mudou por causa disso
+
+**Reserva pelo WebDriver.** `_android_hierarchy` tenta `uiautomator dump` e, se
+vier vazio, abre sessão UiAutomator2 pelo Appium — o equivalente Android do WDA.
+O caminho rápido continua primeiro porque abrir sessão custa dezenas de segundos
+na primeira vez.
+
+**Erro que diz o que fazer.** A mensagem era "Hierarquia de UI indisponivel para
+o alvo atual", que deixava o usuário sem árvore, sem código e sem pista. Agora
+o texto separa iOS de Android e, quando reconhece `UiAutomation not connected`,
+diz que reiniciar o aparelho ou reconectar o cabo costuma resolver.
+
+### O espelho reflete, mas devagar
+
+Medido com o aparelho físico: abrir Ajustes gerou 5 quadros, voltar à home
+gerou 2. Ou seja, ele reflete. O problema é o intervalo.
+
+`last_capture_ms` estava em **1823 ms** por quadro, com fps efetivo de 1,22. A
+sensação de travado vem daí, não de o espelho estar parado.
+
+Causa: `screencap -p` faz o **aparelho** codificar o PNG. Medido no g55:
+
+| Forma | Tempo | Tamanho |
+|---|---|---|
+| `screencap -p` | 2,14 s | 3,0 MB |
+| `screencap` cru | 1,23 s | 10,4 MB |
+
+A codificação no aparelho custa quase um segundo, e é desperdício puro: o
+espelho reduz a imagem logo em seguida. A captura passou a usar o formato cru,
+com o PNG como reserva para aparelho que não entregue o cru.
+
+Resultado medido depois da mudança: **1227 ms** por quadro, contra 1823 ms.
+
+**Limite honesto:** ~0,8 quadro por segundo continua longe de fluido. Chegar a
+espelho fluido no Android exige `scrcpy` ou um fluxo H.264 decodificado no Mac,
+que é trabalho de outra ordem e não foi feito.
+
+### Rodapé sempre atualizado
+
+`applyDaemonStatus` rodava **uma única vez**, na conexão, e só mexia em dois dos
+quatro indicadores. Subir o WDA, ligar o proxy ou perder o adb não mudava nada
+na tela: o painel que existe para dizer o que está de pé afirmava o que estava
+de pé um minuto atrás.
+
+`startWatchingDaemons` relê a cada 5 s e alimenta os quatro.
+
+### Espelho responsivo
+
+A moldura era 258x540 fixos. A coluna podia crescer sem o espelho crescer junto,
+e qualquer aparelho fora de 19.5:9 aparecia na proporção errada — iPad desenhado
+como iPhone.
+
+Agora a proporção vem de `deviceSize`, medida pelo motor, e o tamanho é o maior
+que cabe no espaço oferecido. Arredondamentos e notch acompanham a largura.
+
+### Cobertura
+
+Motor 180 → 196, front 66.
+
+---
+
+## Dock de quatro botões trocado por "Atualizar" (08/09)
+
+`DeviceDock` trazia "Voltar", "Home", "Girar" e "Screenshot" — quatro botões com
+corpo vazio desde sempre, listados como fachada desde a primeira varredura.
+Removidos a pedido, junto com o arquivo.
+
+No lugar, um botão só: **Atualizar**, que recaptura a tela e recarrega a
+hierarquia (o antigo `captureNow`, também no ⌘K).
+
+Ele tem razão de existir enquanto o espelho depender de `screencap`: a captura
+passa de um segundo em aparelho físico, então o espelho ao vivo anda perto de um
+quadro por segundo. Quando se quer o estado exato de agora, com a árvore
+correspondente, pedir na hora é mais direto que esperar a próxima volta do ciclo.
+
+O estado "Atualizando…" não é enfeite: captura mais dump passam de dois
+segundos, e sem ele o clique parece não ter feito nada — o que leva a apertar
+várias vezes e enfileirar capturas.
+
+---
+
+## O espelho congelava no primeiro quadro (08/09)
+
+Sintoma relatado: com o aparelho conectado, o Mo baile mostrava a tela de
+minutos atrás enquanto o scrcpy, lado a lado, mostrava a atual. Só clicando em
+"Atualizar" a imagem vinha.
+
+### Como foi isolado
+
+Primeiro descartando o motor. Testado com o mesmo interpretador que o app usa
+(Python 3.14 do framework, não o `.venv`), nas duas plataformas:
+
+| | Android | iOS |
+|---|---|---|
+| `screen.capture` | 1,29 s, imagem conferida a olho | 0,27 s |
+| `hierarchy.dump` | 45 elementos | 48 elementos |
+
+Depois, olhando o processo do motor do próprio app: **zero processos de captura
+em 6 s de amostragem**. Ou seja, `stream.start` nunca tinha sido pedido.
+
+### A causa
+
+Havia dois caminhos até um alvo ficar pronto, e eles divergiam:
+
+- escolher no menu → `select(deviceID:)` → ligava o espelho
+- o aparelho aparecer sozinho pelo detector → `device.changed` → **não ligava**
+
+O segundo é o caminho comum de quem pluga o aparelho. Por ele chegava um único
+quadro, vindo do `refreshFrame()`, e a moldura congelava nele para sempre.
+
+Os dois caminhos passaram a usar a mesma rotina, `activateDevice()`: medida,
+primeiro quadro, árvore e espelho ao vivo.
+
+### Um segundo defeito que o teste revelou
+
+No `device.changed`, `refreshDevices()` rodava **antes** da ativação. Um
+`devices.list` que voltasse vazio por um instante zerava o alvo recém-anunciado,
+e a ativação então não acontecia.
+
+Isso não é hipotético: acontece com USB instável, que é exatamente o que esse
+aparelho vinha apresentando. A releitura da lista passou para depois — o aviso é
+autoridade sobre a chegada, a lista não é.
+
+### Cobertura
+
+Dois testes novos, um deles comparando os dois caminhos e exigindo que terminem
+no mesmo estado, que é o que impede a divergência de voltar. Front 67 → 69.
+
+Verificado depois da correção: o motor do app passou a disparar captura a cada
+segundo, contra zero antes.
+
+---
+
+## Workspace deixou de ser fachada (08/09)
+
+### Editor de código
+
+Duas coisas trocadas de uma vez:
+
+**Numeração de linha.** Era uma coluna que desenhava `Text("1")` fixo — qualquer
+arquivo aparecia com uma linha, e o número nem acompanhava a rolagem. Virou
+`LineNumberRuler`, régua do próprio `NSScrollView`, que rola junto e conta as
+linhas do texto real.
+
+**Coloração Python.** O editor mostrava tudo numa cor só. Como o produto inteiro
+existe para produzir Python, ler o resultado sem distinguir palavra-chave de
+string era trabalho a mais justamente no artefato final. `PythonHighlighter` é
+um colorizador léxico: comentário, string, palavra-chave, número, nome de função
+e classe, e as CONSTANTES em caixa alta, que são os locators gerados.
+
+A posição do cursor é preservada na recoloração — sem isso, cada passo gravado
+jogava o cursor para o início de quem estivesse editando.
+
+### Copiar, Salvar e Limpar
+
+Os três tinham corpo vazio.
+
+- **Copiar** vai para a área de transferência do sistema, não pelo motor: a área
+  de transferência é da máquina de quem usa, não do processo do motor.
+- **Salvar** virou `codegen.save` no contrato, porque a convenção de nome e
+  pasta é regra do produto e as duas interfaces precisam produzir o mesmo
+  layout. Escreve `pages/<chave>.py` e `locators/<chave>.py` em
+  `~/Documents/Mo baile/`. O conteúdo enviado é o **dos editores**, e não o que
+  o motor tem guardado: os campos são editáveis, então o que está na tela é o
+  que vale.
+- **Limpar** zera passos e editores.
+
+O nome do arquivo no cabeçalho passou a vir de `page_objects_key`, exposto agora
+em `engine.info`. Antes era "feature.py" fixo, que não correspondia ao que o
+Salvar escreve.
+
+### Barra de abas
+
+Era `Text("Tabs: Page Objects | Rede HTTP | Analytics")` e
+`Text("Strategy: ID | XPath | Coords")` — texto literal que parecia controle. A
+troca de aba acontecia por outro caminho e essa barra não participava dela.
+
+Agora são dois `SegmentedControl`, com contagem por aba para não ser preciso
+entrar na aba para saber se há o que ver nela.
+
+- **Estrutura · N** abre o `StructureDialog`, que já existia pronto e não estava
+  ligado: tabela ordenada dos passos gravados.
+- **Split** alterna entre os dois editores lado a lado e só o de ações.
+- **Rodar** executa o fluxo.
+
+### Execução de fluxo no contrato
+
+`services/flows.py` estava implementado e testado desde sempre, e só a interface
+Tk o usava — o front nativo não tinha como rodar automação nenhuma.
+
+Três métodos novos: `flow.run`, `flow.stop`, `flow.status`. O andamento sai como
+notificação `flow.log`, linha a linha, do mesmo jeito que o espelho usa
+`stream.frame`, e o fim como `flow.finished`.
+
+Isso passou a alimentar `runLog`, `currentRunStep` e `runState` — os três campos
+que as telas liam e ninguém escrevia.
+
+`flow.stop` marca a intenção e avisa a interface, sem matar o processo no meio
+de um toque.
+
+### Contrato
+
+37 → 41 métodos. Fixtures regeradas.
+
+---
+
+## Escolha de localizador, no modelo do Maestro Studio (08/09)
+
+O Maestro Studio é baseado em snapshot: captura mais hierarquia, desenha os
+limites dos elementos por cima e, ao clicar, **escolhe o seletor sozinho** a
+partir dos atributos, mostrando o comando pronto. Não é vídeo ao vivo — recaptura
+após cada ação.
+
+Comparando com o que já existia aqui, o overlay de hover e a resolução do clique
+já eram equivalentes. A diferença estava na escolha do seletor.
+
+### O buraco
+
+A estratégia era uma só para a sessão inteira e escolhida na mão: ID, XPath ou
+Coords. Isso produz passo instável, porque o mesmo `resource-id` pode casar com
+vários elementos da tela e o passo passa a depender de qual deles o Appium
+encontre primeiro.
+
+Medido no aparelho físico: na tela inicial, o id do elemento clicado casava com
+**15 elementos**. A gente emitia esse id assim mesmo.
+
+### O que passou a existir
+
+`rank_locators` ordena os candidatos por robustez — identificador, rótulo de
+acessibilidade, texto, caminho na árvore, coordenada — e **confere a unicidade
+contra a tela inteira**, que já está carregada no momento da gravação. Candidato
+ambíguo vai para o fim.
+
+Cada candidato carrega o motivo, para a tela poder mostrar o que foi descartado
+e por quê: sem isso o usuário não tem como discordar com fundamento.
+
+`codegen.record` aceita `strategy: "auto"`, que passou a ser o padrão da
+interface, e devolve a estratégia escolhida mais as alternativas avaliadas.
+
+Verificado no aparelho: com o id casando 15 vezes, o motor rebaixou o id e
+escolheu o XPath, que era único.
+
+### Cobertura
+
+Motor 196 → 201.
+
+---
+
+## A coluna do workspace sumia: era o NSRulerView (08/09)
+
+Sintoma: a coluna direita aparecia vazia, sem barra de abas, sem cabeçalho dos
+editores, só o rodapé lá embaixo.
+
+### Como foi isolado
+
+O ambiente ganhou acesso a `screencapture`, o que permitiu capturar a janela
+real e bissectar sozinho, sem depender de descrição. A sequência:
+
+1. Coluna inteira trocada por um retângulo vermelho → **apareceu**. Logo a
+   coluna renderiza e está no lugar certo.
+2. Barra de abas trocada por barra vermelha de 200pt → não apareceu, mas o
+   detector de cor estava com limiar errado (o vermelho sai lavado na captura).
+   Isso quase me levou a uma conclusão falsa; olhar a imagem, e não o limiar,
+   corrigiu.
+3. Coluna renderizada isolada em 440x950, a medida real → **correta**.
+4. Só a régua de numeração desligada → **tudo apareceu**.
+
+### A causa
+
+`LineNumberRuler` era um `NSRulerView`, o caminho idiomático do AppKit. Ligar
+`rulersVisible` no `NSScrollView` dentro do `HSplitView` da janela fazia o
+scroll view pedir uma altura enorme. O `VStack` da coluna dava tudo a ele, e a
+barra de abas e os cabeçalhos eram espremidos a zero.
+
+O teste de renderização isolada **não pegava**: `ImageRenderer` não desenha view
+do AppKit, então o `NSScrollView` nunca chegava a distorcer o layout ali. Era um
+defeito que só existia na janela real.
+
+### A correção
+
+`CodeTextView` desenha os números na própria margem esquerda, dentro do
+`draw(_:)`. Não mexe em métrica de layout nenhuma, e a numeração rola junto com
+o texto de graça.
+
+### Segundo defeito, encontrado no caminho
+
+A barra de abas não cabia na coluna. Com as três colunas abertas ela fica em
+440pt, e o conteúdo somado passa de 1000pt: as abas transbordavam para fora dos
+dois lados.
+
+Agora ela tem modo estreito, em duas linhas: abas em cima; seletor de estratégia
+como menu e ações em ícone embaixo. Mesma solução que a barra superior já usava,
+que eu não tinha aplicado aqui.
+
+### Lição de processo
+
+Snapshot isolado não substitui olhar a janela. Os dois defeitos acima passavam
+por build, por 71 testes e por renderização isolada, e só apareciam em execução.
+
+---
+
+## Escuta passiva: gravar o que se faz no aparelho (08/09)
+
+Objetivo: agir no aparelho ou simulador e ver o passo aparecer em Page Objects,
+sem clicar no espelho.
+
+### O que existe agora
+
+`passive.start`, `passive.stop`, `passive.status` no contrato, mais as
+notificações `passive.step`, `passive.text` e `passive.skipped`.
+
+O botão "Gravar do aparelho" liga e desliga, e fica vermelho enquanto grava.
+
+### Android: funciona, e a conversão importa
+
+Lê `/dev/input` pelo `getevent`. Verificado no moto g55 sem root: leitura
+permitida, touchscreen identificado como `event8` (`fts_ts`).
+
+O detalhe que decide se presta: o digitizer tem resolução própria. Neste
+aparelho vai a **4320x9600 para uma tela de 1080x2400** — fator 4. Sem a
+conversão, todo passo sairia a quatro vezes a distância. Os limites são lidos do
+próprio aparelho e conferidos.
+
+A falha de leitura desses limites era engolida por `except Exception: pass`.
+Era o pior lugar possível para silêncio: a escuta seguiria funcionando e
+gravando tudo errado. Agora é log explícito.
+
+### iOS: só simulador
+
+Observa o clique do mouse sobre a janela do Simulator. **Em iPhone físico não há
+como observar toque** — não existe API para isso, e nenhuma implementação muda
+esse fato.
+
+E um erro de espaço de coordenada que valia corrigir: `screen.size` no iOS mede
+a **captura, em pixels**; o WDA trabalha em **pontos**. Medido no iPhone 16e:
+1170x2532 contra 390x844, fator 3. A escuta usa a raiz da árvore do WDA, que é a
+fonte certa. A interface Tk usava o padrão fixo 390x844 do construtor, que
+acerta neste simulador por coincidência e erra em qualquer outro.
+
+### Digitação: cada tecla é um toque
+
+Digitar "joao" numa busca são quatro toques em coordenada de teclado. Sem
+tratamento, viravam quatro passos de clique — lixo que não reexecuta.
+
+Enquanto o teclado está na tela (`dumpsys input_method`, ~60 ms), os toques são
+suprimidos. Quando ele fecha, o motor relê a tela, encontra o campo e guarda o
+texto observado **no passo**, não no Page Object: o método gerado continua
+recebendo `texto` como parâmetro, porque o objeto precisa servir para qualquer
+valor; quem repete a execução é o passo.
+
+### O que falta verificar
+
+O caminho `getevent` → passo só pode ser confirmado com um toque físico de
+verdade. `sendevent` exige root neste aparelho, então não deu para sintetizar.
+Tudo antes disso está verificado: permissão, identificação do touchscreen,
+limites do digitizer e a conversão.

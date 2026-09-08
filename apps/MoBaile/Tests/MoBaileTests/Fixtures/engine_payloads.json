@@ -10,6 +10,7 @@
       "adb_available": true,
       "scrcpy_available": false,
       "wda_url": "http://localhost:8100",
+      "page_objects_key": "onboarding_credito_objs",
       "proxy": {
         "host": "127.0.0.1",
         "port": 8082,
@@ -22,6 +23,7 @@
         "analytics.stop",
         "codegen.record",
         "codegen.reset",
+        "codegen.save",
         "codegen.steps",
         "devices.list",
         "devices.watch_start",
@@ -31,14 +33,23 @@
         "emulators.list",
         "engine.info",
         "engine.shutdown",
+        "flow.run",
+        "flow.status",
+        "flow.stop",
         "hierarchy.dump",
         "hierarchy.element_at",
         "input.tap",
         "input.text",
+        "passive.start",
+        "passive.status",
+        "passive.stop",
         "proxy.clear",
         "proxy.events",
         "proxy.start",
         "proxy.stop",
+        "recording.start",
+        "recording.status",
+        "recording.stop",
         "screen.capture",
         "screen.size",
         "session.select_device",
@@ -146,7 +157,9 @@
         "chip_type": "B",
         "display_name": "Continuar"
       },
-      "step_count": 1
+      "step_count": 1,
+      "strategy": "position",
+      "alternatives": []
     }
   },
   "codegen.steps": {
@@ -346,6 +359,36 @@
       "appium_running": false,
       "appium_url": "http://127.0.0.1:4723",
       "wda_url": "http://localhost:8100"
+    }
+  },
+  "recording.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "recording": false,
+      "path": null,
+      "elapsed_s": 0.0,
+      "platform": null
+    }
+  },
+  "recording.start": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "recording": true,
+      "path": "/Users/qa/Movies/Mo baile/mobaile-android-20260908-101500.mp4",
+      "platform": "android",
+      "limit_s": 180
+    }
+  },
+  "recording.stop": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "recording": false,
+      "path": "/Users/qa/Movies/Mo baile/mobaile-android-20260908-101500.mp4",
+      "size_bytes": 1482310,
+      "duration_s": 12.4
     }
   },
   "wda.start": {

@@ -13,9 +13,15 @@ public struct CanvasSwitch: View {
     
     public var body: some View {
         HStack(spacing: 8) {
+            // Sem isto o rotulo quebra no meio da palavra quando a barra fica
+            // apertada: "Streaming" virava "Streamin" / "g" em duas linhas.
+            // O texto e curto e fixo, entao vale mais manter a largura
+            // intrinseca e deixar a barra comprimir o que e elastico.
             Text(label)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundColor(theme.current.textPrimary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)

@@ -46,6 +46,10 @@ class AppiumBridge:
     def __init__(self, base_url: str | None = None, wda_url: str | None = None):
         self.base_url = (base_url or settings.appium_url).rstrip("/")
         self.wda_url = (wda_url or settings.wda_url).rstrip("/")
+        # Qual plataforma e qual alvo a sessao aberta atende. Sem isto, uma
+        # sessao de iOS seria reaproveitada para um pedido de Android.
+        self.session_platform: str | None = None
+        self.session_udid: str | None = None
         self.session_id: str | None = None
         self._process: subprocess.Popen | None = None
 
@@ -160,6 +164,71 @@ class AppiumBridge:
             capabilities["appium:platformVersion"] = platform_version
         return capabilities
 
+    def _android_capabilities(self, udid: str) -> dict:
+        """Sessao UiAutomator2, equivalente Android da sessao XCUITest.
+
+        Existe porque `uiautomator dump` falha em parte dos aparelhos — em
+        Motorola com Android 14 ele e morto com SIGKILL e nao devolve nada. Sem
+        hierarquia nao ha elemento para resolver, e a gravacao de passo do
+        Android ficava sem gerar codigo enquanto a do iOS funcionava.
+        """
+        return {
+            "platformName": "Android",
+            "appium:automationName": "UiAutomator2",
+            "appium:udid": udid,
+            "appium:noReset": True,
+            # Mesmo motivo do iOS: com o padrao de 60 s o Appium encerraria a
+            # sessao por inatividade e derrubaria o servidor de UI junto.
+            "appium:newCommandTimeout": 0,
+            "appium:skipDeviceInitialization": False,
+            "appium:disableWindowAnimation": True,
+        }
+
+    def ensure_android_session(self, udid: str) -> tuple[bool, str]:
+        """Garante uma sessao UiAutomator2 para o aparelho informado."""
+        udid = validate_device_id(udid)
+        if self.session_id and self.session_platform == "android" and self.session_udid == udid:
+            return True, "Sessao Android ja estava aberta."
+
+        ok, mensagem = self.start_server()
+        if not ok:
+            return False, mensagem
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/session",
+                json={"capabilities": {"alwaysMatch": self._android_capabilities(udid)}},
+                timeout=WDA_SESSION_TIMEOUT,
+            )
+        except requests.Timeout:
+            return False, "O Appium demorou demais para abrir a sessao Android."
+        except requests.RequestException as exc:
+            return False, f"Falha ao falar com o Appium: {exc}"
+
+        if response.status_code not in (200, 201):
+            return False, f"O Appium recusou a sessao Android: {self._extract_error(response)}"
+
+        payload = response.json()
+        self.session_id = payload.get("sessionId") or (payload.get("value") or {}).get("sessionId")
+        self.session_platform = "android"
+        self.session_udid = udid
+        return True, "Sessao Android no ar."
+
+    def get_page_source(self) -> str | None:
+        """XML da tela pela sessao aberta, seja Android ou iOS."""
+        if not self.session_id:
+            return None
+        try:
+            response = requests.get(f"{self.base_url}/session/{self.session_id}/source", timeout=30)
+        except requests.RequestException as exc:
+            logger.debug("Page source pelo Appium falhou: %s", exc)
+            return None
+        if response.status_code != 200:
+            logger.debug("Page source pelo Appium respondeu %s", response.status_code)
+            return None
+        fonte = (response.json() or {}).get("value")
+        return fonte if isinstance(fonte, str) and fonte.strip() else None
+
     def _wda_port(self) -> int:
         from urllib.parse import urlparse
 
@@ -200,6 +269,8 @@ class AppiumBridge:
 
         payload = response.json()
         self.session_id = payload.get("sessionId") or (payload.get("value") or {}).get("sessionId")
+        self.session_platform = "ios"
+        self.session_udid = udid
 
         # A sessao voltou, mas a porta do WDA pode levar um instante a mais.
         deadline = time.time() + 30

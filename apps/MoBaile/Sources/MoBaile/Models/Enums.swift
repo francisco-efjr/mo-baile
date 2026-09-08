@@ -12,14 +12,28 @@ enum Platform: String, CaseIterable, Identifiable, Codable, Sendable {
 }
 
 enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
+    /// Deixa o motor escolher o localizador mais robusto que seja único na tela
+    /// atual. Uma estratégia fixa para a sessão inteira produz passo instável:
+    /// o mesmo `resource-id` pode casar com vários elementos, e aí o teste
+    /// depende de qual deles o Appium encontre primeiro.
+    case auto
     case id, xpath, coords
+
     var id: String { rawValue }
+
     var displayName: String {
         switch self {
+        case .auto: return "Auto"
         case .id: return "ID"
         case .xpath: return "XPath"
         case .coords: return "Coords"
         }
+    }
+
+    /// Nome do lado do motor. A interface chama de `coords` o que o contrato
+    /// chama de `position`.
+    var engineName: String {
+        self == .coords ? "position" : rawValue
     }
 }
 
@@ -59,11 +73,10 @@ enum ThemeMode: String, CaseIterable, Identifiable, Codable, Sendable {
 
 /// O que um clique no espelho significa.
 ///
-/// Antes o clique so selecionava o elemento na arvore; repassar o toque e
-/// gravar o passo, que sao as duas razoes de existir da ferramenta, nao tinham
-/// caminho na interface nativa.
+/// Eram tres modos. "Inspecionar" saiu: o painel de atributos ja e preenchido
+/// em qualquer modo, entao ele nao fazia nada que os outros dois nao fizessem,
+/// e ocupava espaco na barra obrigando a trocar de modo a toa.
 enum InteractionMode: String, CaseIterable, Identifiable, Sendable {
-    case inspect
     case forward
     case record
 
@@ -71,7 +84,6 @@ enum InteractionMode: String, CaseIterable, Identifiable, Sendable {
 
     var displayName: String {
         switch self {
-        case .inspect: return "Inspecionar"
         case .forward: return "Repassar toque"
         case .record: return "Gravar passo"
         }
@@ -79,7 +91,6 @@ enum InteractionMode: String, CaseIterable, Identifiable, Sendable {
 
     var symbolName: String {
         switch self {
-        case .inspect: return "cursorarrow.rays"
         case .forward: return "hand.tap"
         case .record: return "record.circle"
         }

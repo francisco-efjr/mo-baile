@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import sys, os, json
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _qa_common import registrar, tem_ios, png, emitir_binario, atraso_de_captura
+
+argv = sys.argv[1:]
+registrar("xcrun", argv)
+UDID = "A1B2C3D4-1111-2222-3333-444455556666"
+NOME = "iPhone 16 QA"
+
+if argv[:2] == ["simctl", "list"]:
+    booted = tem_ios() or os.environ.get("QA_IOS_BOOTED") == "1"
+    if "--json" in argv:
+        print(json.dumps({"devices": {
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-0": [
+                {"udid": UDID, "name": NOME, "state": "Booted" if booted else "Shutdown", "isAvailable": True},
+                {"udid": "BBBB-0000", "name": "iPad Air QA", "state": "Shutdown", "isAvailable": True},
+            ]}}))
+    else:
+        print("== Devices ==")
+        print("-- iOS 18.0 --")
+        estado = "Booted" if booted else "Shutdown"
+        print(f"    {NOME} ({UDID}) ({estado})")
+    sys.exit(0)
+
+if argv[:2] == ["simctl", "io"] and "screenshot" in argv:
+    atraso_de_captura(); emitir_binario(png(1170, 2532)); sys.exit(0)
+
+if argv[:2] == ["simctl", "boot"]:
+    sys.exit(0)
+
+if argv[:2] == ["simctl", "spawn"]:
+    sys.exit(0)
+
+sys.exit(0)

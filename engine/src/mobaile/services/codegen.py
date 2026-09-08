@@ -33,6 +33,19 @@ class CodeGenerator:
         self.declared_actions.clear()
         self.steps.clear()
 
+    def set_last_input_text(self, texto: str) -> bool:
+        """Guarda no ultimo passo de digitacao o texto que foi realmente escrito.
+
+        O metodo gerado continua recebendo `texto` como parametro, porque o Page
+        Object precisa ser reutilizavel. O valor observado fica no passo, que e
+        o que a execucao repete.
+        """
+        for passo in reversed(self.steps):
+            if passo.action_type == "input":
+                passo.input_text = texto
+                return True
+        return False
+
     def get_steps(self) -> list[AutomationStep]:
         return list(self.steps)
 
@@ -112,6 +125,68 @@ class CodeGenerator:
             counter += 1
 
         return final_name, final_slug
+
+    def rank_locators(self, element: UIElement, screen: list[UIElement]) -> list[dict]:
+        """Ordena os localizadores possiveis do mais robusto ao menos, dizendo
+        quais sao unicos na tela atual.
+
+        Escolher o seletor na mao, uma estrategia so para a sessao inteira,
+        produz codigo instavel: o mesmo `resource-id` pode aparecer cinco vezes
+        na tela, e o passo gerado passa a depender de qual delas o Appium achar
+        primeiro. Como a hierarquia inteira ja esta carregada, da para conferir.
+
+        A ordem segue robustez: identificador estavel primeiro, texto depois
+        (muda com idioma e conteudo), e coordenada por ultimo, que quebra em
+        qualquer mudanca de layout.
+        """
+        candidatos: list[dict] = []
+
+        def quantos_com(campo: str, valor: str) -> int:
+            return sum(1 for e in screen if getattr(e, campo, None) == valor)
+
+        if element.resource_id:
+            campo = "resource_id"
+            candidatos.append({
+                "strategy": "id",
+                "value": self.generate_locator_value(element, LocatorStrategy.ID),
+                "matches": quantos_com(campo, element.resource_id),
+                "why": "identificador do elemento, o que menos muda entre versoes",
+            })
+        if element.content_desc:
+            candidatos.append({
+                "strategy": "accessibility_id",
+                "value": f'(AppiumBy.ACCESSIBILITY_ID, "{element.content_desc}")',
+                "matches": quantos_com("content_desc", element.content_desc),
+                "why": "rotulo de acessibilidade, estavel e legivel",
+            })
+        if element.text:
+            candidatos.append({
+                "strategy": "text",
+                "value": f'(AppiumBy.XPATH, \'{self._generate_xpath(element)}\')',
+                "matches": quantos_com("text", element.text),
+                "why": "texto visivel; muda com idioma e com conteudo dinamico",
+            })
+        candidatos.append({
+            "strategy": "xpath",
+            "value": f'(AppiumBy.XPATH, \'{self._generate_xpath(element)}\')',
+            "matches": 1,
+            "why": "caminho na arvore; quebra se o layout mudar",
+        })
+        candidatos.append({
+            "strategy": "position",
+            "value": self.generate_locator_value(element, LocatorStrategy.POSITION),
+            "matches": 1,
+            "why": "coordenada absoluta; ultimo recurso, quebra com qualquer mudanca de tela",
+        })
+
+        for c in candidatos:
+            c["unique"] = c["matches"] == 1
+        # Unico vence ambiguo; entre iguais, mantem a ordem de robustez acima.
+        return sorted(candidatos, key=lambda c: not c["unique"])
+
+    def choose_locator(self, element: UIElement, screen: list[UIElement]) -> dict:
+        """O melhor localizador para este elemento nesta tela."""
+        return self.rank_locators(element, screen)[0]
 
     def generate_locator_value(self, element: UIElement, strategy: LocatorStrategy) -> str:
         if strategy == LocatorStrategy.ID:

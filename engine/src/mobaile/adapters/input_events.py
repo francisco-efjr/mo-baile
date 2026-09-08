@@ -1,3 +1,4 @@
+import logging
 import re
 import subprocess
 import threading
@@ -9,6 +10,9 @@ try:
     QUARTZ_AVAILABLE = True
 except ImportError:
     QUARTZ_AVAILABLE = False
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_video_viewport(win_w: int, win_h: int, device_w: int, device_h: int) -> tuple[int, int, int, int]:
@@ -79,8 +83,18 @@ class AndroidPassiveListener:
                         m = re.search(r"max\s+(\d+)", line)
                         if m:
                             self.max_y = int(m.group(1))
-        except Exception:
-            pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.warning("Nao foi possivel ler os limites do digitizer: %s", exc)
+
+        if not self.max_x or not self.max_y:
+            # Falhar calado aqui e o pior caso: a escuta continua funcionando e
+            # grava todo toque na coordenada errada. Medido neste Motorola, o
+            # digitizer vai a 4320x9600 para uma tela de 1080x2400 — sem a
+            # conversao, cada passo sai a quatro vezes a distancia.
+            logger.warning(
+                "Limites do digitizer nao encontrados para %s; a coordenada do toque "
+                "passivo pode sair errada.", self.device_id,
+            )
 
     def start(self):
         if (self._adb_thread and self._adb_thread.is_alive()) or (self._mouse_thread and self._mouse_thread.is_alive()):
@@ -117,6 +131,11 @@ class AndroidPassiveListener:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                # DEVNULL de proposito: sem isto o filho herda o stdin do
+                # motor, que e o canal JSON-RPC, e passa a consumir as
+                # linhas do protocolo. O sintoma e a chamada seguinte nunca
+                # responder — no app, janela travada sem erro.
+                stdin=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,
             )

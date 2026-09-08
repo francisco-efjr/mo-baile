@@ -83,6 +83,7 @@ em proxy aberto para quem estiver na mesma rede.
 | `make check` | Portão antes do commit: lint, bandit e suites |
 | `make test` | Suites Python |
 | `make test-swift` | Suite do front nativo, no macOS |
+| `make qa` | Quatro fluxos de ponta a ponta com aparelho falso, sem precisar de device |
 | `make coverage` | Cobertura do motor |
 | `make fixtures` | Regera as fixtures do contrato usadas pela suite Swift |
 | `make run` | Interface Python a partir do código-fonte |
@@ -98,6 +99,8 @@ em proxy aberto para quem estiver na mesma rede.
 | [PROTOCOLO_RPC.md](docs/PROTOCOLO_RPC.md) | Contrato completo entre motor e front |
 | [SEGURANCA.md](docs/SEGURANCA.md) | Auditoria, correções e pendências |
 | [QA.md](docs/QA.md) | Estado da suite e roteiro de verificação manual |
+| [RELATORIO_QA.md](docs/RELATORIO_QA.md) | Resultado dos quatro fluxos e os defeitos encontrados |
+| [qa/README.md](qa/README.md) | Harness de ponta a ponta dos quatro fluxos |
 | [ESTADO_ATUAL.md](docs/ESTADO_ATUAL.md) | O que funciona, o que depende de aparelho e o que é fachada |
 | [design/](docs/design/) | Especificação visual e handoff |
 | [research/](docs/research/) | Estudo do HTTP Toolkit e notas do interceptador |

@@ -33,12 +33,21 @@ enum EngineDTO {
         let height: Int
         let sourceWidth: Int
         let sourceHeight: Int
+        /// Métricas que viajam junto com o quadro do streaming.
+        ///
+        /// Opcionais porque `screen.capture` (captura avulsa) não as manda:
+        /// elas só existem quando há um stream medindo.
+        let fps: Double?
+        let captureMs: Double?
+        let skipped: Int?
 
         enum CodingKeys: String, CodingKey {
             case pngBase64 = "png_base64"
-            case width, height
+            case width, height, fps
             case sourceWidth = "source_width"
             case sourceHeight = "source_height"
+            case captureMs = "capture_ms"
+            case skipped
         }
 
         /// Converte para imagem. `nil` quando o base64 chega corrompido, o que a
@@ -343,6 +352,53 @@ enum EngineDTO {
         }
     }
 
+    struct PassiveState: Decodable {
+        let listening: Bool
+        let platform: String
+        /// Espaço de coordenadas do alvo: pixels no Android, pontos no iOS.
+        let screen: [Int]
+    }
+
+    struct FlowRun: Decodable {
+        let running: Bool
+        let steps: Int
+        let script: String
+    }
+
+    struct SaveResult: Decodable {
+        let saved: Bool
+        let paths: [String]
+        let directory: String
+    }
+
+    // MARK: - Gravacao de video da tela
+
+    struct RecordingState: Decodable {
+        let recording: Bool
+        let path: String?
+        let platform: String?
+        /// Só o Android tem limite: `screenrecord` para sozinho ao atingi-lo.
+        let limitSeconds: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case recording, path, platform
+            case limitSeconds = "limit_s"
+        }
+    }
+
+    struct RecordingResult: Decodable {
+        let recording: Bool
+        let path: String?
+        let sizeBytes: Int
+        let durationSeconds: Double
+
+        enum CodingKeys: String, CodingKey {
+            case recording, path
+            case sizeBytes = "size_bytes"
+            case durationSeconds = "duration_s"
+        }
+    }
+
     // MARK: - Ciclo de vida de simulador e emulador
 
     struct SimulatorList: Decodable {
@@ -417,6 +473,8 @@ enum EngineDTO {
         let adbAvailable: Bool
         let scrcpyAvailable: Bool
         let wdaUrl: String
+        /// Nome que os arquivos gravados vão receber.
+        let pageObjectsKey: String
         let proxy: ProxyInfo
         let methods: [String]
 
@@ -427,6 +485,7 @@ enum EngineDTO {
             case adbAvailable = "adb_available"
             case scrcpyAvailable = "scrcpy_available"
             case wdaUrl = "wda_url"
+            case pageObjectsKey = "page_objects_key"
         }
     }
 

@@ -142,7 +142,10 @@ enum DesignMetrics {
     
     enum Window {
         static let defaultSize = CGSize(width: 1440, height: 900)
-        static let minSize = CGSize(width: 1100, height: 720)
+        // A barra superior somada pede cerca de 1380 pontos e as tres colunas
+        // pedem 980. Em 1100 a janela abria com os controles das pontas
+        // cortados pela borda, que era o estado em que dava para redimensionar.
+        static let minSize = CGSize(width: 1320, height: 720)
     }
     
     enum DeviceMirror {

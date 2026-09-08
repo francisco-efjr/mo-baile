@@ -51,3 +51,8 @@ DerivedData/
 # Artefatos temporarios da automacao
 .flow_runner.py
 .automation_cache/
+
+# Artefatos do harness de QA (gerados a cada execucao)
+qa/calls.log
+qa/cert.pem
+qa/key.pem

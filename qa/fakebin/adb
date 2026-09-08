@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _qa_common import registrar, tem_android, png, emitir_binario, atraso_de_captura, ANDROID_XML
+
+argv = sys.argv[1:]
+registrar("adb", argv)
+SERIAL = "emulator-5554"
+
+def resto(args):
+    return args[2:] if len(args) >= 2 and args[0] == "-s" else args
+
+if argv and argv[0] == "devices":
+    print("List of devices attached")
+    if tem_android():
+        print(f"{SERIAL}\tdevice")
+    print()
+    sys.exit(0)
+
+a = resto(argv)
+
+if a[:3] == ["shell", "getprop", "ro.product.model"]:
+    print("Pixel 7 QA"); sys.exit(0)
+if a[:3] == ["shell", "getprop", "sys.boot_completed"]:
+    print("1"); sys.exit(0)
+if a[:3] == ["exec-out", "screencap", "-p"] or a[:2] == ["exec-out", "screencap"]:
+    atraso_de_captura(); emitir_binario(png(1080, 2400)); sys.exit(0)
+if a[:3] == ["shell", "uiautomator", "dump"]:
+    print(f"UI hierchary dumped to: {a[3] if len(a) > 3 else '/sdcard/x.xml'}"); sys.exit(0)
+if a[:2] == ["shell", "cat"]:
+    print(ANDROID_XML); sys.exit(0)
+if a[:3] == ["shell", "wm", "size"]:
+    print("Physical size: 1080x2400"); sys.exit(0)
+if a[:3] == ["shell", "getevent", "-p"]:
+    print("add device 1: /dev/input/event2")
+    print("    name:     \"qa-touch\"")
+    print("    events:")
+    print("      ABS (0003): 0035  : value 0, min 0, max 1079, fuzz 0, flat 0, resolution 0")
+    print("      ABS (0003): 0036  : value 0, min 0, max 2399, fuzz 0, flat 0, resolution 0")
+    sys.exit(0)
+if a[:2] == ["shell", "input"] or (a[:1] == ["shell"] and len(a) > 1 and a[1].startswith("input ")):
+    sys.exit(0)
+if a[:1] == ["reverse"] or a[:2] == ["shell", "settings"]:
+    if a[:1] == ["shell"] and "get" in a:
+        print(":0")
+    sys.exit(0)
+if a[:1] == ["shell"] and len(a) > 1 and a[1] == "rm":
+    sys.exit(0)
+if a[:1] == ["logcat"]:
+    sys.exit(0)
+if a[:1] == ["get-state"]:
+    print("device"); sys.exit(0)
+sys.exit(0)

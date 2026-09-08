@@ -21,9 +21,14 @@ class AppState {
     var passiveMode: Bool = false
     
     // --- Locator & Code ---
-    var locatorStrategy: LocatorStrategy = .id
+    var locatorStrategy: LocatorStrategy = .auto
     var locatorKey: String = "onboarding_credito"
     var workspaceTab: WorkspaceTab = .pageObjects
+
+    /// Mostra os dois editores lado a lado, ou só o de ações.
+    var splitEditors: Bool = true
+    /// Modal com a tabela ordenada dos passos gravados.
+    var showingStructure: Bool = false
     var codeSplitMode: Bool = true
     
     // --- Hierarchy ---
@@ -72,7 +77,14 @@ class AppState {
     var deviceSize: CGSize = CGSize(width: 1080, height: 2400)
 
     /// Modo de interacao do espelho: inspecionar, repassar toque ou gravar passo.
-    var interactionMode: InteractionMode = .inspect
+    var interactionMode: InteractionMode = .forward
+
+    /// Gravação de vídeo da tela do aparelho, feita pelo motor.
+    /// Escuta passiva: grava o que a pessoa faz direto no aparelho.
+    var passiveListening: Bool = false
+
+    var screenRecording: Bool = false
+    var screenRecordingPath: String?
     
     // MARK: - Computed Properties
     

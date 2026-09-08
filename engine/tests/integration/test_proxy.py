@@ -56,6 +56,7 @@ class DummyHTTPHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("X-Custom-Header", "TestValue")
+        self.send_header("Set-Cookie", "sessao=segredo-do-servidor; Path=/")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -191,6 +192,20 @@ class TestProxyInterception(ProxyTestBase):
         event = self.last_event()
         self.assertNotIn("1234", event.request_body)
         self.assertIn("redigido", event.request_body)
+
+    def test_header_sensivel_da_resposta_tambem_e_redigido(self):
+        # Encontrado em QA: só os headers da requisição eram redigidos. O
+        # cookie de sessão emitido pelo servidor vazava para a tabela e para a
+        # exportação HAR.
+        self.get()
+        event = self.last_event()
+        set_cookie = event.response_headers.get("Set-Cookie", "")
+        self.assertNotIn("segredo-do-servidor", set_cookie)
+        self.assertIn("redigido", set_cookie)
+        self.assertEqual(
+            event.response_headers.get("X-Custom-Header"), "TestValue",
+            "header inocente da resposta continua visível",
+        )
 
     def test_corpo_grande_e_truncado(self):
         self.get("/grande")

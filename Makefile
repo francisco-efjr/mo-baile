@@ -9,7 +9,7 @@ VENV_PY := $(VENV)/bin/python
 SWIFT_APP := apps/MoBaile
 
 .DEFAULT_GOAL := help
-.PHONY: help setup test test-engine test-ui test-swift lint format security audit fixtures check run run-engine install-app build-native clean
+.PHONY: help setup test test-engine test-ui test-swift qa lint format security audit fixtures check run run-engine install-app build-native clean
 
 help: ## Lista os alvos disponiveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -32,6 +32,9 @@ test-ui: ## Suite da UI Tkinter (precisa de sessao grafica)
 test-swift: ## Suite do front nativo (so no macOS, com Swift instalado)
 	cd $(SWIFT_APP) && swift test
 
+qa: ## Fluxos de ponta a ponta com aparelho falso (sem device, iOS, Android, HTTPS)
+	$(PYTHON) qa/run_all.py
+
 coverage: ## Cobertura do motor
 	cd engine && $(abspath $(VENV_PY)) -m pytest --cov --cov-report=term-missing
 
@@ -50,7 +53,7 @@ audit: ## Vulnerabilidades conhecidas nas dependencias
 fixtures: ## Regera as fixtures do contrato usadas pela suite Swift
 	$(PYTHON) tools/generate_fixtures.py
 
-check: lint security test ## Portao antes do commit
+check: lint security test qa ## Portao antes do commit
 
 run: ## Sobe a interface Tkinter a partir do codigo-fonte
 	$(VENV_PY) apps/tk-legacy/main.py

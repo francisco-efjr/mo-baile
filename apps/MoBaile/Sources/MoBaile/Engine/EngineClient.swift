@@ -27,6 +27,10 @@ actor EngineClient {
     private var buffer = Data()
 
     private var notificationContinuation: AsyncStream<EngineNotification>.Continuation?
+
+    /// Entrega ordenada dos pedaços do stdout, e a única tarefa que os consome.
+    private var chunkContinuation: AsyncStream<Data>.Continuation?
+    private var readerTask: Task<Void, Never>?
     /// Fluxo de notificacoes do motor: quadros do espelho, eventos HTTP, analytics.
     nonisolated let notifications: AsyncStream<EngineNotification>
 
@@ -67,10 +71,31 @@ actor EngineClient {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        // Os pedaços do stdout precisam ser consumidos NA ORDEM em que saíram
+        // do cano.
+        //
+        // Antes, cada pedaço virava uma `Task` própria — e `Task` não garante
+        // ordem. Resposta curta cabe num pedaço só e nunca deu problema, mas um
+        // quadro do espelho passa de 400 KB em base64 e chega em vários pedaços,
+        // que eram remontados embaralhados. O JSON ainda decodificava, porque a
+        // troca caía dentro da string base64, e o resultado era um PNG parcial:
+        // certo no topo, uma faixa de lixo e o resto preto.
+        //
+        // O `AsyncStream` preserva a ordem do `yield`, e um único consumidor
+        // aplica os pedaços em sequência.
+        let (pedacos, entregaPedaco) = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
+        self.chunkContinuation = entregaPedaco
+        self.readerTask = Task { [weak self] in
+            for await chunk in pedacos {
+                guard !Task.isCancelled else { return }
+                await self?.ingest(chunk)
+            }
+        }
+
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            Task { await self?.ingest(chunk) }
+            entregaPedaco.yield(chunk)
         }
 
         // stderr do motor e log, nunca protocolo. Vai para o Console do sistema.
@@ -101,6 +126,10 @@ actor EngineClient {
         try? send(["jsonrpc": .string("2.0"), "id": .int(nextID()), "method": .string("engine.shutdown")])
         stdinHandle?.closeFile()
         process.terminate()
+        chunkContinuation?.finish()
+        chunkContinuation = nil
+        readerTask?.cancel()
+        readerTask = nil
         self.process = nil
         self.stdinHandle = nil
     }

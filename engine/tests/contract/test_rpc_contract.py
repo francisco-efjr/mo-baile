@@ -129,6 +129,17 @@ class TestValidacaoDeParametros(ContractBase):
     def test_coordenada_ausente(self):
         self.assertEqual(self.erro("input.tap", {})["data"]["code"], "invalid_input")
 
+    def test_texto_invalido_vira_erro_tipado_e_nao_ok_falso(self):
+        # Encontrado em QA: o adapter recusava o texto internamente e devolvia
+        # False, então a interface recebia {"ok": false} sem motivo nenhum.
+        erro = self.erro("input.text", {"text": "linha1\nlinha2"})
+        self.assertEqual(erro["data"]["code"], "invalid_input")
+        self.assertIn("controle", erro["message"].lower())
+
+    def test_texto_gigante_tambem_e_recusado_na_fronteira(self):
+        erro = self.erro("input.text", {"text": "a" * 5000})
+        self.assertEqual(erro["data"]["code"], "invalid_input")
+
     def test_element_at_exige_hierarquia_carregada(self):
         erro = self.erro("hierarchy.element_at", {"x": 5, "y": 5})
         self.assertIn("hierarchy.dump", erro["message"])
@@ -168,6 +179,47 @@ class TestFluxoDeInspecao(ContractBase):
         self.assertEqual(len(self.ok("codegen.steps")["steps"]), 1)
         self.ok("codegen.reset")
         self.assertEqual(len(self.ok("codegen.steps")["steps"]), 0)
+
+    def test_clique_fora_de_qualquer_elemento_grava_passo_por_posicao(self):
+        """Regressao: clicar em area vazia recusava a gravacao.
+
+        `codegen.record` levantava "Nenhum elemento encontrado nessa
+        coordenada" quando o ponto nao caia em no nenhum da arvore. No front
+        nativo isso virava clique que nao faz nada: area vazia, canvas de jogo
+        e componente desenhado a mao nao aparecem na arvore de acessibilidade,
+        e e justamente ai que o passo por coordenada e a unica saida.
+
+        A interface Tk ja sintetizava esse elemento por conta propria, ou seja,
+        a regra existia num lugar so e o outro front falhava em silencio.
+        """
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=self.XML):
+            self.ok("hierarchy.dump")
+
+        # O XML da suite cobre [10,20]-[110,70]; este ponto esta fora dele.
+        gravado = self.ok("codegen.record", {"x": 900, "y": 1600, "strategy": "position"})
+
+        self.assertEqual(gravado["step_count"], 1)
+        self.assertEqual(gravado["element"]["text"], "pos_900_1600")
+        self.assertEqual(gravado["element"]["bounds"], [900, 1600, 900, 1600])
+        self.assertTrue(gravado["element"]["clickable"])
+        self.assertIn("900", gravado["action_code"] + gravado["object_code"])
+
+    def test_elemento_sintetico_usa_a_classe_da_plataforma_ativa(self):
+        """iOS e Android nomeiam o no generico de formas diferentes, e o codigo
+        gerado carrega esse nome. Trocar a plataforma tem de trocar a classe."""
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=self.XML):
+            self.ok("hierarchy.dump")
+
+        android = self.ok("codegen.record", {"x": 900, "y": 1600})
+        self.assertEqual(android["element"]["class_name"], "android.view.View")
+
+        # Trocar de plataforma limpa a hierarquia carregada, entao o dump e
+        # refeito pela fonte do iOS antes de gravar de novo.
+        self.ok("session.select_device", {"platform": "ios", "device_id": "SIMULADOR"})
+        with patch.object(self.server.ios, "get_ui_hierarchy", return_value=self.XML):
+            self.ok("hierarchy.dump")
+        ios = self.ok("codegen.record", {"x": 900, "y": 1600})
+        self.assertEqual(ios["element"]["class_name"], "XCUIElementTypeOther")
 
     def test_estrategia_invalida_e_recusada(self):
         with patch.object(self.server.adb, "get_ui_hierarchy", return_value=self.XML):
@@ -333,6 +385,12 @@ class TestStreamingPorNotificacao(ContractBase):
         self.assertGreaterEqual(len(quadros), 1)
         self.assertNotIn("id", quadros[0], "notificacao nao carrega id")
         self.assertIn("png_base64", quadros[0]["params"])
+
+        # As metricas viajam com o quadro. Sem isso o front precisava de uma ida
+        # e volta de `stream.stats` por quadro, e o laco de notificacoes dele
+        # ficava parado esperando a resposta.
+        for chave in ("fps", "capture_ms", "skipped"):
+            self.assertIn(chave, quadros[0]["params"], f"{chave} deveria vir junto com o quadro")
         self.assertTrue(estatisticas["running"])
         self.assertGreater(estatisticas["frames_captured"], 0)
 

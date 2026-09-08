@@ -25,6 +25,9 @@ ignore = [
 "apps/tk-legacy/**" = ["B", "SIM", "UP", "C4", "RUF", "E741"]
 # Testes podem repetir e usar nomes longos.
 "**/tests/**" = ["B011"]
+# Harness de QA: scripts imperativos, com import tardio de proposito para que
+# cada fluxo carregue o motor so depois de montar o PATH falso.
+"qa/**" = ["E402", "E701", "E702", "E741", "B011", "SIM", "RUF", "UP", "C4", "B007", "F841"]
 
 [lint.isort]
 known-first-party = ["mobaile", "mobaile_tk"]

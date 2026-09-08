@@ -36,11 +36,13 @@ struct MirrorColumn: View {
             .padding(.horizontal, 24)
             .padding(.top, 24)
             
-            // Device
+            // A moldura recebe a folga da coluna: era ela que ficava fixa
+            // enquanto o Spacer de baixo engolia todo o espaço extra.
             DeviceBezel()
+                .frame(maxHeight: .infinity)
             
-            // Dock
-            DeviceDock()
+            MirrorRefreshButton()
+                .padding(.bottom, 24)
             
             // Cartao de correlacao: so faz sentido quando a coluna da direita
             // esta mostrando rede ou analytics.
@@ -54,7 +56,6 @@ struct MirrorColumn: View {
                     .padding(.horizontal, 24)
             }
             
-            Spacer(minLength: 0)
         }
         .frame(minWidth: 320, idealWidth: 384, maxWidth: 560)
         .background(theme.bgPanel)

@@ -25,6 +25,12 @@ struct WorkspaceColumn: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .sheet(isPresented: Bindable(appState).showingStructure) {
+                StructureDialog { appState.showingStructure = false }
+                    .environment(appState)
+                    .environment(themeManager)
+                    .frame(minWidth: 640, minHeight: 420)
+            }
             .background(themeManager.current.bgWindow)
         }
     }

@@ -85,6 +85,17 @@ class ADBBridge:
             )
         except FileNotFoundError as exc:
             raise ToolNotFoundError("adb não encontrado no sistema.", detail=str(exc)) from exc
+        except PermissionError as exc:
+            # Encontrado em QA: adb presente mas sem bit de execução (acontece
+            # ao copiar o SDK entre máquinas, ou com binário em quarentena)
+            # subia PermissionError crua até a fronteira RPC, que devolvia erro
+            # interno com stack trace em vez de uma explicação.
+            raise ToolNotFoundError(
+                f"adb encontrado em {self.adb_path}, mas sem permissão de execução.",
+                detail=str(exc),
+            ) from exc
+        except OSError as exc:
+            raise ToolNotFoundError("Falha ao executar o adb.", detail=str(exc)) from exc
         return proc.returncode, proc.stdout, proc.stderr
 
     def _device_args(self, device_id: str, *rest: str) -> list[str]:
@@ -116,13 +127,41 @@ class ADBBridge:
             return []
 
     def list_devices_typed(self) -> list[Device]:
-        """Mesma listagem, já no modelo de domínio (usada pela fronteira RPC)."""
+        """Mesma listagem, já no modelo de domínio (usada pela fronteira RPC).
+
+        O `adb` diz `device` assim que o `adbd` responde, o que num emulador
+        acontece bem antes de a interface subir. Quem consumia essa lista
+        selecionava o alvo, lia `screen.size` e capturava a tela nesse intervalo:
+        o tamanho vinha errado e o quadro vinha rasgado, e nada relia depois.
+
+        Por isso o estado `device` só é mantido quando `sys.boot_completed`
+        confirma. Antes disso o alvo aparece como `booting`, que a interface já
+        trata como "não pronto".
+        """
         out: list[Device] = []
         for serial, state in self.list_devices():
+            if state == "device" and not self.is_boot_completed(serial):
+                state = "booting"
             out.append(
                 Device(id=serial, name=self.get_device_model(serial), platform=Platform.ANDROID, state=state)
             )
         return out
+
+    def is_boot_completed(self, device_id: str) -> bool:
+        """O Android terminou de subir a interface?
+
+        Falha de leitura conta como concluído: um aparelho físico que não
+        responde ao getprop no tempo esperado nao pode sumir da lista por causa
+        disso. O modo de errar escolhido e o menos danoso dos dois.
+        """
+        try:
+            _, stdout, _ = self._run_cmd(
+                self._device_args(device_id, "shell", "getprop", "sys.boot_completed"), timeout=5
+            )
+            return stdout.decode("utf-8", errors="ignore").strip() == "1"
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.debug("sys.boot_completed indisponivel para %r: %s", device_id, exc)
+            return True
 
     def get_device_model(self, device_id: str) -> str:
         try:
@@ -135,6 +174,52 @@ class ADBBridge:
     # -------------------------------------------------------------- captura
 
     def take_screenshot(self, device_id: str) -> Image.Image | None:
+        """Captura a tela. Tenta o formato cru primeiro, por ser bem mais rapido.
+
+        `screencap -p` faz o aparelho codificar o PNG, e essa codificacao domina
+        o custo: medido num Motorola g55, 2,14 s contra 1,23 s do formato cru,
+        apesar de o cru trafegar 10 MB contra 3 MB. Como o espelho reduz a
+        imagem logo em seguida, pagar PNG no aparelho e desperdicio puro — e era
+        quase um segundo por quadro.
+        """
+        img = self._screenshot_raw(device_id)
+        if img is not None:
+            return img
+        return self._screenshot_png(device_id)
+
+    def _screenshot_raw(self, device_id: str) -> Image.Image | None:
+        """`screencap` sem `-p`: cabecalho curto seguido de RGBA cru."""
+        try:
+            ret, stdout, _ = self._run_cmd(
+                self._device_args(device_id, "exec-out", "screencap"), timeout=15
+            )
+            if ret != 0 or len(stdout) < 16:
+                return None
+            largura = int.from_bytes(stdout[0:4], "little")
+            altura = int.from_bytes(stdout[4:8], "little")
+            if not (0 < largura <= 8192 and 0 < altura <= 8192):
+                return None
+
+            esperado = largura * altura * 4
+            # O cabecalho ganhou um campo de espaco de cor no Android 13; aceitar
+            # os dois tamanhos evita depender da versao do aparelho.
+            for cabecalho in (16, 12):
+                if len(stdout) - cabecalho == esperado:
+                    return Image.frombuffer(
+                        "RGBA", (largura, altura), stdout[cabecalho:], "raw", "RGBA", 0, 1
+                    ).convert("RGB")
+            logger.debug(
+                "screencap cru com tamanho inesperado (%d bytes para %dx%d)", len(stdout), largura, altura
+            )
+            return None
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.debug("Captura crua falhou para %r: %s", device_id, exc)
+            return None
+        except (OSError, ValueError) as exc:
+            logger.debug("Captura crua nao pode ser lida para %r: %s", device_id, exc)
+            return None
+
+    def _screenshot_png(self, device_id: str) -> Image.Image | None:
         try:
             ret, stdout, _ = self._run_cmd(
                 self._device_args(device_id, "exec-out", "screencap", "-p"), timeout=10
@@ -244,6 +329,11 @@ class ADBBridge:
             subprocess.Popen(
                 [self.emulator_path, "-avd", avd_name],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                # DEVNULL de proposito: sem isto o filho herda o stdin do
+                # motor, que e o canal JSON-RPC, e passa a consumir as
+                # linhas do protocolo. O sintoma e a chamada seguinte nunca
+                # responder — no app, janela travada sem erro.
+                stdin=subprocess.DEVNULL,
             )
             return True
         except OSError as exc:
