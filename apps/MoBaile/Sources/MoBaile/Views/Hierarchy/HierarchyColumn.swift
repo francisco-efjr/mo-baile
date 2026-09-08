@@ -13,6 +13,12 @@ struct HierarchyColumn: View {
                     .textCase(.uppercase)
                     .foregroundColor(themeManager.current.textLabel ?? Color.gray)
                     .tracking(0.09) // letter-spacing .09em
+
+                if !appState.hierarchyElements.isEmpty {
+                    Text("· \(appState.hierarchyElements.count)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(themeManager.current.textTertiary ?? Color.secondary)
+                }
                 
                 Spacer()
                 

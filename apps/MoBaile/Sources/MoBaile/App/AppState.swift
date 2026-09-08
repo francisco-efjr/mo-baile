@@ -29,6 +29,8 @@ class AppState {
     var splitEditors: Bool = true
     /// Modal com a tabela ordenada dos passos gravados.
     var showingStructure: Bool = false
+    /// Modal com a execucao visual do fluxo gravado.
+    var showingFlowRunner: Bool = false
     var codeSplitMode: Bool = true
     
     // --- Hierarchy ---

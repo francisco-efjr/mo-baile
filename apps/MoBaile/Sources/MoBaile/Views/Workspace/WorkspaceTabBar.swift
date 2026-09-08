@@ -126,6 +126,9 @@ struct WorkspaceTabBar: View {
                     icon: compactas ? "play.fill" : nil,
                     style: podeRodar ? .run : .disabled
                 ) {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        appState.showingFlowRunner = true
+                    }
                     Task { await session.runFlow() }
                 }
                 .disabled(!podeRodar)

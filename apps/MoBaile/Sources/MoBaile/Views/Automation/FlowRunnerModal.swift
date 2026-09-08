@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FlowRunnerModal: View {
     @Environment(AppState.self) private var appState
+    @Environment(EngineSession.self) private var session
     @Environment(ThemeManager.self) private var theme
     
     let locatorKey: String
@@ -14,7 +15,7 @@ struct FlowRunnerModal: View {
                 .ignoresSafeArea()
                 .onTapGesture {
                     if appState.runState != .running {
-                        onClose()
+                        withAnimation(.easeIn(duration: 0.15)) { onClose() }
                     }
                 }
             
@@ -34,7 +35,11 @@ struct FlowRunnerModal: View {
                     
                     // Preconditions
                     HStack(spacing: 12) {
-                        Text("WDA 8100 \(appState.daemonStatus.wda == .ok ? "✓" : "✗")")
+                        if appState.platform == .android {
+                            Text("ADB \(appState.daemonStatus.adb == .ok ? "✓" : "✗")")
+                        } else {
+                            Text("WDA 8100 \(appState.daemonStatus.wda == .ok ? "✓" : "✗")")
+                        }
                         Text("·")
                         Text("Proxy 8082 \(appState.daemonStatus.proxy == .ok ? "✓" : "✗")")
                     }
@@ -103,17 +108,17 @@ struct FlowRunnerModal: View {
                     Spacer()
                     
                     HStack(spacing: 8) {
-                        FluidPillButton(text: "Abrir log", style: .secondary) {
-                            // Action to open log
+                        FluidPillButton(text: "Abrir log", icon: "doc.plaintext", style: .secondary) {
+                            abrirLog()
                         }
                         
                         if appState.runState == .running {
-                            FluidPillButton(text: "Interromper", style: .destructiveText) {
-                                // Action to stop
+                            FluidPillButton(text: "Interromper", icon: "stop.fill", style: .destructiveText) {
+                                Task { await session.stopFlow() }
                             }
                         } else {
                             FluidPillButton(text: "Concluir", style: .primary) {
-                                onClose()
+                                withAnimation(.easeIn(duration: 0.15)) { onClose() }
                             }
                         }
                     }
@@ -131,6 +136,19 @@ struct FlowRunnerModal: View {
             )
             .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
         }
+    }
+
+    private func abrirLog() {
+        let texto = appState.runLog.map {
+            "[\($0.timestamp.formatted(date: .omitted, time: .standard))] [\($0.prefix)] \($0.message)"
+        }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(texto, forType: .string)
+
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("mobaile-flow-run.log")
+        try? texto.write(to: tempURL, atomically: true, encoding: .utf8)
+        NSWorkspace.shared.open(tempURL)
+        appState.statusMessage = "Log copiado e aberto no editor"
     }
     
     private var statusBadge: some View {

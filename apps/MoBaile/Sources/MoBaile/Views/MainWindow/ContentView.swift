@@ -17,37 +17,52 @@ struct ContentView: View {
     var body: some View {
         @Bindable var state = appState
 
-        VStack(spacing: 0) {
-            UnifiedToolbar()
+        ZStack {
+            VStack(spacing: 0) {
+                UnifiedToolbar()
 
-            if appState.isDeviceConnected {
-                HSplitView {
-                    if appState.mirrorVisible {
-                        MirrorColumn()
-                    } else {
-                        CollapsedRail(label: "Espelho", shortcut: "⌥1", isExpanded: $state.mirrorVisible)
-                    }
+                if appState.isDeviceConnected {
+                    HSplitView {
+                        if appState.mirrorVisible {
+                            MirrorColumn()
+                        } else {
+                            CollapsedRail(label: "Espelho", shortcut: "⌥1", isExpanded: $state.mirrorVisible)
+                        }
 
-                    if appState.hierarchyVisible {
-                        HierarchyColumn()
-                    } else {
-                        CollapsedRail(label: "Hierarquia", shortcut: "⌥2", isExpanded: $state.hierarchyVisible)
-                    }
+                        if appState.hierarchyVisible {
+                            HierarchyColumn()
+                        } else {
+                            CollapsedRail(label: "Hierarquia", shortcut: "⌥2", isExpanded: $state.hierarchyVisible)
+                        }
 
-                    if appState.workspaceVisible {
-                        WorkspaceColumn()
-                            .frame(minWidth: 420)
-                    } else {
-                        CollapsedRail(label: "Workspace", shortcut: "⌥3", isExpanded: $state.workspaceVisible)
+                        if appState.workspaceVisible {
+                            WorkspaceColumn()
+                                .frame(minWidth: 420)
+                        } else {
+                            CollapsedRail(label: "Workspace", shortcut: "⌥3", isExpanded: $state.workspaceVisible)
+                        }
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                EmptyStateView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    EmptyStateView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                StatusBar()
             }
 
-            StatusBar()
+            if appState.showingFlowRunner {
+                FlowRunnerModal(
+                    locatorKey: session.engineInfo?.pageObjectsKey ?? "fluxo",
+                    onClose: {
+                        withAnimation(.easeIn(duration: 0.15)) {
+                            appState.showingFlowRunner = false
+                        }
+                    }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(100)
+            }
         }
         .background(theme.bgWindow)
         .task {

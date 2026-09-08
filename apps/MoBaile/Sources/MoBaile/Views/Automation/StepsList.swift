@@ -7,11 +7,14 @@ struct StepsList: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 4) {
-                ForEach(appState.steps) { step in
+                ForEach(Array(appState.steps.enumerated()), id: \.element.id) { index, step in
+                    let stepNumber = index + 1
+                    let isCurrent = appState.currentRunStep == stepNumber
+                    let isPast = appState.currentRunStep > stepNumber || appState.runState == .passed
                     StepRow(
                         step: step,
-                        isActive: appState.runState == .running && appState.steps.firstIndex(where: { $0.id == step.id }) == appState.currentRunStep,
-                        isDone: appState.steps.firstIndex(where: { $0.id == step.id }) ?? 0 < appState.currentRunStep
+                        isActive: appState.runState == .running && isCurrent,
+                        isDone: isPast
                     )
                 }
             }
