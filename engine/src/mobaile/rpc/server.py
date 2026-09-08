@@ -584,6 +584,7 @@ class EngineServer:
     # -------------------------------------------------------------- analytics
 
     def analytics_start(self, _params: dict[str, Any]) -> dict[str, Any]:
+        self.analytics.add_event_callback(lambda event: self.notify("analytics.event", event.to_dict()))
         ok = self.analytics.start(platform=self.platform.value, device_id=self.device_id)
         return {"running": ok}
 

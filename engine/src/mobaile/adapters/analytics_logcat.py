@@ -54,6 +54,10 @@ class FirebaseAnalyticsListener:
         self._lock = threading.Lock()
         self.active_platform: str = "android"
         self.active_device: str | None = None
+        self._callbacks: list[Callable[[AnalyticsEvent], None]] = []
+
+    def add_event_callback(self, cb: Callable[[AnalyticsEvent], None]) -> None:
+        self._callbacks.append(cb)
 
     def get_next_id(self) -> int:
         with self._lock:
@@ -190,6 +194,11 @@ class FirebaseAnalyticsListener:
                     with self._lock:
                         self.events_history.append(event)
                     self.event_queue.put(event)
+                    for cb in self._callbacks:
+                        try:
+                            cb(event)
+                        except Exception:
+                            logger.exception("Callback de analytics falhou.")
 
     def _parse_line(self, line: str, platform: str = "android") -> AnalyticsEvent | None:
         """Extrai data, tag, nome do evento e parâmetros tanto para Android quanto iOS."""

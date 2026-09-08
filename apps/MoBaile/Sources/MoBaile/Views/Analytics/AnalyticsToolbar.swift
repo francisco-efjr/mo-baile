@@ -39,6 +39,18 @@ struct AnalyticsToolbar: View {
             
             HStack(spacing: 8) {
                 FluidPillButton(
+                    text: appState.analyticsListenerActive ? "Parar escuta" : "Iniciar escuta",
+                    icon: appState.analyticsListenerActive ? "stop.fill" : "antenna.radiowaves.left.and.right",
+                    style: appState.analyticsListenerActive ? .primary : .secondary
+                ) {
+                    Task {
+                        await session.toggleAnalytics()
+                    }
+                }
+                .disabled(!appState.isDeviceConnected)
+                .help(appState.analyticsListenerActive ? "Encerra a captura de eventos de Analytics" : "Inicia a captura de eventos de Analytics (Firebase) no aparelho")
+
+                FluidPillButton(
                     text: "Copiar TSV",
                     icon: "doc.on.clipboard",
                     style: .secondary
