@@ -12,8 +12,15 @@ public struct PanelToggles: View {
     @Environment(ThemeManager.self) private var themeManager
 
     @Binding var mirrorVisible: Bool
-    @Binding var hierarchyVisible: Bool
     @Binding var workspaceVisible: Bool
+
+    public init(
+        mirrorVisible: Binding<Bool>,
+        workspaceVisible: Binding<Bool>
+    ) {
+        self._mirrorVisible = mirrorVisible
+        self._workspaceVisible = workspaceVisible
+    }
 
     public init(
         mirrorVisible: Binding<Bool>,
@@ -21,15 +28,13 @@ public struct PanelToggles: View {
         workspaceVisible: Binding<Bool>
     ) {
         self._mirrorVisible = mirrorVisible
-        self._hierarchyVisible = hierarchyVisible
         self._workspaceVisible = workspaceVisible
     }
 
     public var body: some View {
         HStack(spacing: 2) {
             botao(icone: "iphone", nome: "Espelho", atalho: "⌥1", ligado: $mirrorVisible)
-            botao(icone: "list.bullet.indent", nome: "Hierarquia", atalho: "⌥2", ligado: $hierarchyVisible)
-            botao(icone: "curlybraces", nome: "Workspace", atalho: "⌥3", ligado: $workspaceVisible)
+            botao(icone: "curlybraces", nome: "Workspace", atalho: "⌥2", ligado: $workspaceVisible)
         }
         .padding(2)
         .background(

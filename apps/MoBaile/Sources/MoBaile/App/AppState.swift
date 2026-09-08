@@ -11,7 +11,7 @@ class AppState {
     
     // --- UI Visibility ---
     var mirrorVisible: Bool = true
-    var hierarchyVisible: Bool = true
+    var hierarchyVisible: Bool = false
     var workspaceVisible: Bool = true
     var zenMode: Bool = false
     
@@ -124,16 +124,13 @@ class AppState {
         zenMode.toggle()
         if zenMode {
             mirrorVisible = false
-            hierarchyVisible = false
         } else {
             mirrorVisible = true
-            hierarchyVisible = true
         }
     }
     
     func restoreAllPanels() {
         mirrorVisible = true
-        hierarchyVisible = true
         workspaceVisible = true
         zenMode = false
     }

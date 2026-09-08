@@ -53,10 +53,8 @@ struct MoBaileCommands: Commands {
         CommandGroup(after: .toolbar) {
             Button("Espelho") { appState.mirrorVisible.toggle() }
                 .keyboardShortcut("1", modifiers: .option)
-            Button("Hierarquia") { appState.hierarchyVisible.toggle() }
-                .keyboardShortcut("2", modifiers: .option)
             Button("Workspace") { appState.workspaceVisible.toggle() }
-                .keyboardShortcut("3", modifiers: .option)
+                .keyboardShortcut("2", modifiers: .option)
             Divider()
             Button("Mostrar todos os paineis") { appState.restoreAllPanels() }
                 .keyboardShortcut("f", modifiers: [.command, .option])

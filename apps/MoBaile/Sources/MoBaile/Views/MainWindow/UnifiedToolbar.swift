@@ -157,7 +157,6 @@ struct UnifiedToolbar: View {
 
             PanelToggles(
                 mirrorVisible: Bindable(state).mirrorVisible,
-                hierarchyVisible: Bindable(state).hierarchyVisible,
                 workspaceVisible: Bindable(state).workspaceVisible
             )
 

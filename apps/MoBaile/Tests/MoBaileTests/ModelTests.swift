@@ -95,20 +95,17 @@ final class ModelTests: XCTestCase {
         let state = AppState()
         
         state.mirrorVisible = true
-        state.hierarchyVisible = true
         state.zenMode = false
         
         state.toggleZenMode()
         
         XCTAssertTrue(state.zenMode)
         XCTAssertFalse(state.mirrorVisible)
-        XCTAssertFalse(state.hierarchyVisible)
         
         state.toggleZenMode()
         
         XCTAssertFalse(state.zenMode)
         XCTAssertTrue(state.mirrorVisible)
-        XCTAssertTrue(state.hierarchyVisible)
     }
 
     func testHARExporterGeneratesValidJSON() throws {

@@ -29,17 +29,11 @@ struct ContentView: View {
                             CollapsedRail(label: "Espelho", shortcut: "⌥1", isExpanded: $state.mirrorVisible)
                         }
 
-                        if appState.hierarchyVisible {
-                            HierarchyColumn()
-                        } else {
-                            CollapsedRail(label: "Hierarquia", shortcut: "⌥2", isExpanded: $state.hierarchyVisible)
-                        }
-
                         if appState.workspaceVisible {
                             WorkspaceColumn()
-                                .frame(minWidth: 420)
+                                .frame(minWidth: 460)
                         } else {
-                            CollapsedRail(label: "Workspace", shortcut: "⌥3", isExpanded: $state.workspaceVisible)
+                            CollapsedRail(label: "Workspace", shortcut: "⌥2", isExpanded: $state.workspaceVisible)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
