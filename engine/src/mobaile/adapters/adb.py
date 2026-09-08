@@ -382,6 +382,9 @@ class ADBBridge:
             port = validate_port(proxy_port)
             args = self._device_args(device_id)
             self._run_cmd([*args, "shell", "settings", "put", "global", "http_proxy", ":0"], timeout=5)
+            self._run_cmd([*args, "shell", "settings", "delete", "global", "http_proxy"], timeout=5)
+            self._run_cmd([*args, "shell", "settings", "delete", "global", "global_http_proxy_host"], timeout=5)
+            self._run_cmd([*args, "shell", "settings", "delete", "global", "global_http_proxy_port"], timeout=5)
             self._run_cmd([*args, "reverse", "--remove", f"tcp:{port}"], timeout=5)
             return True
         except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
