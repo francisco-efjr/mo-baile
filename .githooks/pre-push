@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Portao de versionamento: todo push de branch leva versao nova (docs/VERSIONAMENTO.md).
+# Ativado por `make hooks` (git config core.hooksPath .githooks).
+exec python3 "$(git rev-parse --show-toplevel)/tools/version.py" pre-push

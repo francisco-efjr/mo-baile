@@ -10,6 +10,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  versao:
+    name: Versão (docs/VERSIONAMENTO.md)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cópias e CHANGELOG batem com VERSION
+        run: python tools/version.py check
+      # Todo PR sobe a versão: é a mesma regra do hook de pre-push, para quem
+      # empurrou com --no-verify ou sem `make hooks`.
+      - name: Versão maior que a da branch de destino
+        if: github.event_name == 'pull_request'
+        run: |
+          base="$(git show "origin/${{ github.base_ref }}:VERSION" 2>/dev/null || echo 0.0.0)"
+          head="$(cat VERSION)"
+          python - "$base" "$head" <<'PY'
+          import sys
+          base, head = (tuple(map(int, v.strip().split("."))) for v in sys.argv[1:])
+          if head <= base:
+              print(f"::error::VERSION {sys.argv[2]} nao e maior que {sys.argv[1]} da branch de destino. Rode tools/version.py bump.")
+              sys.exit(1)
+          PY
+
   engine:
     name: Motor (Python ${{ matrix.python }})
     runs-on: ubuntu-latest

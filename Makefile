@@ -9,7 +9,7 @@ VENV_PY := $(VENV)/bin/python
 SWIFT_APP := apps/MoBaile
 
 .DEFAULT_GOAL := help
-.PHONY: help setup test test-engine test-ui test-swift qa lint format security audit fixtures check run run-engine install-app build-native clean
+.PHONY: help setup hooks version test test-engine test-ui test-swift qa lint format security audit fixtures check run run-engine install-app build-native clean
 
 help: ## Lista os alvos disponiveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -19,7 +19,14 @@ setup: ## Cria o ambiente virtual e instala motor + UI em modo editavel
 	$(VENV_PY) -m pip install --upgrade pip
 	$(VENV_PY) -m pip install -e "engine[dev,macos]"
 	$(VENV_PY) -m pip install -e apps/tk-legacy
+	$(MAKE) hooks
 	@echo "pronto. Ative com: source $(VENV)/bin/activate"
+
+hooks: ## Liga o portao de versionamento no push (docs/VERSIONAMENTO.md)
+	git config core.hooksPath .githooks
+
+version: ## Mostra a versao e confere se as copias e o CHANGELOG batem
+	$(PYTHON) tools/version.py check
 
 test: test-engine test-ui ## Roda as suites Python
 
@@ -53,7 +60,7 @@ audit: ## Vulnerabilidades conhecidas nas dependencias
 fixtures: ## Regera as fixtures do contrato usadas pela suite Swift
 	$(PYTHON) tools/generate_fixtures.py
 
-check: lint security test qa ## Portao antes do commit
+check: version lint security test qa ## Portao antes do commit
 
 run: ## Sobe a interface Tkinter a partir do codigo-fonte
 	$(VENV_PY) apps/tk-legacy/main.py

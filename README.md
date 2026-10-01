@@ -114,3 +114,7 @@ ninguém vai descobrir qual até um cliente reclamar.
 
 Mudou o contrato? Rode `make fixtures` e faça o commit do resultado. O CI
 reprova o PR se as fixtures estiverem desatualizadas.
+
+Todo push sobe a versão (`VERSION` + `CHANGELOG.md`, SemVer). O hook de
+`pre-push` e o CI recusam o que não subir; rode `make hooks` uma vez por clone.
+Passo a passo em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
