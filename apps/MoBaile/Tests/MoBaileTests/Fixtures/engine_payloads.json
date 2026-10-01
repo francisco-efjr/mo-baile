@@ -19,6 +19,7 @@
       "methods": [
         "analytics.clear",
         "analytics.events",
+        "analytics.ios_devices",
         "analytics.start",
         "analytics.stop",
         "codegen.record",
@@ -31,6 +32,7 @@
         "diagnostics.check",
         "emulators.boot",
         "emulators.list",
+        "engine.hello",
         "engine.info",
         "engine.shutdown",
         "flow.run",
@@ -65,6 +67,291 @@
         "wda.start",
         "wda.status"
       ]
+    }
+  },
+  "engine.hello": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocol_version": 2,
+      "engine_version": "2.0.0",
+      "capabilities": [
+        "cancel",
+        "progress",
+        "lanes"
+      ],
+      "methods": {
+        "engine.hello": {
+          "lane": "inline",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "engine.info": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "engine.shutdown": {
+          "lane": "inline",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "session.select_device": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "devices.list": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "devices.watch_start": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "devices.watch_stop": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "diagnostics.check": {
+          "lane": "query",
+          "timeout_s": 30,
+          "progress": true
+        },
+        "simulators.list": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "simulators.boot": {
+          "lane": "environment",
+          "timeout_s": 180,
+          "progress": true
+        },
+        "simulators.shutdown": {
+          "lane": "environment",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "emulators.list": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "emulators.boot": {
+          "lane": "environment",
+          "timeout_s": 120,
+          "progress": true
+        },
+        "wda.start": {
+          "lane": "environment",
+          "timeout_s": 600,
+          "progress": true
+        },
+        "wda.status": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "recording.start": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "recording.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "recording.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "screen.capture": {
+          "lane": "capture",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "screen.size": {
+          "lane": "capture",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "hierarchy.dump": {
+          "lane": "capture",
+          "timeout_s": 60,
+          "progress": true
+        },
+        "hierarchy.element_at": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "input.tap": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "input.text": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.start": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.stop": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.stats": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "scrcpy.start": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "scrcpy.stop": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "scrcpy.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.start": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "proxy.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "proxy.events": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.clear": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "analytics.start": {
+          "lane": "services",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "analytics.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "analytics.events": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "analytics.clear": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "analytics.ios_devices": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.record": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.steps": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.reset": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.save": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.run": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "flow.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "flow.status": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "passive.start": {
+          "lane": "capture",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "passive.stop": {
+          "lane": "capture",
+          "timeout_s": 75,
+          "progress": false
+        },
+        "passive.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        }
+      },
+      "notifications": [
+        "stream.frame",
+        "stream.settled",
+        "proxy.event",
+        "analytics.event",
+        "device.changed",
+        "passive.step",
+        "passive.skipped",
+        "passive.text",
+        "flow.log",
+        "flow.finished",
+        "$/progress"
+      ]
+    }
+  },
+  "erro_incompatible_protocol": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Protocolo incompativel: o front fala a versao 1 e o motor, a versao 2. Atualize o Mo baile para que os dois andem juntos.",
+      "data": {
+        "code": "incompatible_protocol",
+        "message": "Protocolo incompativel: o front fala a versao 1 e o motor, a versao 2. Atualize o Mo baile para que os dois andem juntos."
+      }
     }
   },
   "session.select_device": {
@@ -197,7 +484,8 @@
       "width": 30,
       "height": 60,
       "source_width": 60,
-      "source_height": 120
+      "source_height": 120,
+      "device_id": "emulator-5554"
     }
   },
   "screen.size": {
@@ -403,6 +691,15 @@
       "wda_running": true
     }
   },
+  "notif_$/progress": {
+    "jsonrpc": "2.0",
+    "method": "$/progress",
+    "params": {
+      "token": "wda-1",
+      "message": "Subindo o WebDriverAgent pelo Appium. Na primeira vez ele compila, o que leva minutos.",
+      "percent": null
+    }
+  },
   "notif_proxy.event": {
     "jsonrpc": "2.0",
     "method": "proxy.event",
@@ -450,6 +747,18 @@
         "first_open": true
       },
       "raw_log": "Logging event: screen_view"
+    }
+  },
+  "erro_request_cancelled": {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "error": {
+      "code": -32800,
+      "message": "Requisicao cancelada.",
+      "data": {
+        "code": "request_cancelled",
+        "message": "Requisicao cancelada."
+      }
     }
   }
 }

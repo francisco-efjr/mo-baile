@@ -38,6 +38,18 @@ class TestScreenDiffDetector(unittest.TestCase):
         self.assertTrue(mudou)
         self.assertGreater(score, 3.5)
 
+    def test_mudanca_localizada_pequena_e_detectada(self):
+        detector = ScreenDiffDetector(diff_threshold=3.5, settle_delay=0.1)
+        base = tela("black")
+        detector.process_frame(base)
+        # Cria uma pequena alteração concentrada (ex: toggle switch acionado)
+        com_toggle = tela("black")
+        for x in range(30, 60):
+            for y in range(30, 60):
+                com_toggle.putpixel((x, y), (255, 255, 255))
+        mudou, _, _ = detector.process_frame(com_toggle)
+        self.assertTrue(mudou, "micro-mudança localizada deve ser detectada")
+
     def test_estabilizacao_dispara_apos_o_intervalo(self):
         detector = ScreenDiffDetector(diff_threshold=3.5, settle_delay=0.05)
         detector.process_frame(tela("black"))

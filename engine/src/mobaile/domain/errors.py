@@ -53,3 +53,27 @@ class AdapterError(EngineError):
     """Falha ao conversar com uma ferramenta externa."""
 
     code = "adapter_error"
+
+
+class IncompatibleProtocolError(EngineError):
+    """Front e motor falam versoes diferentes do contrato JSON-RPC.
+
+    Seguir conectando assim faria o erro aparecer longe da causa, como campo
+    ausente num DTO minutos depois. Recusar no aperto de mao poe a mensagem
+    certa na frente do usuario.
+    """
+
+    code = "incompatible_protocol"
+
+
+class RequestCancelledError(EngineError):
+    """O cliente desistiu da requisicao com `$/cancelRequest`.
+
+    Tambem serve de sinal interno: o metodo longo que percebe o cancelamento
+    entre duas etapas levanta este erro para parar cedo.
+    """
+
+    code = "request_cancelled"
+
+    def __init__(self, message: str = "Requisicao cancelada.") -> None:
+        super().__init__(message)

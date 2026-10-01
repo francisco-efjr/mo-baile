@@ -257,6 +257,12 @@ class ADBBridge:
                 if "<hierarchy" in xml_str:
                     return xml_str
 
+            if ret == 137:
+                # 137 é SIGKILL: no Android 14+ em aparelhos físicos, uiautomator dump
+                # é sumariamente morto pelo SO. Insistir no fallback apenas desperdiça 13 s.
+                logger.debug("uiautomator dump morto com SIGKILL (137) em %r; abortando fallback.", device_id)
+                return None
+
             # Fallback seguro para chamadas individuais caso o shell composto nao responda
             self._run_cmd([*args, "shell", "uiautomator", "dump", remote], timeout=8)
             ret, stdout, _ = self._run_cmd([*args, "shell", "cat", remote], timeout=5)
@@ -362,11 +368,27 @@ class ADBBridge:
         try:
             port = validate_port(proxy_port)
             args = self._device_args(device_id)
-            ret_rev, _, _ = self._run_cmd([*args, "reverse", f"tcp:{port}", f"tcp:{port}"], timeout=5)
-            ret_set, _, _ = self._run_cmd(
+            ret_rev, _, err_rev = self._run_cmd([*args, "reverse", f"tcp:{port}", f"tcp:{port}"], timeout=5)
+            if ret_rev != 0:
+                logger.warning("adb reverse falhou em %r: %s", device_id, err_rev.decode(errors="ignore"))
+                return False
+
+            # Desativa temporariamente a checagem de captive portal para evitar
+            # que o Android (especialmente Motorola/AOSP) marque a rede como
+            # 'sem internet' e desligue o roteamento ou migre para dados móveis.
+            self._run_cmd([*args, "shell", "settings", "put", "global", "captive_portal_mode", "0"], timeout=5)
+
+            ret_set, _, err_set = self._run_cmd(
                 [*args, "shell", "settings", "put", "global", "http_proxy", f"127.0.0.1:{port}"], timeout=5
             )
-            return ret_rev == 0 and ret_set == 0
+            if ret_set != 0:
+                logger.warning("Falha ao definir http_proxy em %r: %s", device_id, err_set.decode(errors="ignore"))
+                # Rollback defensivo: desfaz a rota reversa e o captive_portal_mode
+                self._run_cmd([*args, "shell", "settings", "delete", "global", "captive_portal_mode"], timeout=5)
+                self._run_cmd([*args, "reverse", "--remove", f"tcp:{port}"], timeout=5)
+                return False
+
+            return True
         except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
             logger.warning("Configuração de proxy falhou em %r: %s", device_id, exc)
             return False
@@ -385,6 +407,7 @@ class ADBBridge:
             self._run_cmd([*args, "shell", "settings", "delete", "global", "http_proxy"], timeout=5)
             self._run_cmd([*args, "shell", "settings", "delete", "global", "global_http_proxy_host"], timeout=5)
             self._run_cmd([*args, "shell", "settings", "delete", "global", "global_http_proxy_port"], timeout=5)
+            self._run_cmd([*args, "shell", "settings", "delete", "global", "captive_portal_mode"], timeout=5)
             self._run_cmd([*args, "reverse", "--remove", f"tcp:{port}"], timeout=5)
             return True
         except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
@@ -446,3 +469,35 @@ class ADBBridge:
         except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
             logger.debug("getevent -p falhou em %r: %s", device_id, exc)
         return (None, None, None)
+
+    def get_current_package(self, device_id: str) -> str | None:
+        """Obtém o nome do pacote (package) do app atualmente em primeiro plano."""
+        try:
+            args = self._device_args(device_id)
+            # Tenta via mCurrentFocus ou mFocusedApp (dumpsys window)
+            ret, stdout, _ = self._run_cmd([*args, "shell", "dumpsys", "window"], timeout=5)
+            if ret == 0 and stdout:
+                text = stdout.decode("utf-8", errors="ignore")
+                for line in text.splitlines():
+                    if "mCurrentFocus" in line or "mFocusedApp" in line:
+                        m = re.search(r"(?:u\d+\s+)?([a-zA-Z0-9_\.]+)/", line)
+                        if m:
+                            pkg = m.group(1).strip()
+                            if pkg and not pkg.startswith("com.android.systemui") and not pkg.endswith("launcher") and not pkg.endswith("launcher3"):
+                                return pkg
+
+            # Alternativa via dumpsys activity
+            ret, stdout, _ = self._run_cmd([*args, "shell", "dumpsys", "activity", "activities"], timeout=5)
+            if ret == 0 and stdout:
+                text = stdout.decode("utf-8", errors="ignore")
+                for line in text.splitlines():
+                    if "topResumedActivity" in line or "ResumedActivity" in line:
+                        m = re.search(r"([a-zA-Z0-9_\.]+)/[a-zA-Z0-9_\.]+", line)
+                        if m:
+                            pkg = m.group(1).strip()
+                            if pkg and not pkg.startswith("com.android.systemui") and not pkg.endswith("launcher") and not pkg.endswith("launcher3"):
+                                return pkg
+            return None
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+            logger.debug("Consulta do pacote atual falhou em %r: %s", device_id, exc)
+            return None

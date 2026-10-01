@@ -333,3 +333,92 @@ extension EngineContractTests {
         XCTAssertNil(estado.platform)
     }
 }
+
+// MARK: - Protocolo 2: handshake, cancelamento e progresso
+
+/// O que a Etapa 1 acrescentou ao contrato. O front passou a depender de três
+/// coisas que não existiam: a tabela de prazos do `engine.hello`, o código de
+/// cancelamento e o formato do `$/progress`. Um campo renomeado em qualquer
+/// uma delas faria o front cair no prazo padrão, mostrar cancelamento como
+/// erro ou ignorar o progresso, tudo em silêncio.
+extension EngineContractTests {
+
+    private struct CorpoDeErro: Decodable {
+        struct Body: Decodable {
+            struct Detail: Decodable { let code: String; let message: String }
+            let code: Int
+            let message: String
+            let data: Detail?
+        }
+        let error: Body
+    }
+
+    func testEngineHello() throws {
+        let hello = try decodeResult("engine.hello", as: EngineDTO.Hello.self)
+        XCTAssertEqual(hello.protocolVersion, EngineSession.protocolVersion, "front e motor divergem na versão")
+        XCTAssertFalse(hello.engineVersion.isEmpty)
+        XCTAssertTrue(hello.capabilities.contains("cancel"), "\(hello.capabilities)")
+        XCTAssertTrue(hello.capabilities.contains("progress"), "\(hello.capabilities)")
+        XCTAssertTrue(hello.notifications.contains("$/progress"), "\(hello.notifications)")
+        // As filas mudam com o motor; o front só depende de toda entrada ter
+        // uma, e do prazo.
+        for (metodo, spec) in hello.methods {
+            XCTAssertFalse(spec.lane.isEmpty, "\(metodo) sem fila")
+            XCTAssertGreaterThan(spec.timeoutS, 0, "\(metodo) sem prazo")
+        }
+
+        // As três operações longas para as quais a sessão manda
+        // `progress_token`: têm de emitir progresso e ter prazo maior que o
+        // padrão, ou a interface desistiria delas no meio.
+        for metodo in ["wda.start", "simulators.boot", "emulators.boot"] {
+            let spec = try XCTUnwrap(hello.methods[metodo], "\(metodo) ausente da tabela")
+            XCTAssertEqual(spec.lane, "environment", metodo)
+            XCTAssertTrue(spec.progress, "\(metodo) não emite progresso")
+            XCTAssertGreaterThan(spec.timeoutS, EngineClient.defaultTimeout, metodo)
+        }
+    }
+
+    func testErroDeProtocoloIncompativel() throws {
+        let dados = try payload("erro_incompatible_protocol")
+        let corpo = try JSONDecoder().decode(CorpoDeErro.self, from: dados).error
+        XCTAssertEqual(corpo.code, -32000)
+        XCTAssertEqual(corpo.data?.code, "incompatible_protocol")
+        // A mensagem é o que o usuário lê, e ela tem de citar as duas versões.
+        let mensagem = try XCTUnwrap(corpo.data?.message)
+        XCTAssertTrue(mensagem.contains(String(EngineSession.protocolVersion)), mensagem)
+
+        // Pelo caminho do cliente, chega como erro de domínio com o código que
+        // a sessão traduz para `incompatibleProtocol`.
+        XCTAssertThrowsError(try EngineClient.decodeResult(dados, as: EngineDTO.Hello.self)) { erro in
+            XCTAssertEqual(erro as? EngineError, .engine(code: "incompatible_protocol", message: mensagem))
+        }
+    }
+
+    func testErroDeRequisicaoCanceladaViraCancelled() throws {
+        let dados = try payload("erro_request_cancelled")
+        let corpo = try JSONDecoder().decode(CorpoDeErro.self, from: dados).error
+        XCTAssertEqual(corpo.code, EngineClient.requestCancelledCode)
+        XCTAssertEqual(corpo.data?.code, "request_cancelled")
+
+        XCTAssertThrowsError(try EngineClient.decodeResult(dados, as: EngineDTO.Hello.self)) { erro in
+            XCTAssertEqual(erro as? EngineError, .cancelled, "cancelamento viraria mensagem de erro na tela")
+        }
+    }
+
+    func testNotificacaoDeProgresso() throws {
+        struct Envelope: Decodable {
+            let method: String
+            let params: EngineDTO.Progress
+        }
+        let envelope = try JSONDecoder().decode(Envelope.self, from: payload("notif_$/progress"))
+        XCTAssertEqual(envelope.method, "$/progress")
+        XCTAssertFalse(envelope.params.message.isEmpty)
+        switch envelope.params.token {
+        case .string, .int: break
+        default: XCTFail("token tem de ser texto ou número: \(envelope.params.token)")
+        }
+        if let percent = envelope.params.percent {
+            XCTAssertTrue((0...100).contains(percent), "percentual fora da faixa: \(percent)")
+        }
+    }
+}

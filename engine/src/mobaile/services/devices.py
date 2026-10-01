@@ -53,6 +53,15 @@ class DeviceWatcher:
 
         self.current_platform: str | None = None
         self.current_device_id: str | None = None
+        # Sobe a cada `set_platform`. Uma listagem leva ate segundos (`adb
+        # devices` com aparelho travado), e se a plataforma mudou no meio dela o
+        # resultado descreve a plataforma anterior: aplica-lo punha um serial
+        # Android numa sessao iOS.
+        self._generation = 0
+        # Ordem de locks: este e tomado antes do lock de estado do servidor (o
+        # aviso roda com ele), e o servidor nunca chama `set_platform` segurando
+        # o dele. Assim nao ha inversao.
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------ ciclo de vida
 
@@ -76,8 +85,10 @@ class DeviceWatcher:
 
     def set_platform(self, platform: str) -> None:
         """Troca a plataforma vigiada e forca uma nova deteccao."""
-        self.target_platform = platform
-        self.reset_current()
+        with self._lock:
+            self._generation += 1
+            self.target_platform = platform
+            self.reset_current()
 
     def reset_current(self) -> None:
         self.current_device_id = None
@@ -85,11 +96,11 @@ class DeviceWatcher:
 
     # ------------------------------------------------------------------ deteccao
 
-    def _list_targets(self) -> list[tuple[str, str]]:
-        """`(id, rotulo)` dos alvos prontos da plataforma vigiada."""
-        if self.target_platform == Platform.IOS.value:
+    def _list_targets(self, platform: str) -> list[tuple[str, str]]:
+        """`(id, rotulo)` dos alvos prontos de `platform`."""
+        if platform == Platform.IOS.value:
             return list(self.ios.list_booted_simulators())
-        if self.target_platform == Platform.ANDROID.value:
+        if platform == Platform.ANDROID.value:
             # Alvo em `unauthorized` ou `offline` nao serve: selecionar um
             # desses faria toda operacao seguinte falhar sem explicacao.
             return [(dev_id, state) for dev_id, state in self.adb.list_devices() if state == "device"]
@@ -100,26 +111,36 @@ class DeviceWatcher:
 
         Separado do laco de proposito: assim da para testar a maquina de estados
         sem thread e sem espera.
+
+        A plataforma e lida antes de listar, e a listagem roda fora do lock. O
+        resultado so vale se ninguem trocou a plataforma enquanto ela rodava.
         """
+        with self._lock:
+            platform, generation = self.target_platform, self._generation
         try:
-            targets = self._list_targets()
+            targets = self._list_targets(platform)
         except (EngineError, OSError) as exc:
             logger.warning("Falha ao consultar dispositivos: %s", exc)
             targets = []
 
-        if targets:
-            device_id = targets[0][0]
-            if self.current_platform != self.target_platform or self.current_device_id != device_id:
-                self.current_platform = self.target_platform
-                self.current_device_id = device_id
-                self.on_device_changed(self.target_platform, device_id)
-            return device_id
+        with self._lock:
+            if generation != self._generation:
+                logger.debug("Listagem de %s descartada: a plataforma mudou durante ela.", platform)
+                return None
 
-        if self.current_device_id is not None:
-            self.current_platform = None
-            self.current_device_id = None
-            self.on_device_changed("none", "")
-        return None
+            if targets:
+                device_id = targets[0][0]
+                if self.current_platform != platform or self.current_device_id != device_id:
+                    self.current_platform = platform
+                    self.current_device_id = device_id
+                    self.on_device_changed(platform, device_id)
+                return device_id
+
+            if self.current_device_id is not None:
+                self.current_platform = None
+                self.current_device_id = None
+                self.on_device_changed("none", "")
+            return None
 
     def _watch_loop(self) -> None:
         while not self._stop_event.is_set():

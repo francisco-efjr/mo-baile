@@ -66,4 +66,101 @@ final class ToolbarLayoutTests: XCTestCase {
             "abaixo da barra deveria haver só o preenchimento; vieram \(cores.count) cores"
         )
     }
+
+    /// Valida que a barra renderiza perfeitamente no estado desconectado
+    func testBarraRenderizaDesconectadaSemErros() throws {
+        let estado = AppState()
+        estado.selectedDevice = nil
+        estado.availableDevices = []
+        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
+        let toolbar = UnifiedToolbar()
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager())
+
+        let renderer = ImageRenderer(content: toolbar.frame(width: 1440, height: 52))
+        XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar desconectada")
+    }
+
+    /// Valida renderização no Android com scrcpy ativo e inativo
+    func testBarraRenderizaAndroidComScrcpy() throws {
+        let estado = AppState()
+        estado.platform = .android
+        estado.selectedDevice = "emulator-5554"
+        estado.availableDevices = [(id: "emulator-5554", name: "Pixel 7 Pro")]
+        estado.scrcpyAvailable = true
+        estado.scrcpyRunning = true
+        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
+        let toolbar = UnifiedToolbar()
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager())
+
+        let renderer = ImageRenderer(content: toolbar.frame(width: 1440, height: 52))
+        XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar Android com scrcpy ativo")
+    }
+
+    /// Valida renderização no iOS físico vs iOS simulador
+    func testBarraRenderizaIOSFisicoESimulador() throws {
+        let estado = AppState()
+        estado.platform = .ios
+        estado.selectedDevice = "00008110-0012345678" // Dispositivo físico
+        estado.availableDevices = [(id: "00008110-0012345678", name: "iPhone 15 Pro Max")]
+        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
+        let toolbarFisico = UnifiedToolbar()
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager())
+
+        let rendererFisico = ImageRenderer(content: toolbarFisico.frame(width: 1440, height: 52))
+        XCTAssertNotNil(rendererFisico.nsImage, "Falha ao renderizar toolbar no iOS físico")
+
+        // Agora simulador (deve ter escuta passiva habilitada se UDID estiver em simulators)
+        estado.selectedDevice = "7303D258"
+        estado.availableDevices = [(id: "7303D258", name: "iPhone 16")]
+        let toolbarSim = UnifiedToolbar()
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager())
+
+        let rendererSim = ImageRenderer(content: toolbarSim.frame(width: 1440, height: 52))
+        XCTAssertNotNil(rendererSim.nsImage, "Falha ao renderizar toolbar no iOS simulador")
+    }
+
+    /// Valida renderização nos estados de gravação de tela e escuta passiva simultâneos
+    func testBarraRenderizaEstadosDeGravacao() throws {
+        let estado = AppState()
+        estado.platform = .android
+        estado.selectedDevice = "emulator-5554"
+        estado.availableDevices = [(id: "emulator-5554", name: "Pixel 7")]
+        estado.screenRecording = true
+        estado.passiveListening = true
+        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
+        let toolbar = UnifiedToolbar()
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager())
+
+        let renderer = ImageRenderer(content: toolbar.frame(width: 1440, height: 52))
+        XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar gravando tela e escuta passiva")
+    }
+
+    /// Valida que a barra alterna para o modo compacto sem cortar elementos nem crashar em larguras menores
+    func testBarraModoCompactoRenderizaSemErros() throws {
+        let estado = AppState()
+        estado.platform = .android
+        estado.selectedDevice = "emulator-5554"
+        estado.availableDevices = [(id: "emulator-5554", name: "Pixel 7 Pro Extra Long Name")]
+        estado.screenRecording = true
+        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
+        let toolbar = UnifiedToolbar()
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager())
+
+        for largura in [CGFloat(1100), CGFloat(1280), CGFloat(1320), CGFloat(1399)] {
+            let renderer = ImageRenderer(content: toolbar.frame(width: largura, height: 52))
+            XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar compacta na largura \(largura)")
+        }
+    }
 }

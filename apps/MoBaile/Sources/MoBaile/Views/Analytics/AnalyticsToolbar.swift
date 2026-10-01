@@ -17,7 +17,11 @@ struct AnalyticsToolbar: View {
                     .foregroundColor(theme.current.textSecondary)
             }
             .frame(width: 140, alignment: .leading)
-            
+
+            if appState.platform == .ios {
+                iosSourceMenu
+            }
+
             HStack {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .foregroundColor(theme.current.textTertiary)
@@ -47,7 +51,7 @@ struct AnalyticsToolbar: View {
                         await session.toggleAnalytics()
                     }
                 }
-                .disabled(!appState.isDeviceConnected)
+                .disabled(!appState.analyticsListenerActive && !appState.canStartAnalytics)
                 .help(appState.analyticsListenerActive ? "Encerra a captura de eventos de Analytics" : "Inicia a captura de eventos de Analytics (Firebase) no aparelho")
 
                 FluidPillButton(
@@ -86,6 +90,88 @@ struct AnalyticsToolbar: View {
                 .foregroundColor(theme.current.border),
             alignment: .bottom
         )
+        .task(id: appState.platform) {
+            if appState.platform == .ios {
+                await session.refreshAnalyticsIOSDevices()
+            }
+        }
+    }
+
+    /// Origem do tagueamento no iOS: o simulador ou um iPhone por cabo. O
+    /// espelho so funciona com simulador, mas o log do Firebase vem dos dois.
+    private var iosSourceMenu: some View {
+        Menu {
+            Button(checked("Automático", appState.analyticsIOSSource == .auto)) {
+                appState.analyticsIOSSource = .auto
+            }
+            Button(checked("Simulador", appState.analyticsIOSSource == .simulator)) {
+                appState.analyticsIOSSource = .simulator
+            }
+            Divider()
+            if let hint = appState.analyticsIOSDeviceHint {
+                Text("iPhone por cabo indisponível")
+                Text(hint)
+            } else if appState.analyticsIOSDevices.isEmpty {
+                Text("Nenhum iPhone conectado por cabo")
+            } else {
+                ForEach(appState.analyticsIOSDevices) { device in
+                    Button(checked(deviceLabel(device), appState.analyticsIOSSource == .device(udid: device.udid))) {
+                        appState.analyticsIOSSource = .device(udid: device.udid)
+                    }
+                    .disabled(device.problem != nil)
+                    .help(device.problem ?? "")
+                }
+            }
+            Divider()
+            Button("Atualizar lista") {
+                Task { await session.refreshAnalyticsIOSDevices() }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: sourceIcon)
+                    .font(.system(size: 10))
+                Text(sourceLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundColor(theme.current.textSecondary)
+            .frame(maxWidth: 170, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .disabled(appState.analyticsListenerActive)
+        .help("De onde ler o tagueamento. Para trocar, pare a escuta.")
+        .accessibilityLabel("Origem do tagueamento")
+        .accessibilityValue(sourceLabel)
+    }
+
+    private func checked(_ label: String, _ isOn: Bool) -> String {
+        isOn ? "✓ \(label)" : label
+    }
+
+    private func deviceLabel(_ device: IOSPhysicalDevice) -> String {
+        let version = device.iosVersion.isEmpty ? "" : " · iOS \(device.iosVersion)"
+        let problem = device.problem == nil ? "" : " (indisponível)"
+        return "\(device.name)\(version)\(problem)"
+    }
+
+    private var sourceLabel: String {
+        switch appState.analyticsIOSSource {
+        case .auto: return "Automático"
+        case .simulator: return "Simulador"
+        case .device(let udid):
+            return appState.analyticsIOSDevices.first { $0.udid == udid }?.name ?? "iPhone"
+        }
+    }
+
+    private var sourceIcon: String {
+        switch appState.analyticsIOSSource {
+        case .auto: return "wand.and.stars"
+        case .simulator: return "macbook.and.iphone"
+        case .device: return "cable.connector"
+        }
     }
 
     private func copyTSV() {

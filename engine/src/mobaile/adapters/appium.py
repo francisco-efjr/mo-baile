@@ -15,6 +15,10 @@ Dois detalhes que decidem se isso funciona na pratica:
 2. **`newCommandTimeout: 0`.** Sem isso o Appium encerra a sessao apos 60 s sem
    comando e derruba o WDA junto. O usuario veria o indicador ficar verde e
    voltar a vermelho sozinho, que e o tipo de sintoma que consome uma tarde.
+
+`requests` e importado dentro de cada metodo que fala HTTP. Carregado no topo,
+ele custava uns 45 ms em toda subida do motor, inclusive nas que nunca chegam a
+falar com o Appium.
 """
 
 from __future__ import annotations
@@ -23,14 +27,17 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
-
-import requests
+from typing import TYPE_CHECKING
 
 from mobaile.config import settings
 from mobaile.domain.errors import ToolNotFoundError
 from mobaile.security import validate_device_id
+
+if TYPE_CHECKING:
+    import requests
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +59,12 @@ class AppiumBridge:
         self.session_udid: str | None = None
         self.session_id: str | None = None
         self._process: subprocess.Popen | None = None
+        # O motor atende filas em paralelo: `wda.start` e um `hierarchy.dump`
+        # do Android podem pedir o Appium ao mesmo tempo. Sem este lock os dois
+        # viam "fora do ar" e subiam dois servidores disputando a porta, ou
+        # abriam duas sessoes e cada um gravava a sua em `session_*`. E
+        # reentrante porque abrir sessao sobe o servidor antes.
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------- descoberta
 
@@ -76,12 +89,16 @@ class AppiumBridge:
 
     def is_running(self) -> bool:
         """O servidor Appium esta no ar?"""
+        import requests
+
         try:
             return requests.get(f"{self.base_url}/status", timeout=2).status_code == 200
         except requests.RequestException:
             return False
 
     def is_wda_running(self) -> bool:
+        import requests
+
         try:
             return requests.get(f"{self.wda_url}/status", timeout=2).status_code == 200
         except requests.RequestException:
@@ -91,6 +108,10 @@ class AppiumBridge:
 
     def start_server(self) -> tuple[bool, str]:
         """Sobe o servidor Appium em segundo plano, se ainda nao estiver de pe."""
+        with self._lock:
+            return self._start_server_locked()
+
+    def _start_server_locked(self) -> tuple[bool, str]:
         if self.is_running():
             return True, "Servidor Appium ja estava no ar."
 
@@ -187,6 +208,12 @@ class AppiumBridge:
     def ensure_android_session(self, udid: str) -> tuple[bool, str]:
         """Garante uma sessao UiAutomator2 para o aparelho informado."""
         udid = validate_device_id(udid)
+        with self._lock:
+            return self._ensure_android_session_locked(udid)
+
+    def _ensure_android_session_locked(self, udid: str) -> tuple[bool, str]:
+        import requests
+
         if self.session_id and self.session_platform == "android" and self.session_udid == udid:
             return True, "Sessao Android ja estava aberta."
 
@@ -216,10 +243,16 @@ class AppiumBridge:
 
     def get_page_source(self) -> str | None:
         """XML da tela pela sessao aberta, seja Android ou iOS."""
-        if not self.session_id:
+        import requests
+
+        # Lido uma vez, sem lock: segurar o lock durante a leitura prenderia o
+        # dump atras de um `wda.start` de minutos. Um id que caducou no meio so
+        # faz o Appium responder erro, que vira `None` aqui.
+        session_id = self.session_id
+        if not session_id:
             return None
         try:
-            response = requests.get(f"{self.base_url}/session/{self.session_id}/source", timeout=30)
+            response = requests.get(f"{self.base_url}/session/{session_id}/source", timeout=30)
         except requests.RequestException as exc:
             logger.debug("Page source pelo Appium falhou: %s", exc)
             return None
@@ -241,6 +274,12 @@ class AppiumBridge:
         porta do WDA responder.
         """
         udid = validate_device_id(udid)
+        with self._lock:
+            return self._ensure_wda_locked(udid, platform_version)
+
+    def _ensure_wda_locked(self, udid: str, platform_version: str | None) -> tuple[bool, str]:
+        import requests
+
 
         if self.is_wda_running():
             return True, "WebDriverAgent ja estava respondendo."
@@ -291,13 +330,16 @@ class AppiumBridge:
 
     def delete_session(self) -> bool:
         """Encerra a sessao. Isso derruba o WDA junto, por design do Appium."""
-        if not self.session_id:
+        import requests
+
+        with self._lock:
+            if not self.session_id:
+                return True
+            try:
+                requests.delete(f"{self.base_url}/session/{self.session_id}", timeout=10)
+            except requests.RequestException as exc:
+                logger.warning("Nao foi possivel encerrar a sessao do Appium: %s", exc)
+                return False
+            finally:
+                self.session_id = None
             return True
-        try:
-            requests.delete(f"{self.base_url}/session/{self.session_id}", timeout=10)
-        except requests.RequestException as exc:
-            logger.warning("Nao foi possivel encerrar a sessao do Appium: %s", exc)
-            return False
-        finally:
-            self.session_id = None
-        return True

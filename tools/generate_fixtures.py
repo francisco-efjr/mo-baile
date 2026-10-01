@@ -17,6 +17,7 @@ import io
 import json
 import pathlib
 import sys
+import threading
 from unittest.mock import patch
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ sys.path.insert(0, str(REPO_ROOT / "engine" / "src"))
 from PIL import Image  # noqa: E402
 
 from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
-from mobaile.rpc import protocol  # noqa: E402
+from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
 
 HIERARCHY_XML = (
@@ -97,8 +98,36 @@ def ambiente_fixo(server: EngineServer):
         yield
 
 
+def cancelamento() -> dict:
+    """Erro de cancelamento pelo caminho real: fila, `$/cancelRequest` e descarte.
+
+    Sobe o laco de producao (`serve_forever`) com um `wda.start` que so espera,
+    cancela o pedido e confere que saiu uma resposta so, a de erro. Montar esse
+    JSON a mao seria justamente a divergencia que as fixtures existem para pegar.
+    """
+    saida = io.StringIO()
+    server = EngineServer(out=saida)
+    liberar = threading.Event()
+
+    def wda_que_espera(_params):
+        liberar.wait(5)
+        return {"wda_running": True}
+
+    server.methods["wda.start"] = wda_que_espera
+
+    def entrada():
+        yield json.dumps({"jsonrpc": "2.0", "id": 7, "method": "wda.start", "params": {}})
+        yield json.dumps({"jsonrpc": "2.0", "method": contract.CANCEL_REQUEST, "params": {"id": 7}})
+        liberar.set()
+
+    server.serve_forever(entrada())
+    (resposta,) = [json.loads(linha) for linha in saida.getvalue().splitlines() if linha.strip()]
+    return resposta
+
+
 def build() -> dict:
-    server = EngineServer(out=io.StringIO())
+    out = io.StringIO()
+    server = EngineServer(out=out)
 
     def call(method, params=None):
         return server.handle_message(
@@ -107,6 +136,12 @@ def build() -> dict:
 
     with ambiente_fixo(server):
         fixtures = {"engine.info": call("engine.info")}
+        fixtures["engine.hello"] = call(
+            "engine.hello", {"protocol_version": contract.PROTOCOL_VERSION, "client": "MoBaile/0.1"}
+        )
+        fixtures["erro_incompatible_protocol"] = call(
+            "engine.hello", {"protocol_version": contract.PROTOCOL_VERSION - 1, "client": "MoBaile/0.0"}
+        )
         call("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
         fixtures["session.select_device"] = call(
             "session.select_device", {"platform": "android", "device_id": "emulator-5554"}
@@ -150,6 +185,15 @@ def build() -> dict:
             fixtures["recording.stop"] = call("recording.stop")
         fixtures["wda.start"] = call("wda.start", {"udid": SIMULADORES[0]["udid"]})
 
+        # `$/progress` sai do mesmo `wda.start`, agora com token. Fica o
+        # primeiro aviso, o de `percent` nulo, que e o caso que o front precisa
+        # decodificar sem inventar numero.
+        out.seek(0)
+        out.truncate()
+        call("wda.start", {"udid": SIMULADORES[0]["udid"], "progress_token": "wda-1"})
+        avisos = [json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip()]
+        fixtures["notif_$/progress"] = next(m for m in avisos if m.get("method") == contract.PROGRESS)
+
     traffic = NetworkEvent(
         id=7, timestamp=1757030000.5, time_str="14:32:10.123", method="POST",
         url="https://api.exemplo.com.br/v2/credito/simulacao", host="api.exemplo.com.br",
@@ -169,6 +213,7 @@ def build() -> dict:
     fixtures["notif_analytics.event"] = protocol.notification("analytics.event", analytics.to_dict())
 
     server.shutdown()
+    fixtures["erro_request_cancelled"] = cancelamento()
     return fixtures
 
 
