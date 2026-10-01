@@ -60,9 +60,12 @@ class ScreenDiffDetector:
 
         diff_img = ImageChops.difference(self.last_thumb, thumb)
         diff_score = ImageStat.Stat(diff_img).mean[0]
+        extrema = diff_img.getextrema()
+        peak_diff = extrema[1] if isinstance(extrema, tuple) and len(extrema) == 2 else 0
 
         now = time.time()
-        has_changed = diff_score > self.diff_threshold
+        # Detecta por alteração global da tela ou por alteração local concentrada (ex.: toggle, foco de input, checkbox)
+        has_changed = (diff_score > self.diff_threshold) or (peak_diff > 45 and diff_score > 0.4)
         is_settled = False
 
         if has_changed:

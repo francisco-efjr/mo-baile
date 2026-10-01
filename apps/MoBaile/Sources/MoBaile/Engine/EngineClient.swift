@@ -19,28 +19,75 @@ struct EngineNotification: Sendable {
 ///   ator por `await`.
 /// - **Uma linha por mensagem.** Enquadramento por `\n`, que casa com o lado
 ///   Python e dispensa cabecalho de tamanho.
+/// - **Toda chamada tem prazo.** O prazo vem da tabela que o motor manda no
+///   `engine.hello`; estourado, o cliente avisa o motor com `$/cancelRequest` e
+///   falha a chamada. Sem isso, uma resposta que nunca chega vira spinner
+///   eterno na interface.
 actor EngineClient {
+    /// Prazo antes do handshake e para método que a tabela do motor não traz.
+    ///
+    /// 15 s cobre com folga os métodos das filas rápidas; os longos (`wda.*`,
+    /// `simulators.*`) sempre vêm na tabela com prazo próprio.
+    static let defaultTimeout: Double = 15
+
+    private struct PendingCall {
+        let continuation: CheckedContinuation<Data, Error>
+        let timer: Task<Void, Never>
+    }
+
     private var process: Process?
     private var stdinHandle: FileHandle?
-    private var pending: [Int: CheckedContinuation<Data, Error>] = [:]
+    private var pending: [Int: PendingCall] = [:]
     private var nextRequestID = 0
     private var buffer = Data()
+    private var methodTable: [String: EngineDTO.MethodSpec] = [:]
 
-    private var notificationContinuation: AsyncStream<EngineNotification>.Continuation?
+    private let notificationContinuation: AsyncStream<EngineNotification>.Continuation
+    private let frameContinuation: AsyncStream<EngineNotification>.Continuation
+    private let terminationContinuation: AsyncStream<Int32>.Continuation
 
     /// Entrega ordenada dos pedaços do stdout, e a única tarefa que os consome.
     private var chunkContinuation: AsyncStream<Data>.Continuation?
     private var readerTask: Task<Void, Never>?
-    /// Fluxo de notificacoes do motor: quadros do espelho, eventos HTTP, analytics.
+
+    /// Notificacoes do motor, menos os quadros: eventos HTTP, analytics,
+    /// progresso, aparelho. Ordenado e sem perda, porque cada uma conta.
     nonisolated let notifications: AsyncStream<EngineNotification>
+
+    /// Só `stream.frame`, guardando apenas o mais novo.
+    ///
+    /// Os quadros iam no mesmo fluxo ilimitado das outras notificações. Com a
+    /// interface ocupada, eles se empilhavam — cada um com centenas de KB de
+    /// base64 — e o espelho passava a mostrar a tela de segundos atrás enquanto
+    /// a memória crescia. Quadro velho não tem valor quando já existe um mais
+    /// novo; evento de rede e de analytics tem. Por isso fluxos separados, com
+    /// políticas opostas.
+    nonisolated let frames: AsyncStream<EngineNotification>
+
+    /// Código de saída do motor quando ele morre sem que `stop()` tenha sido
+    /// chamado. É o sinal que a supervisão da sessão usa para reiniciar.
+    nonisolated let terminations: AsyncStream<Int32>
 
     private let configuration: EngineConfiguration
 
-    init(configuration: EngineConfiguration) {
+    /// Quanto `stop()` espera o motor sair sozinho antes de mandar SIGTERM.
+    ///
+    /// O desmonte do motor inclui tirar o proxy global do Android, e isso é
+    /// uma chamada de adb que leva centenas de milissegundos. O SIGTERM
+    /// imediato interrompia esse passo no meio e o aparelho ficava apontando
+    /// para uma porta morta, sem rede. 3 s cobrem o desmonte com folga sem
+    /// segurar o encerramento do app por tempo indeterminado.
+    let shutdownGrace: Double
+
+    /// Quem espera a saída de um processo em `stop()`, por identidade.
+    private var exitWaiters: [ObjectIdentifier: CheckedContinuation<Bool, Never>] = [:]
+
+    init(configuration: EngineConfiguration, shutdownGrace: Double = 3) {
         self.configuration = configuration
-        var continuation: AsyncStream<EngineNotification>.Continuation!
-        self.notifications = AsyncStream { continuation = $0 }
-        self.notificationContinuation = continuation
+        self.shutdownGrace = shutdownGrace
+        (notifications, notificationContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
+        (frames, frameContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
+        (terminations, terminationContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
 
     var isRunning: Bool { process?.isRunning ?? false }
@@ -49,6 +96,9 @@ actor EngineClient {
 
     func start() throws {
         guard !isRunning else { return }
+        // Resto de linha de um processo anterior não pode colar na primeira
+        // linha do novo.
+        buffer = Data()
 
         let process = Process()
         process.executableURL = configuration.pythonURL
@@ -92,21 +142,38 @@ actor EngineClient {
             }
         }
 
+        // Pedaço vazio é fim de arquivo: o motor fechou o stdout (saiu ou
+        // morreu). Sem desligar o tratador aqui, ele continuaria sendo chamado
+        // com pedaço vazio em laço, gastando CPU depois de toda queda do motor.
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                entregaPedaco.finish()
+                return
+            }
             entregaPedaco.yield(chunk)
         }
 
         // stderr do motor e log, nunca protocolo. Vai para o Console do sistema.
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty, let text = String(data: chunk, encoding: .utf8) else { return }
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            guard let text = String(data: chunk, encoding: .utf8) else { return }
             FileHandle.standardError.write(Data("[motor] \(text)".utf8))
         }
 
+        // A identidade do processo acompanha o aviso de término: o aviso chega
+        // depois, por outra tarefa, e só vale se ainda for sobre o processo
+        // atual. Um `stop()` já esqueceu o processo, então o término que ele
+        // provoca não conta como queda.
+        let processID = ObjectIdentifier(process)
         process.terminationHandler = { [weak self] finished in
-            Task { await self?.handleTermination(status: finished.terminationStatus) }
+            let status = finished.terminationStatus
+            Task { await self?.handleTermination(of: processID, status: status) }
         }
 
         do {
@@ -119,47 +186,113 @@ actor EngineClient {
         self.stdinHandle = stdinPipe.fileHandleForWriting
     }
 
-    func stop() {
+    func stop() async {
         guard let process else { return }
         // Pedido educado primeiro: o motor desfaz a configuracao de proxy do
         // aparelho no encerramento. Matar direto deixaria o aparelho sem rede.
         try? send(["jsonrpc": .string("2.0"), "id": .int(nextID()), "method": .string("engine.shutdown")])
         stdinHandle?.closeFile()
-        process.terminate()
-        chunkContinuation?.finish()
+
+        // O cliente esquece o processo já, antes de esperar: a saída que vem a
+        // seguir foi pedida e não pode contar como queda, e um `start()`
+        // durante a espera sobe outro processo sem herdar nada deste.
+        let chunks = chunkContinuation
+        let reader = readerTask
         chunkContinuation = nil
-        readerTask?.cancel()
         readerTask = nil
         self.process = nil
         self.stdinHandle = nil
+        // Encerramento pedido não é falha: quem ainda esperava resposta recebe
+        // `cancelled`, que a interface não transforma em mensagem de erro.
+        failAllPending(with: .cancelled)
+
+        // SIGTERM só para o motor que não saiu sozinho no prazo. O stdout
+        // continua sendo lido durante a espera: um motor que escreve enquanto
+        // desmonta travaria no cano cheio e nunca chegaria a sair.
+        if await !waitForExit(of: process, timeout: shutdownGrace), process.isRunning {
+            process.terminate()
+        }
+        chunks?.finish()
+        reader?.cancel()
+    }
+
+    /// Espera o processo sair, com prazo, sem ocupar o ator: a espera é uma
+    /// suspensão, e o aviso de término entra normalmente enquanto isso.
+    private func waitForExit(of process: Process, timeout: Double) async -> Bool {
+        guard process.isRunning else { return true }
+        let processID = ObjectIdentifier(process)
+        return await withCheckedContinuation { continuation in
+            exitWaiters[processID] = continuation
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                await self?.resolveExitWait(processID, exited: false)
+            }
+        }
+    }
+
+    /// Quem chegar primeiro, término ou prazo, responde; o outro não acha
+    /// mais ninguém esperando.
+    private func resolveExitWait(_ processID: ObjectIdentifier, exited: Bool) {
+        exitWaiters.removeValue(forKey: processID)?.resume(returning: exited)
+    }
+
+    /// Adota a tabela de métodos que o motor mandou no `engine.hello`.
+    func useMethodTable(_ table: [String: EngineDTO.MethodSpec]) {
+        methodTable = table
+    }
+
+    /// Prazo de uma chamada: o da tabela do motor, ou o padrão.
+    func timeout(for method: String) -> Double {
+        methodTable[method]?.timeoutS ?? Self.defaultTimeout
     }
 
     // MARK: - Chamadas
 
     /// Faz uma chamada e decodifica o `result` no tipo pedido.
+    ///
+    /// Três saídas além da resposta: o prazo estoura (`timeout`), a tarefa que
+    /// espera é cancelada (`cancelled`) ou o motor morre (`processTerminated`).
+    /// Nas duas primeiras o motor recebe `$/cancelRequest` para parar o
+    /// trabalho que ninguém mais vai ler.
     func call<Response: Decodable>(
         _ method: String,
         params: [String: JSONValue] = [:],
         as type: Response.Type = Response.self
     ) async throws -> Response {
         guard isRunning else { throw EngineError.notRunning }
+        guard !Task.isCancelled else { throw EngineError.cancelled }
 
         let requestID = nextID()
-        let data: Data = try await withCheckedThrowingContinuation { continuation in
-            pending[requestID] = continuation
-            do {
-                try send([
-                    "jsonrpc": .string("2.0"),
-                    "id": .int(requestID),
-                    "method": .string(method),
-                    "params": .object(params),
-                ])
-            } catch {
-                pending.removeValue(forKey: requestID)
-                continuation.resume(throwing: error)
+        let seconds = timeout(for: method)
+        // O corpo roda neste ator sem ponto de suspensão até registrar a
+        // pendência. Um cancelamento que chegue nesse meio entra no ator pela
+        // tarefa do `onCancel` e, por isso, só é tratado depois do registro:
+        // não há janela em que ele se perca.
+        let data: Data = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let timer = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                    await self?.abandon(requestID, with: .timeout(method: method, seconds: seconds))
+                }
+                pending[requestID] = PendingCall(continuation: continuation, timer: timer)
+                do {
+                    try send([
+                        "jsonrpc": .string("2.0"),
+                        "id": .int(requestID),
+                        "method": .string(method),
+                        "params": .object(params),
+                    ])
+                } catch {
+                    timer.cancel()
+                    pending.removeValue(forKey: requestID)
+                    continuation.resume(throwing: error)
+                }
             }
+        } onCancel: {
+            Task { await self.abandon(requestID, with: .cancelled) }
         }
-        return try decodeResult(data, as: Response.self)
+        return try Self.decodeResult(data, as: Response.self)
     }
 
     /// Chamada cujo resultado nao interessa.
@@ -178,6 +311,30 @@ actor EngineClient {
     private func nextID() -> Int {
         nextRequestID += 1
         return nextRequestID
+    }
+
+    /// Desiste de uma chamada ainda pendente e avisa o motor.
+    ///
+    /// Se a resposta já chegou, não há pendência e nada acontece: o prazo e o
+    /// cancelamento disputam com a resposta, e quem chega primeiro vence.
+    private func abandon(_ requestID: Int, with error: EngineError) {
+        guard let call = pending.removeValue(forKey: requestID) else { return }
+        call.timer.cancel()
+        try? send([
+            "jsonrpc": .string("2.0"),
+            "method": .string("$/cancelRequest"),
+            "params": .object(["id": .int(requestID)]),
+        ])
+        call.continuation.resume(throwing: error)
+    }
+
+    private func failAllPending(with error: EngineError) {
+        let waiting = pending
+        pending.removeAll()
+        for (_, call) in waiting {
+            call.timer.cancel()
+            call.continuation.resume(throwing: error)
+        }
     }
 
     private func send(_ message: [String: JSONValue]) throws {
@@ -209,12 +366,23 @@ actor EngineClient {
             return
         }
 
-        if let id = envelope.id, let continuation = pending.removeValue(forKey: id) {
-            continuation.resume(returning: line)
+        if let id = envelope.id {
+            // Sem pendência, é resposta de chamada que já estourou o prazo ou
+            // foi cancelada: o chamador já recebeu o erro e seguiu em frente.
+            // Descartar é o único destino seguro, porque retomar a mesma
+            // continuação duas vezes derruba o app.
+            if let call = pending.removeValue(forKey: id) {
+                call.timer.cancel()
+                call.continuation.resume(returning: line)
+            }
             return
         }
-        if let method = envelope.method {
-            notificationContinuation?.yield(EngineNotification(method: method, payload: line))
+        guard let method = envelope.method else { return }
+        let notification = EngineNotification(method: method, payload: line)
+        if method == "stream.frame" {
+            frameContinuation.yield(notification)
+        } else {
+            notificationContinuation.yield(notification)
         }
     }
 
@@ -233,7 +401,12 @@ actor EngineClient {
         let data: Detail?
     }
 
-    private func decodeResult<Response: Decodable>(_ data: Data, as type: Response.Type) throws -> Response {
+    /// Código do LSP para requisição cancelada, que o motor adotou.
+    static let requestCancelledCode = -32800
+
+    /// Interno, e não privado, para o teste de contrato passar a fixture do
+    /// motor pelo mesmo caminho da resposta real.
+    static func decodeResult<Response: Decodable>(_ data: Data, as type: Response.Type) throws -> Response {
         let envelope: ResultEnvelope<Response>
         do {
             envelope = try JSONDecoder().decode(ResultEnvelope<Response>.self, from: data)
@@ -241,6 +414,12 @@ actor EngineClient {
             throw EngineError.protocolViolation(error.localizedDescription)
         }
         if let failure = envelope.error {
+            // O motor só manda este erro quando alguém pediu o cancelamento, e
+            // quem pediu já sabe. Virar `.engine` faria a mensagem aparecer na
+            // barra de status como se fosse falha.
+            if failure.code == requestCancelledCode || failure.data?.code == "request_cancelled" {
+                throw EngineError.cancelled
+            }
             throw EngineError.engine(
                 code: failure.data?.code ?? "rpc_\(failure.code)",
                 message: failure.data?.message ?? failure.message
@@ -252,16 +431,15 @@ actor EngineClient {
         return result
     }
 
-    private func handleTermination(status: Int32) {
+    private func handleTermination(of processID: ObjectIdentifier, status: Int32) {
+        resolveExitWait(processID, exited: true)
+        guard let process, ObjectIdentifier(process) == processID else { return }
         // Deixar chamadas penduradas seria pior que falhar: a interface ficaria
         // com spinner eterno em vez de mostrar que o motor caiu.
-        let waiting = pending
-        pending.removeAll()
-        for (_, continuation) in waiting {
-            continuation.resume(throwing: EngineError.processTerminated(status))
-        }
-        process = nil
+        failAllPending(with: .processTerminated(status))
+        self.process = nil
         stdinHandle = nil
+        terminationContinuation.yield(status)
     }
 }
 

@@ -5,7 +5,9 @@ from mobaile.domain.errors import (
     DeviceNotFoundError,
     DeviceNotReadyError,
     EngineError,
+    IncompatibleProtocolError,
     InvalidInputError,
+    RequestCancelledError,
     ToolNotFoundError,
 )
 from mobaile.domain.models import (
@@ -28,10 +30,12 @@ __all__ = [
     "DeviceNotFoundError",
     "DeviceNotReadyError",
     "EngineError",
+    "IncompatibleProtocolError",
     "InvalidInputError",
     "LocatorStrategy",
     "NetworkEvent",
     "Platform",
+    "RequestCancelledError",
     "ToolNotFoundError",
     "UIElement",
 ]

@@ -25,8 +25,11 @@ APP_NAME="${APP_NAME:-Mo baile (nativo)}"
 DEST_DIR="${DEST_DIR:-/Applications}"
 APP_DIR="$DEST_DIR/$APP_NAME.app"
 CONTENTS="$APP_DIR/Contents"
-VERSION="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$REPO_ROOT/engine/src/mobaile/__init__.py" | head -1)"
-VERSION="${VERSION:-2.0.0}"
+# Fonte unica da versao (docs/VERSIONAMENTO.md). Sem ela, nao empacota: um app
+# com versao inventada nao diz qual codigo esta rodando.
+VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
+[ -n "$VERSION" ] || { echo "erro: VERSION vazio ou ausente na raiz do repositorio."; exit 1; }
+python3 "$REPO_ROOT/tools/version.py" check || { echo "ABORTADO: versao inconsistente."; exit 1; }
 
 command -v swift >/dev/null || { echo "erro: swift nao encontrado. Instale as Command Line Tools do Xcode."; exit 1; }
 

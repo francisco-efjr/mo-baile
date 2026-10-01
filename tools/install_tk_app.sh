@@ -55,7 +55,7 @@ exec "\$PY" "\$REPO/apps/tk-legacy/main.py" >> "\$LOG" 2>&1
 LAUNCHER
 chmod +x "$CONTENTS/MacOS/$APP_NAME"
 
-VERSION="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$REPO_ROOT/engine/src/mobaile/__init__.py" | head -1)"
+VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"  # fonte unica: docs/VERSIONAMENTO.md
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -74,9 +74,9 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>${VERSION:-2.0.0}</string>
+    <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>${VERSION:-2.0.0}</string>
+    <string>$VERSION</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>pt-BR</string>
     <key>LSApplicationCategoryType</key>

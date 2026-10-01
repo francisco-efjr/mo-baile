@@ -245,3 +245,34 @@ class TestLeituraDeBootCompleted(unittest.TestCase):
 
         ponte._run_cmd = estoura
         self.assertTrue(ponte.is_boot_completed("emulator-5554"))
+
+
+class TestTrocaDePlataformaDuranteAListagem(unittest.TestCase):
+    """Regressao: `adb devices` em voo quando a sessao passa para iOS.
+
+    A plataforma era lida depois da listagem, entao o resultado Android saia
+    rotulado como iOS e punha um serial Android numa sessao de simulador.
+    """
+
+    def test_listagem_da_plataforma_anterior_e_descartada(self):
+        listando, soltar = threading.Event(), threading.Event()
+
+        class ADBLento(FakeADB):
+            def list_devices(self):
+                listando.set()
+                soltar.wait(5)
+                return [("R58M123ABC", "device")]
+
+        handler = MagicMock()
+        w = watcher(adb=ADBLento(), ios=FakeIOS([("SIM-1", "iPhone")]), handler=handler)
+        rodada = threading.Thread(target=w.poll_once)
+        rodada.start()
+        self.assertTrue(listando.wait(2))
+        w.set_platform("ios")
+        soltar.set()
+        rodada.join(2)
+
+        handler.assert_not_called()
+        self.assertIsNone(w.current_device_id)
+        self.assertEqual(w.poll_once(), "SIM-1")
+        handler.assert_called_once_with("ios", "SIM-1")

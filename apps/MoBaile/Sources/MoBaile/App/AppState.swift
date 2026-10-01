@@ -55,6 +55,21 @@ class AppState {
     var selectedAnalyticsEvent: AnalyticsEvent? = nil
     var analyticsFilterText: String = ""
     var analyticsListenerActive: Bool = false
+    /// iOS: iPhones por cabo disponiveis para a escuta, e qual origem usar.
+    var analyticsIOSDevices: [IOSPhysicalDevice] = []
+    var analyticsIOSSource: AnalyticsIOSSource = .auto
+    /// Sem pymobiledevice3 no motor; a origem por cabo fica indisponivel.
+    var analyticsIOSDeviceHint: String? = nil
+
+    /// A escuta tem de onde ler: alvo da sessao, ou um iPhone por cabo no iOS.
+    var canStartAnalytics: Bool {
+        guard platform == .ios else { return isDeviceConnected }
+        switch analyticsIOSSource {
+        case .auto: return isDeviceConnected || analyticsIOSDevices.contains { $0.problem == nil }
+        case .simulator: return isDeviceConnected
+        case .device: return true
+        }
+    }
     
     // --- Metrics ---
     var fps: Int = 0

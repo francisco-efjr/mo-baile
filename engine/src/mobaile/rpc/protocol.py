@@ -28,6 +28,9 @@ INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 # Faixa reservada a implementacao: erros do dominio do motor.
 ENGINE_ERROR = -32000
+# Emprestado do LSP, que e de onde vem o `$/cancelRequest`: um cliente que ja
+# conhece o LSP reconhece o codigo sem ler documentacao.
+REQUEST_CANCELLED = -32800
 
 
 def encode(message: dict[str, Any]) -> str:

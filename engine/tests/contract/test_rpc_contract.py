@@ -413,3 +413,63 @@ class TestScrcpy(ContractBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAnalyticsIOSFisico(ContractBase):
+    """De onde vem o tagueamento no iOS: simulador da sessao ou iPhone por cabo."""
+
+    UDID = "00008020-001549180128402E"
+    IPHONE: ClassVar[dict] = {"udid": UDID, "name": "iPhone", "ios_version": "18.7", "connection": "USB"}
+
+    def setUp(self):
+        super().setUp()
+        self.start = patch.object(self.server.analytics, "start", return_value=True).start()
+        patch("mobaile.adapters.ios_device_log.is_available", return_value=True).start()
+        self.listar = patch("mobaile.adapters.ios_device_log.list_devices", return_value=[self.IPHONE]).start()
+        self.addCleanup(patch.stopall)
+
+    def test_sem_simulador_o_automatico_usa_o_iphone_por_cabo(self):
+        self.ok("session.select_device", {"platform": "ios"})
+        resultado = self.ok("analytics.start")
+        self.assertEqual(resultado["source"], "ios_device")
+        self.assertEqual(resultado["device_id"], self.UDID)
+        self.start.assert_called_once_with(platform="ios", device_id=self.UDID, ios_physical=True)
+
+    def test_com_simulador_o_automatico_fica_no_simulador(self):
+        self.ok("session.select_device", {"platform": "ios", "device_id": "SIM-UDID-1"})
+        self.ok("analytics.start")
+        self.assertFalse(self.start.call_args.kwargs.get("ios_physical", False))
+        self.listar.assert_not_called()
+
+    def test_origem_explicita_vence_o_simulador(self):
+        self.ok("session.select_device", {"platform": "ios", "device_id": "SIM-UDID-1"})
+        self.ok("analytics.start", {"ios_source": self.UDID})
+        self.start.assert_called_once_with(platform="ios", device_id=self.UDID, ios_physical=True)
+
+    def test_sem_simulador_nem_iphone_explica_o_que_falta(self):
+        self.listar.return_value = []
+        self.ok("session.select_device", {"platform": "ios"})
+        erro = self.erro("analytics.start")
+        self.assertEqual(erro["data"]["code"], "device_not_found")
+        self.assertIn("iPhone", erro["message"])
+
+    def test_iphone_bloqueado_repassa_o_motivo(self):
+        self.listar.return_value = [{**self.IPHONE, "problem": "Desbloqueie o iPhone e tente de novo."}]
+        self.ok("session.select_device", {"platform": "ios"})
+        erro = self.erro("analytics.start")
+        self.assertEqual(erro["data"]["code"], "device_not_ready")
+        self.assertIn("Desbloqueie", erro["message"])
+
+    def test_udid_malicioso_e_recusado(self):
+        self.ok("session.select_device", {"platform": "ios"})
+        erro = self.erro("analytics.start", {"ios_source": 'x"; rm -rf /'})
+        self.assertEqual(erro["data"]["code"], "invalid_input")
+
+    def test_lista_iphones(self):
+        self.assertEqual(self.ok("analytics.ios_devices"), {"available": True, "devices": [self.IPHONE]})
+
+    def test_lista_sem_pymobiledevice3_diz_como_instalar(self):
+        with patch("mobaile.adapters.ios_device_log.is_available", return_value=False):
+            resultado = self.ok("analytics.ios_devices")
+        self.assertFalse(resultado["available"])
+        self.assertIn("pip install pymobiledevice3", resultado["hint"])

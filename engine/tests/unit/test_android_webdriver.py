@@ -50,6 +50,27 @@ class TestReservaPeloWebDriver(unittest.TestCase):
              patch.object(self.server.appium, "get_page_source", return_value=XML):
             self.assertEqual(self.server._android_hierarchy("ZY22L3CH3X"), XML)
 
+    def test_backend_appium_e_memorizado_apos_falha_de_uiautomator(self):
+        """Após a primeira falha de uiautomator dump, o motor deve memorizar
+        que este aparelho precisa de Appium e ir direto a ele nas próximas
+        vezes, sem tentar adb.get_ui_hierarchy novamente."""
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=None) as mock_adb, \
+             patch.object(self.server.appium, "ensure_android_session", return_value=(True, "ok")), \
+             patch.object(self.server.appium, "get_page_source", return_value=XML) as mock_page_source:
+            # Primeira chamada: descobre que precisa de Appium
+            self.assertEqual(self.server._android_hierarchy("ZY22L3CH3X"), XML)
+            self.assertEqual(mock_adb.call_count, 1)
+
+            # Simula sessão ativa
+            self.server.appium.session_id = "sessao_123"
+            self.server.appium.session_platform = "android"
+            self.server.appium.session_udid = "ZY22L3CH3X"
+
+            # Segunda chamada: deve ir direto para get_page_source sem chamar adb.get_ui_hierarchy
+            self.assertEqual(self.server._android_hierarchy("ZY22L3CH3X"), XML)
+            self.assertEqual(mock_adb.call_count, 1, "adb.get_ui_hierarchy não deveria ter sido chamado de novo")
+            self.assertEqual(mock_page_source.call_count, 2)
+
     def test_as_duas_falhando_devolvem_none(self):
         with patch.object(self.server.adb, "get_ui_hierarchy", return_value=None), \
              patch.object(self.server.appium, "ensure_android_session", return_value=(False, "sem sessao")):

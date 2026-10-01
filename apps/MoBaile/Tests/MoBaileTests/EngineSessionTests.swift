@@ -7,13 +7,39 @@ import XCTest
 /// próprio `connect()`: não havia como observar quais chamadas ela faz sem
 /// subir um processo Python. Foi por isso que o espelho em branco passou por 45
 /// testes verdes.
+///
+/// Também faz as vezes do processo: o teste empurra notificação, quadro e
+/// queda pelos mesmos fluxos que o `EngineClient` expõe, e pode segurar uma
+/// chamada em andamento para observar o estado intermediário da sessão.
 actor FakeEngine: EngineCalling {
-    private let respostas: [String: Data]
+    private var respostas: [String: Data]
+    /// Respostas consumidas uma por chamada, antes de `respostas`: permite que
+    /// duas chamadas ao mesmo método devolvam coisas diferentes.
+    private var filas: [String: [Data]] = [:]
+    private let erros: [String: EngineError]
     private(set) var chamadas: [String] = []
+    private(set) var chamadasComParametros: [(metodo: String, params: [String: JSONValue])] = []
+    private(set) var tabela: [String: EngineDTO.MethodSpec]?
+    private(set) var parado = false
+    private var metodosRetidos: Set<String> = []
+    private var retidos: [String: [CheckedContinuation<Void, Never>]] = [:]
 
-    init(respostas: [String: Data]) {
+    nonisolated let notifications: AsyncStream<EngineNotification>
+    nonisolated let frames: AsyncStream<EngineNotification>
+    nonisolated let terminations: AsyncStream<Int32>
+    private let notificacoes: AsyncStream<EngineNotification>.Continuation
+    private let quadros: AsyncStream<EngineNotification>.Continuation
+    private let terminos: AsyncStream<Int32>.Continuation
+
+    init(respostas: [String: Data], erros: [String: EngineError] = [:]) {
         self.respostas = respostas
+        self.erros = erros
+        (notifications, notificacoes) = AsyncStream.makeStream()
+        (frames, quadros) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
+        (terminations, terminos) = AsyncStream.makeStream()
     }
+
+    func start() {}
 
     func call<Response: Decodable>(
         _ method: String,
@@ -21,7 +47,17 @@ actor FakeEngine: EngineCalling {
         as type: Response.Type
     ) async throws -> Response {
         chamadas.append(method)
-        guard let data = respostas[method] else {
+        chamadasComParametros.append((method, params))
+        // A resposta é escolhida na chegada, e não na liberação: é a ordem das
+        // chamadas que decide qual resposta da fila cada uma recebe.
+        let data = filas[method]?.isEmpty == false ? filas[method]!.removeFirst() : respostas[method]
+        if metodosRetidos.contains(method) {
+            await withCheckedContinuation { retidos[method, default: []].append($0) }
+        }
+        if let erro = erros[method] {
+            throw erro
+        }
+        guard let data else {
             throw EngineError.notRunning
         }
         return try JSONDecoder().decode(Response.self, from: data)
@@ -29,17 +65,77 @@ actor FakeEngine: EngineCalling {
 
     func callIgnoringResult(_ method: String, params: [String: JSONValue]) async throws {
         chamadas.append(method)
+        chamadasComParametros.append((method, params))
+        if let erro = erros[method] {
+            throw erro
+        }
     }
 
-    func stop() {}
+    func useMethodTable(_ table: [String: EngineDTO.MethodSpec]) {
+        tabela = table
+    }
+
+    func stop() {
+        parado = true
+    }
+
+    // MARK: - Controles do teste
+
+    func parametros(de metodo: String) -> [String: JSONValue]? {
+        chamadasComParametros.last { $0.metodo == metodo }?.params
+    }
+
+    /// A próxima chamada a `metodo` fica esperando até `liberar`.
+    func reter(_ metodo: String) {
+        metodosRetidos.insert(metodo)
+    }
+
+    /// Solta todas as chamadas retidas de `metodo`, na ordem em que chegaram.
+    func liberar(_ metodo: String) {
+        metodosRetidos.remove(metodo)
+        for continuacao in retidos.removeValue(forKey: metodo) ?? [] {
+            continuacao.resume()
+        }
+    }
+
+    /// Solta só a chamada retida mais recente, para o teste escolher a ordem
+    /// em que as respostas voltam.
+    func liberarUltima(_ metodo: String) {
+        retidos[metodo]?.popLast()?.resume()
+    }
+
+    func quantasRetidas(_ metodo: String) -> Int {
+        retidos[metodo]?.count ?? 0
+    }
+
+    func responder(_ metodo: String, com data: Data) {
+        respostas[metodo] = data
+    }
+
+    func enfileirar(_ metodo: String, _ datas: [Data]) {
+        filas[metodo, default: []] += datas
+    }
+
+    func emitir(_ notificacao: EngineNotification) {
+        if notificacao.method == "stream.frame" {
+            quadros.yield(notificacao)
+        } else {
+            notificacoes.yield(notificacao)
+        }
+    }
+
+    /// O processo morre sem ninguém ter pedido.
+    func cair(status: Int32) {
+        terminos.yield(status)
+    }
 }
 
-@MainActor
-final class EngineSessionTests: XCTestCase {
-
+extension XCTestCase {
     /// Carrega o campo `result` de cada fixture, que é o que o cliente entrega
     /// aos chamadores depois de descascar o envelope JSON-RPC.
-    private func resultadosDasFixtures() throws -> [String: Data] {
+    ///
+    /// Em extensão para as suítes da sessão compartilharem o mesmo motor falso.
+    func resultadosDasFixtures() throws -> [String: Data] {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "engine_payloads", withExtension: "json"))
         let root = try XCTUnwrap(
             JSONSerialization.jsonObject(with: try Data(contentsOf: url)) as? [String: Any]
@@ -52,6 +148,10 @@ final class EngineSessionTests: XCTestCase {
         }
         return saida
     }
+}
+
+@MainActor
+final class EngineSessionTests: XCTestCase {
 
     /// Regressão: selecionar um dispositivo enchia a hierarquia e deixava o
     /// espelho vazio.
@@ -284,5 +384,31 @@ final class EngineSessionTests: XCTestCase {
             XCTAssertTrue(doDetector.contains(metodo), "detector não chamou \(metodo)")
         }
         XCTAssertEqual(porMenu.streamActive, porDetector.streamActive)
+    }
+
+    /// `stream.settled` não pode bloquear o loop de notificações, caso contrário
+    /// quadros recebidos logo em seguida ficariam represados enquanto a hierarquia é obtida.
+    func testStreamSettledNaoBloqueiaHandleDeStreamFrame() async throws {
+        let estado = AppState()
+        // Sem aparelho selecionado nenhum quadro é pintado (ver os testes de
+        // quadro de outro aparelho abaixo).
+        estado.selectedDevice = "emulator-5554"
+        let motor = FakeEngine(respostas: try resultadosDasFixtures())
+        let sessao = EngineSession(state: estado, client: motor)
+
+        // Entrega stream.settled (que relê a hierarquia de forma desacoplada)
+        await sessao.handle(EngineNotification(method: "stream.settled", payload: Data(#"{}"#.utf8)))
+
+        // Imediatamente entrega um stream.frame válido com base64
+        let base641x1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        let framePayload = Data("""
+        {"params":{"png_base64":"\(base641x1)","width":1,"height":1,"source_width":1,"source_height":1,"fps":30.0,"capture_ms":10.0}}
+        """.utf8)
+
+        await sessao.handle(EngineNotification(method: "stream.frame", payload: framePayload))
+
+        // Verifica que o quadro foi consumido e atualizou o estado
+        XCTAssertNotNil(estado.currentFrame)
+        XCTAssertEqual(estado.fps, 30)
     }
 }

@@ -182,3 +182,42 @@ class TestEncerramento(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSessaoSobConcorrencia(unittest.TestCase):
+    """O motor atende filas em paralelo: `wda.start` e um dump Android pelo
+    Appium podem abrir sessao ao mesmo tempo. Duas criacoes simultaneas
+    gravariam `session_*` misturando a sessao de uma com o alvo da outra."""
+
+    def test_aberturas_de_sessao_nao_se_sobrepoem(self):
+        import threading
+        import time
+
+        bridge = AppiumBridge()
+        em_voo, maximo = [0], [0]
+        trava = threading.Lock()
+
+        def post_lento(*_args, **kwargs):
+            with trava:
+                em_voo[0] += 1
+                maximo[0] = max(maximo[0], em_voo[0])
+            time.sleep(0.05)
+            with trava:
+                em_voo[0] -= 1
+            plataforma = kwargs["json"]["capabilities"]["alwaysMatch"]["platformName"]
+            return resposta(200, {"sessionId": f"S-{plataforma}"})
+
+        with patch.object(bridge, "is_wda_running", side_effect=[False, True]), \
+             patch.object(bridge, "is_running", return_value=True), \
+             patch("requests.post", side_effect=post_lento):
+            ios = threading.Thread(target=bridge.ensure_wda, args=("AAAA-1111",))
+            android = threading.Thread(target=bridge.ensure_android_session, args=("emulator-5554",))
+            ios.start()
+            android.start()
+            ios.join(5)
+            android.join(5)
+
+        self.assertEqual(maximo[0], 1)
+        # A ultima sessao aberta e coerente consigo mesma.
+        par = (bridge.session_id, bridge.session_platform)
+        self.assertIn(par, {("S-iOS", "ios"), ("S-Android", "android")})

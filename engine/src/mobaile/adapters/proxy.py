@@ -53,7 +53,7 @@ MAX_HEADER_BYTES = 64 * 1024
 # Eventos mantidos em memória (buffer circular).
 MAX_HISTORY = 2000
 # Conexões simultâneas atendidas.
-MAX_CONCURRENT_CONNECTIONS = 128
+MAX_CONCURRENT_CONNECTIONS = 512
 # Túnel ocioso por mais que isso é encerrado.
 TUNNEL_IDLE_TIMEOUT = 120.0
 
@@ -199,6 +199,13 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             remote_sock = socket.create_connection((host, port), timeout=10)
             client_sock.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
 
+            # Remove os timeouts de 8s/10s para que conexões TLS ociosas
+            # (como push notifications, keep-alive do sistema e apps em background)
+            # não sejam abortadas prematuramente. O TUNNEL_IDLE_TIMEOUT no select
+            # cuida da detecção de encerramento da conexão.
+            client_sock.settimeout(None)
+            remote_sock.settimeout(None)
+
             sockets = [client_sock, remote_sock]
             while True:
                 readable, _, exceptional = select.select(sockets, [], sockets, TUNNEL_IDLE_TIMEOUT)
@@ -206,10 +213,16 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                     break
                 for sock in readable:
                     other = remote_sock if sock is client_sock else client_sock
-                    data = sock.recv(65536)
+                    try:
+                        data = sock.recv(65536)
+                    except OSError:
+                        return
                     if not data:
                         return
-                    other.sendall(data)
+                    try:
+                        other.sendall(data)
+                    except OSError:
+                        return
                     bytes_transferred += len(data)
         except OSError as exc:
             error_msg = str(exc)
@@ -249,15 +262,39 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
     def _handle_http(self, client_sock, method, target, headers, protocol, raw_request,
                      event_id, start_time, time_str, server) -> None:
         parsed = urllib.parse.urlparse(target)
-        host = parsed.hostname or headers.get("Host", "localhost")
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        host = parsed.hostname
+        port = parsed.port
+        if not host:
+            host_header = headers.get("Host", "localhost")
+            if ":" in host_header:
+                h, _, p = host_header.partition(":")
+                host = h
+                try:
+                    port = int(p)
+                except ValueError:
+                    port = 443 if parsed.scheme == "https" else 80
+            else:
+                host = host_header
+                port = 443 if parsed.scheme == "https" else 80
+        elif not port:
+            port = 443 if parsed.scheme == "https" else 80
+
         path = parsed.path or "/"
         if parsed.query:
             path += f"?{parsed.query}"
 
-        # Verificação de conectividade do Android: responder na hora evita que o
-        # sistema marque a rede como sem internet e desligue o proxy sozinho.
-        if "generate_204" in target or path.endswith("generate_204"):
+        # Verificação de conectividade do Android (Google, Motorola, Samsung, Xiaomi):
+        # responder na hora evita que o sistema marque a rede como sem internet.
+        is_connectivity_check = (
+            "generate_204" in target
+            or "gen_204" in target
+            or path.endswith("generate_204")
+            or path.endswith("gen_204")
+            or (bool(host) and "connectivitycheck" in host)
+            or (bool(host) and "captive.samsung.com" in host)
+            or "check_network_status" in path
+        )
+        if is_connectivity_check:
             try:
                 client_sock.sendall(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             except OSError:
@@ -266,7 +303,8 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                 NetworkEvent(
                     id=event_id, timestamp=start_time, time_str=time_str, method=method,
                     url=target if target.startswith("http") else f"http://{host}:{port}{path}",
-                    host=host, path=path, status_code=204, status_text="No Content (Connectivity Check)",
+                    host=host or "connectivitycheck", path=path, status_code=204,
+                    status_text="No Content (Connectivity Check)",
                     request_headers=redact_headers(headers), response_headers={"Content-Length": "0"},
                     duration_ms=(time.time() - start_time) * 1000, protocol=protocol,
                 )
@@ -306,8 +344,9 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
 
             client_response = f"HTTP/1.1 {status_code} {status_text}\r\n"
             for key, value in resp.getheaders():
-                client_response += f"{key}: {value}\r\n"
-            client_response += "\r\n"
+                if key.lower() not in ("connection", "proxy-connection"):
+                    client_response += f"{key}: {value}\r\n"
+            client_response += "Connection: close\r\n\r\n"
             client_sock.sendall(client_response.encode("latin1", errors="replace") + resp_data)
 
         except (OSError, http.client.HTTPException) as exc:

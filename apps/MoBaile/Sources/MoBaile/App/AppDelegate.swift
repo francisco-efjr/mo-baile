@@ -43,7 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Rede de seguranca: se a limpeza travar, a aplicacao sai assim mesmo.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+        // O prazo cobre a espera de `EngineClient.stop()` pela saida do motor
+        // (3 s) com folga para o `devices.watch_stop` que vem antes. Com 4 s, um
+        // desmonte demorado era cortado junto com o app, e o proxy do Android
+        // ficava configurado.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
             NSApp.reply(toApplicationShouldTerminate: true)
         }
 

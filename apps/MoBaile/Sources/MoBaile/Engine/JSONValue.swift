@@ -6,7 +6,7 @@ import Foundation
 /// vez de virar `[String: Any]` com `JSONSerialization` e conversao em tempo de
 /// execucao. As respostas nao passam por aqui: cada uma decodifica direto no
 /// seu tipo concreto (ver `EngineDTO.swift`).
-enum JSONValue: Codable, Equatable {
+enum JSONValue: Codable, Equatable, Sendable {
     case string(String)
     case int(Int)
     case double(Double)

@@ -104,10 +104,8 @@ struct UnifiedToolbar: View {
                     }
                 }
             }
-            .disabled(!appState.isDeviceConnected)
-            .help(appState.passiveListening
-                  ? "Para de gravar os toques feitos no aparelho"
-                  : "Grava o que você fizer direto no aparelho, sem clicar no espelho")
+            .disabled(!escutaPassivaDisponivel)
+            .help(tooltipEscutaPassiva)
 
             Spacer().frame(width: 8)
 
@@ -178,10 +176,29 @@ struct UnifiedToolbar: View {
         )
     }
 
+    private var escutaPassivaDisponivel: Bool {
+        guard appState.isDeviceConnected else { return false }
+        if appState.platform == .ios {
+            // No iOS, escuta passiva depende do Simulator via Quartz no macOS.
+            // O iOS físico não expõe toques via USB.
+            return session.simulators.contains { $0.udid == appState.selectedDevice }
+        }
+        return true
+    }
+
+    private var tooltipEscutaPassiva: String {
+        if appState.isDeviceConnected && appState.platform == .ios && !escutaPassivaDisponivel {
+            return "No iOS físico, utilize o clique no espelho (o iOS não expõe toques físicos via USB)"
+        }
+        return appState.passiveListening
+            ? "Para de gravar os toques feitos no aparelho"
+            : "Grava o que você fizer direto no aparelho, sem clicar no espelho"
+    }
+
     /// Vermelho enquanto grava: é estado que precisa ser óbvio de longe, porque
     /// esquecer a gravação ligada custa espaço em disco e privacidade.
     private var botaoDeEscutaPassiva: FluidPillButton.Style {
-        guard appState.isDeviceConnected else { return .disabled }
+        guard escutaPassivaDisponivel else { return .disabled }
         return appState.passiveListening ? .recording : .secondary
     }
 

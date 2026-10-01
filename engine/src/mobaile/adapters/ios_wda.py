@@ -5,7 +5,6 @@ import re
 import shutil
 import subprocess
 
-import requests
 from PIL import Image
 
 from mobaile.config import settings
@@ -16,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class IOSBridge:
+    # `requests` e importado dentro de cada metodo que fala com o WDA: no topo do
+    # modulo ele pesava na subida de todo motor, inclusive de quem so usa Android.
+
     def __init__(self, wda_url: str | None = None):
         self.wda_url = wda_url or settings.wda_url
         self.session_id: str | None = None
@@ -24,6 +26,8 @@ class IOSBridge:
         # um host que engole pacotes. A sessao passa a ser criada no primeiro uso.
 
     def _ensure_session(self) -> str | None:
+        import requests
+
         if self.session_id:
             return self.session_id
 
@@ -83,6 +87,8 @@ class IOSBridge:
         return None
 
     def get_ui_hierarchy(self) -> str | None:
+        import requests
+
         try:
             res = requests.get(f"{self.wda_url}/source", timeout=6)
             if res.status_code == 200:
@@ -95,6 +101,8 @@ class IOSBridge:
         return None
 
     def tap(self, x: int, y: int) -> bool:
+        import requests
+
         sid = self._ensure_session()
         if not sid:
             return False
@@ -220,6 +228,8 @@ class IOSBridge:
 
     def is_wda_running(self) -> bool:
         """Checagem barata de disponibilidade do WebDriverAgent."""
+        import requests
+
         try:
             return requests.get(f"{self.wda_url}/status", timeout=2).status_code == 200
         except requests.RequestException:

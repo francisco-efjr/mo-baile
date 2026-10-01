@@ -27,7 +27,7 @@ enum EngineDTO {
 
     // MARK: - Tela
 
-    struct Frame: Decodable {
+    struct Frame: Decodable, Sendable {
         let pngBase64: String
         let width: Int
         let height: Int
@@ -40,9 +40,13 @@ enum EngineDTO {
         let fps: Double?
         let captureMs: Double?
         let skipped: Int?
+        /// Aparelho que foi capturado. Opcional para tolerar motor anterior
+        /// ao campo; quando vem, a sessão descarta quadro de outro aparelho.
+        let deviceId: String?
 
         enum CodingKeys: String, CodingKey {
             case pngBase64 = "png_base64"
+            case deviceId = "device_id"
             case width, height, fps
             case sourceWidth = "source_width"
             case sourceHeight = "source_height"
@@ -50,11 +54,22 @@ enum EngineDTO {
             case skipped
         }
 
-        /// Converte para imagem. `nil` quando o base64 chega corrompido, o que a
-        /// camada de cima trata como quadro perdido e nao como falha de sessao.
+        /// Converte para imagem já decodificada. `nil` quando o base64 chega
+        /// corrompido, o que a camada de cima trata como quadro perdido e nao
+        /// como falha de sessao.
+        ///
+        /// A decodificação é forçada aqui (`ShouldCacheImmediately`), e não
+        /// adiada. `NSImage(data:)` só guardava o PNG comprimido e o descomprimia
+        /// na hora de desenhar, ou seja, na main thread, a cerca de 7 ms por
+        /// quadro. Forçando aqui, quem chama escolhe a thread: a sessão chama de
+        /// uma tarefa destacada e só entrega ao MainActor a imagem pronta.
         var image: NSImage? {
-            guard let data = Data(base64Encoded: pngBase64) else { return nil }
-            return NSImage(data: data)
+            guard let data = Data(base64Encoded: pngBase64),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let cgImage = CGImageSourceCreateImageAtIndex(
+                      source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+                  ) else { return nil }
+            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         }
     }
 
@@ -458,6 +473,48 @@ enum EngineDTO {
         }
     }
 
+    // MARK: - Handshake
+
+    /// Resultado de `engine.hello`, a primeira chamada de toda conexão.
+    struct Hello: Decodable {
+        let protocolVersion: Int
+        let engineVersion: String
+        let capabilities: [String]
+        /// Tabela declarativa do motor: a mesma que decide a fila de cada
+        /// método decide aqui o prazo de cada chamada. Uma fonte de verdade só.
+        let methods: [String: MethodSpec]
+        let notifications: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case capabilities, methods, notifications
+            case protocolVersion = "protocol_version"
+            case engineVersion = "engine_version"
+        }
+    }
+
+    struct MethodSpec: Decodable, Sendable, Equatable {
+        /// Fila do motor: `inline`, `fast`, `capture` ou `environment`.
+        let lane: String
+        /// Quanto o front espera antes de mandar `$/cancelRequest` e desistir.
+        let timeoutS: Double
+        /// Se o método emite `$/progress` quando recebe `progress_token`.
+        let progress: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case lane, progress
+            case timeoutS = "timeout_s"
+        }
+    }
+
+    /// Parâmetros de `$/progress`.
+    struct Progress: Decodable {
+        /// Texto ou número, como o front mandou em `progress_token`.
+        let token: JSONValue
+        let message: String
+        /// 0 a 100, ou `nil` quando o motor não tem como medir.
+        let percent: Double?
+    }
+
     // MARK: - Diagnostico
 
     struct EngineInfo: Decodable {
@@ -534,6 +591,27 @@ enum EngineDTO {
 
     struct AnalyticsState: Decodable {
         let running: Bool
+    }
+
+    /// `analytics.ios_devices`: iPhones por cabo que a escuta pode usar.
+    struct IOSPhysicalDeviceList: Decodable {
+        let available: Bool
+        let devices: [IOSPhysicalDevice]
+        let hint: String?
+    }
+
+    struct IOSPhysicalDevice: Decodable {
+        let udid: String
+        let name: String
+        let iosVersion: String
+        let connection: String
+        /// Motivo de nao dar para usar agora (bloqueado, nao confiado).
+        let problem: String?
+
+        enum CodingKeys: String, CodingKey {
+            case udid, name, connection, problem
+            case iosVersion = "ios_version"
+        }
     }
 
     struct SessionState: Decodable {

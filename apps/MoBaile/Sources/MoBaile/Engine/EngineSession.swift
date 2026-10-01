@@ -32,19 +32,81 @@ final class EngineSession {
     private(set) var lastScan: Date?
     private(set) var isBooting = false
 
+    /// Resultado do handshake: versão do motor e tabela de métodos.
+    private(set) var hello: EngineDTO.Hello?
+
+    /// Versão do contrato que esta interface fala (ver `docs/PROTOCOLO_RPC.md`).
+    nonisolated static let protocolVersion = 2
+
+    /// Como o front se apresenta no `engine.hello`.
+    ///
+    /// Rodando pelo `swift run` não há Info.plist, e a versão fica `dev`:
+    /// inventar um número faria o log do motor afirmar uma versão que não
+    /// existe.
+    nonisolated static let clientName = "MoBaile/"
+        + ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev")
+
+    /// Quanto esperar entre tentativas de reinício, e quantas aceitar.
+    struct RestartPolicy {
+        /// Espera antes de cada tentativa. Crescente para não martelar um
+        /// ambiente quebrado (adb travado, Python sem dependência) em laço.
+        var delays: [Double] = [0.5, 1, 2]
+        /// Tentativas aceitas dentro de `window`. Passou disso, a queda é
+        /// sistemática e reiniciar de novo só esconderia o problema.
+        var maxAttempts = 3
+        var window: TimeInterval = 60
+    }
+
     private let state: AppState
+    private let makeClient: @MainActor () throws -> any EngineCalling
+    private let restartPolicy: RestartPolicy
     private var client: (any EngineCalling)?
     private var notificationTask: Task<Void, Never>?
+    private var frameTask: Task<Void, Never>?
+    private var terminationTask: Task<Void, Never>?
     private var daemonTask: Task<Void, Never>?
+    private var hierarchyRefreshTask: Task<Void, Never>?
+    private var restartTask: Task<Void, Never>?
+    private var restartAttempts: [Date] = []
+    private var watchingDevices = false
 
-    init(state: AppState) {
+    /// Muda sempre que o espelho é limpo. A decodificação do quadro agora
+    /// acontece fora do MainActor, e um quadro que termine de decodificar
+    /// depois da troca de aparelho não pode repintar a moldura com a tela do
+    /// aparelho anterior.
+    private var frameGeneration = 0
+
+    /// Token de progresso da operação longa em andamento. Progresso com outro
+    /// token é de uma chamada que já terminou ou estourou o prazo, e não pode
+    /// sobrescrever a mensagem da atual.
+    private var activeProgressToken: String?
+    private var progressSequence = 0
+
+    convenience init(state: AppState) {
+        self.init(state: state) {
+            EngineClient(configuration: try EngineLocator.resolve())
+        }
+    }
+
+    /// `makeClient` fabrica um motor novo a cada conexão e a cada reinício.
+    /// Um processo que morreu não é reaproveitado: estado interno pela metade
+    /// (buffer, pendências, tabela) é exatamente o que um reinício quer zerar.
+    init(
+        state: AppState,
+        restartPolicy: RestartPolicy = RestartPolicy(),
+        makeClient: @escaping @MainActor () throws -> any EngineCalling
+    ) {
         self.state = state
+        self.restartPolicy = restartPolicy
+        self.makeClient = makeClient
     }
 
     /// Injeta um motor pronto. Só o teste usa: em produção o cliente nasce
     /// dentro de `connect()`, junto com o processo do motor.
     init(state: AppState, client: any EngineCalling) {
         self.state = state
+        self.restartPolicy = RestartPolicy()
+        self.makeClient = { throw EngineError.notRunning }
         self.client = client
         self.isConnected = true
     }
@@ -53,11 +115,10 @@ final class EngineSession {
 
     func connect() async {
         guard client == nil else { return }
+        restartAttempts.removeAll()
         do {
-            let client = EngineClient(configuration: try EngineLocator.resolve())
-            try await client.start()
-            self.client = client
-            observeNotifications(from: client)
+            let client = try await launch()
+            install(client)
 
             let info: EngineDTO.EngineInfo = try await client.call("engine.info")
             engineInfo = info
@@ -75,26 +136,256 @@ final class EngineSession {
     }
 
     func disconnect() async {
-        notificationTask?.cancel()
-        notificationTask = nil
-        daemonTask?.cancel()
-        daemonTask = nil
+        // Primeiro a supervisão: o encerramento pedido pelo usuário nunca pode
+        // ser lido como queda e disparar reinício.
+        restartTask?.cancel()
+        restartTask = nil
+        stopBackgroundWork()
         try? await client?.callIgnoringResult("devices.watch_stop")
         await client?.stop()
         client = nil
+        watchingDevices = false
         isConnected = false
         state.streamActive = false
         state.proxyRunning = false
         state.analyticsListenerActive = false
     }
 
-    private func observeNotifications(from client: EngineClient) {
+    /// Sobe um motor novo e faz o handshake antes de qualquer outra chamada.
+    ///
+    /// O cliente só é devolvido depois do `engine.hello`: um motor de outra
+    /// versão do protocolo é parado aqui mesmo, sem chegar a receber chamada
+    /// que ele entenderia de outro jeito.
+    private func launch() async throws -> any EngineCalling {
+        let client = try makeClient()
+        try await client.start()
+        do {
+            try await handshake(with: client)
+        } catch {
+            await client.stop()
+            throw error
+        }
+        return client
+    }
+
+    private func handshake(with client: any EngineCalling) async throws {
+        let versao = Self.protocolVersion
+        let resposta: EngineDTO.Hello
+        do {
+            resposta = try await client.call("engine.hello", params: [
+                "protocol_version": .int(versao),
+                "client": .string(Self.clientName),
+            ])
+        } catch EngineError.engine(let code, let message) where code == "incompatible_protocol" {
+            // A mensagem do motor já cita as duas versões; o complemento diz o
+            // que fazer.
+            throw EngineError.incompatibleProtocol(
+                "Motor incompatível com esta versão do Mo baile. \(message) Atualize o app e o motor juntos."
+            )
+        } catch EngineError.engine(let code, _) where code == "rpc_-32601" {
+            // Motor anterior ao handshake não conhece `engine.hello`.
+            throw EngineError.incompatibleProtocol(
+                "Motor incompatível com esta versão do Mo baile: o app usa o protocolo \(versao) "
+                    + "e o motor, o protocolo 1. Atualize o motor."
+            )
+        }
+        guard resposta.protocolVersion == versao else {
+            throw EngineError.incompatibleProtocol(
+                "Motor incompatível com esta versão do Mo baile: o app usa o protocolo \(versao) "
+                    + "e o motor \(resposta.engineVersion), o protocolo \(resposta.protocolVersion). "
+                    + "Atualize o app e o motor juntos."
+            )
+        }
+        hello = resposta
+        await client.useMethodTable(resposta.methods)
+    }
+
+    private func install(_ client: any EngineCalling) {
+        self.client = client
         notificationTask = Task { [weak self] in
             for await notification in client.notifications {
                 guard !Task.isCancelled else { return }
                 await self?.handle(notification)
             }
         }
+        // Laço próprio para os quadros: decodificar um quadro não pode atrasar
+        // um evento de rede, e um evento lento não pode segurar o espelho.
+        frameTask = Task { [weak self] in
+            for await frame in client.frames {
+                guard !Task.isCancelled else { return }
+                await self?.handle(frame)
+            }
+        }
+        terminationTask = Task { [weak self] in
+            for await status in client.terminations {
+                guard !Task.isCancelled else { return }
+                self?.engineTerminated(client, status: status)
+            }
+        }
+    }
+
+    private func stopBackgroundWork() {
+        for task in [notificationTask, frameTask, terminationTask, daemonTask, hierarchyRefreshTask] {
+            task?.cancel()
+        }
+        notificationTask = nil
+        frameTask = nil
+        terminationTask = nil
+        daemonTask = nil
+        hierarchyRefreshTask = nil
+    }
+
+    // MARK: - Supervisao do motor
+
+    /// O que o front sabe no instante da queda e usa para restaurar.
+    private struct RestoreSnapshot {
+        let device: String?
+        let streamWasActive: Bool
+        let watchingDevices: Bool
+        let proxyWasRunning: Bool
+        /// Recursos que caíram junto e ficam desligados, em texto para o usuário.
+        let lost: [String]
+    }
+
+    /// O motor morreu sem ninguém ter pedido.
+    ///
+    /// Antes, a queda deixava a janela desconectada até alguém reabrir o app.
+    /// Agora a sessão sobe outro motor e devolve o que dá para devolver pelo
+    /// estado do front: aparelho, detecção automática e espelho.
+    private func engineTerminated(_ dead: any EngineCalling, status: Int32) {
+        guard let client, client === dead else { return }
+
+        var lost: [String] = []
+        if state.proxyRunning { lost.append("proxy") }
+        if state.analyticsListenerActive { lost.append("analytics") }
+        if state.passiveListening { lost.append("escuta passiva") }
+        if state.screenRecording { lost.append("gravação de tela") }
+        let snapshot = RestoreSnapshot(
+            device: state.selectedDevice,
+            streamWasActive: state.streamActive,
+            watchingDevices: watchingDevices,
+            proxyWasRunning: state.proxyRunning,
+            lost: lost
+        )
+
+        stopBackgroundWork()
+        self.client = nil
+        watchingDevices = false
+        isConnected = false
+
+        // Tudo isto vivia dentro do processo que morreu. Deixar ligado na tela
+        // seria afirmar um proxy, uma escuta e uma gravação que não existem.
+        state.streamActive = false
+        state.fps = 0
+        state.proxyRunning = false
+        state.daemonStatus.proxy = .off
+        state.analyticsListenerActive = false
+        state.daemonStatus.fa = .off
+        state.passiveListening = false
+        state.screenRecording = false
+        if state.runState == .running { state.runState = .failed }
+
+        restartTask?.cancel()
+        restartTask = Task { [weak self] in
+            await self?.recover(after: status, restoring: snapshot)
+        }
+    }
+
+    private func recover(after status: Int32, restoring snapshot: RestoreSnapshot) async {
+        var motivo = EngineError.processTerminated(status).localizedDescription
+        while !Task.isCancelled {
+            // A janela conta tentativas, com ou sem sucesso: um motor que sobe e
+            // cai de novo logo depois também esgota o limite, em vez de ficar
+            // reiniciando para sempre.
+            let agora = Date()
+            restartAttempts.removeAll { agora.timeIntervalSince($0) > restartPolicy.window }
+            guard restartAttempts.count < restartPolicy.maxAttempts else {
+                let mensagem = "O motor caiu e não voltou depois de \(restartPolicy.maxAttempts) tentativas "
+                    + "de reinício. \(motivo) Feche e abra o Mo baile para tentar de novo."
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            }
+            let tentativa = restartAttempts.count
+            restartAttempts.append(agora)
+            state.statusMessage = "\(motivo) Reiniciando o motor "
+                + "(tentativa \(tentativa + 1) de \(restartPolicy.maxAttempts))…"
+
+            let espera = restartPolicy.delays[min(tentativa, restartPolicy.delays.count - 1)]
+            try? await Task.sleep(nanoseconds: UInt64(espera * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
+            let novo: any EngineCalling
+            do {
+                novo = try await launch()
+            } catch EngineError.incompatibleProtocol(let mensagem) {
+                // Tentar de novo não muda a versão do motor no disco.
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            } catch {
+                motivo = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                continue
+            }
+            // `disconnect()` durante a subida: o motor novo não é de ninguém.
+            guard !Task.isCancelled else {
+                await novo.stop()
+                return
+            }
+
+            install(novo)
+            isConnected = true
+            lastError = nil
+            await restore(snapshot)
+            guard !Task.isCancelled else { return }
+
+            var mensagem = "Motor reiniciado depois de uma queda."
+            if !snapshot.lost.isEmpty {
+                mensagem += " Desligados na queda, religue se precisar: \(snapshot.lost.joined(separator: ", "))."
+            }
+            state.statusMessage = mensagem
+            return
+        }
+    }
+
+    /// Devolve o que o front consegue reconstruir sozinho.
+    ///
+    /// Proxy, analytics e escuta passiva ficam de fora de propósito. O proxy
+    /// mexe na rede do aparelho e a escuta grava passos no código: religar sem
+    /// o usuário ver seria agir em nome dele, possivelmente num aparelho que
+    /// ele já trocou.
+    private func restore(_ snapshot: RestoreSnapshot) async {
+        guard let client else { return }
+        if let device = snapshot.device {
+            let sessao = try? await client.call(
+                "session.select_device",
+                params: ["platform": .string(state.platform.rawValue), "device_id": .string(device)],
+                as: EngineDTO.SessionState.self
+            )
+            state.selectedDevice = sessao?.deviceId
+            if sessao?.deviceId != nil {
+                // O motor morto pode ter deixado o aparelho Android apontando
+                // para um proxy que não existe mais, ou seja, sem rede.
+                // `proxy.stop` desfaz essa configuração; não religa nada.
+                if snapshot.proxyWasRunning {
+                    try? await client.callIgnoringResult("proxy.stop")
+                }
+                await refreshDeviceSize()
+                if snapshot.streamWasActive {
+                    await startStream()
+                } else {
+                    await refreshFrame()
+                }
+            } else {
+                clearFrame()
+                state.hierarchyElements = []
+                state.selectedElement = nil
+            }
+        }
+        if snapshot.watchingDevices {
+            await startWatchingDevices()
+        }
+        startWatchingDaemons()
     }
 
     // MARK: - Estado dos servicos do rodape
@@ -168,7 +459,9 @@ final class EngineSession {
     /// `device.changed` e a interface reage. Nao ha polling deste lado.
     private func startWatchingDevices() async {
         guard let client else { return }
-        try? await client.callIgnoringResult("devices.watch_start")
+        if (try? await client.callIgnoringResult("devices.watch_start")) != nil {
+            watchingDevices = true
+        }
     }
 
     // MARK: - Ambiente
@@ -194,8 +487,9 @@ final class EngineSession {
         defer { isBooting = false }
 
         state.statusMessage = "Iniciando simulador…"
+        defer { activeProgressToken = nil }
         do {
-            var params: [String: JSONValue] = [:]
+            var params: [String: JSONValue] = ["progress_token": beginProgress(for: "simulators.boot")]
             if let udid { params["udid"] = .string(udid) }
             let result: EngineDTO.BootResult = try await client.call("simulators.boot", params: params)
             state.statusMessage = result.message
@@ -209,19 +503,35 @@ final class EngineSession {
         }
     }
 
+    /// Abre um token de progresso para a operação longa que vai começar.
+    ///
+    /// O motor emite `$/progress` com este token enquanto trabalha, e a
+    /// mensagem vai para a barra de status, o mesmo lugar onde o texto fixo de
+    /// "Iniciando…" já aparecia. Minutos compilando o WDA com uma frase só
+    /// pareciam travamento.
+    private func beginProgress(for method: String) -> JSONValue {
+        progressSequence += 1
+        let token = "\(method)-\(progressSequence)"
+        activeProgressToken = token
+        return .string(token)
+    }
+
     /// Pede ao Appium que suba o WebDriverAgent.
     ///
     /// Na primeira execução o Appium compila o WDA, o que leva minutos. Por
-    /// isso a chamada tem timeout generoso do lado do motor e aqui a interface
-    /// mostra progresso em vez de parecer travada.
+    /// isso a chamada tem timeout generoso na tabela do motor e aqui a
+    /// interface mostra o progresso que ele emite em vez de parecer travada.
     func startWDA() async {
         guard let client, !isBooting else { return }
         isBooting = true
         defer { isBooting = false }
 
         state.statusMessage = "Preparando WebDriverAgent pelo Appium. Na primeira vez isso compila o WDA e demora."
+        defer { activeProgressToken = nil }
         do {
-            let result: EngineDTO.WDAStartResult = try await client.call("wda.start")
+            let result: EngineDTO.WDAStartResult = try await client.call(
+                "wda.start", params: ["progress_token": beginProgress(for: "wda.start")]
+            )
             state.statusMessage = result.message
             state.daemonStatus.wda = .ok
             await refreshEnvironment()
@@ -238,8 +548,9 @@ final class EngineSession {
         defer { isBooting = false }
 
         state.statusMessage = "Iniciando emulador…"
+        defer { activeProgressToken = nil }
         do {
-            var params: [String: JSONValue] = [:]
+            var params: [String: JSONValue] = ["progress_token": beginProgress(for: "emulators.boot")]
             if let name { params["name"] = .string(name) }
             let result: EngineDTO.AvdBootResult = try await client.call("emulators.boot", params: params)
             state.statusMessage = "Emulador \(result.name) iniciando…"
@@ -259,7 +570,7 @@ final class EngineSession {
             state.selectedDevice = session.deviceId
             state.hierarchyElements = []
             state.selectedElement = nil
-            state.currentFrame = nil
+            clearFrame()
             if session.deviceId != nil {
                 await activateDevice()
             } else {
@@ -374,14 +685,52 @@ final class EngineSession {
     /// tela, não uma moldura preta.
     func refreshFrame() async {
         guard let client else { return }
+        // A geração é lida antes de pedir a captura: a troca de aparelho que
+        // acontecer enquanto o motor captura é justamente a que invalida o
+        // resultado. Lida depois, ela já seria a nova e deixaria passar a tela
+        // do aparelho anterior.
+        let geracao = frameGeneration
         do {
             let frame: EngineDTO.Frame = try await client.call("screen.capture", params: ["max_width": .int(900)])
-            if let image = frame.image {
+            let image = await Task.detached(priority: .userInitiated) { frame.image }.value
+            if let image, mayPublish(frame, generation: geracao) {
                 state.currentFrame = image
             }
         } catch {
             report(error)
         }
+    }
+
+    private func clearFrame() {
+        frameGeneration += 1
+        state.currentFrame = nil
+    }
+
+    /// Um quadro só vai para a moldura se ainda for do aparelho em uso.
+    ///
+    /// Sem aparelho selecionado, nenhum quadro vale: é o estado de moldura
+    /// vazia. Com aparelho, o `device_id` do quadro tem de bater com ele —
+    /// um quadro de A que termina de chegar depois da troca para B pintava a
+    /// tela de A sob o nome de B. Motor anterior ao campo não manda
+    /// `device_id`, e aí só a geração protege.
+    private func mayPublish(_ frame: EngineDTO.Frame, generation: Int) -> Bool {
+        guard generation == frameGeneration, let selecionado = state.selectedDevice else { return false }
+        return frame.deviceId == nil || frame.deviceId == selecionado
+    }
+
+    /// Lê o envelope e decodifica o PNG fora do MainActor.
+    ///
+    /// O quadro tem centenas de KB de base64. Decodificar o JSON e o PNG na
+    /// main thread custava cerca de 7 ms por quadro, tempo em que a janela
+    /// não respondia a clique nem desenhava. Só a publicação volta ao MainActor.
+    nonisolated private static func decodeFrameNotification(
+        _ payload: Data
+    ) async -> (frame: EngineDTO.Frame, image: NSImage)? {
+        await Task.detached(priority: .userInitiated) {
+            guard let frame = try? JSONDecoder().decode(NotificationEnvelope<EngineDTO.Frame>.self, from: payload).params,
+                  let image = frame.image else { return nil }
+            return (frame, image)
+        }.value
     }
 
     // MARK: - Hierarquia
@@ -402,6 +751,24 @@ final class EngineSession {
             }
         } catch {
             report(error)
+        }
+    }
+
+    /// Atualiza a hierarquia sem bloquear a leitura sequencial de notificações.
+    ///
+    /// Antes, `stream.settled` chamava `await refreshHierarchy()` dentro do loop
+    /// de notificações. Num Android físico com dump lento, isso travava o consumo
+    /// de notificações por vários segundos: os quadros do espelho (`stream.frame`)
+    /// empilhavam no buffer e a tela congelava até alguém clicar em "Atualizar".
+    /// Com a chamada desacoplada e debounced, o espelho flui livre.
+    func debouncedRefreshHierarchy(delayNanoseconds: UInt64 = 150_000_000) {
+        hierarchyRefreshTask?.cancel()
+        hierarchyRefreshTask = Task { [weak self] in
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.refreshHierarchy()
         }
     }
 
@@ -647,9 +1014,33 @@ final class EngineSession {
                 state.analyticsListenerActive = result.running
                 state.daemonStatus.fa = .off
             } else {
-                let result: EngineDTO.AnalyticsState = try await client.call("analytics.start")
+                var params: [String: JSONValue] = [:]
+                if state.platform == .ios {
+                    params["ios_source"] = .string(state.analyticsIOSSource.rpcValue)
+                }
+                let result: EngineDTO.AnalyticsState = try await client.call("analytics.start", params: params)
                 state.analyticsListenerActive = result.running
                 state.daemonStatus.fa = result.running ? .ok : .error
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Atualiza os iPhones por cabo que podem servir de origem no iOS.
+    func refreshAnalyticsIOSDevices() async {
+        guard let client else { return }
+        do {
+            let list: EngineDTO.IOSPhysicalDeviceList = try await client.call("analytics.ios_devices")
+            state.analyticsIOSDeviceHint = list.available ? nil : list.hint
+            state.analyticsIOSDevices = list.devices.map {
+                IOSPhysicalDevice(udid: $0.udid, name: $0.name, iosVersion: $0.iosVersion, problem: $0.problem)
+            }
+            // O iPhone escolhido foi desconectado: volta ao automatico em vez
+            // de deixar a escuta apontando para um aparelho que nao existe.
+            if case .device(let udid) = state.analyticsIOSSource,
+               !state.analyticsIOSDevices.contains(where: { $0.udid == udid }) {
+                state.analyticsIOSSource = .auto
             }
         } catch {
             report(error)
@@ -677,8 +1068,9 @@ final class EngineSession {
     func handle(_ notification: EngineNotification) async {
         switch notification.method {
         case "stream.frame":
-            guard let frame = decodeParams(notification, as: EngineDTO.Frame.self),
-                  let image = frame.image else { return }
+            let geracao = frameGeneration
+            guard let (frame, image) = await Self.decodeFrameNotification(notification.payload),
+                  mayPublish(frame, generation: geracao) else { return }
             state.currentFrame = image
             // As métricas chegam dentro do próprio quadro. Antes daqui saía um
             // `stream.stats`, ou seja, uma ida e volta completa por quadro, e o
@@ -714,7 +1106,7 @@ final class EngineSession {
                 state.scrcpyRunning = false
                 state.hierarchyElements = []
                 state.selectedElement = nil
-                state.currentFrame = nil
+                clearFrame()
                 state.statusMessage = "Dispositivo desconectado"
             }
             await refreshDevices()
@@ -732,9 +1124,10 @@ final class EngineSession {
         case "passive.skipped":
             struct Pulado: Decodable { let reason: String }
             guard let motivo = decodeParams(notification, as: Pulado.self) else { return }
-            // Não vira diálogo: durante navegação é rotina o toque cair numa
-            // tela cuja árvore ainda não foi lida.
             state.statusMessage = "Toque não virou passo: \(motivo.reason)"
+            if motivo.reason.contains("hierarquia") {
+                debouncedRefreshHierarchy(delayNanoseconds: 0)
+            }
 
         case "flow.log":
             struct Linha: Decodable { let line: String }
@@ -757,10 +1150,19 @@ final class EngineSession {
                 LogLine(timestamp: Date(), prefix: payload.success ? "PASS" : "FAIL", message: payload.message)
             )
 
+        case "$/progress":
+            guard let progresso = decodeParams(notification, as: EngineDTO.Progress.self),
+                  let ativo = activeProgressToken, progresso.token == .string(ativo) else { return }
+            if let percent = progresso.percent {
+                state.statusMessage = "\(progresso.message) (\(Int(percent.rounded()))%)"
+            } else {
+                state.statusMessage = progresso.message
+            }
+
         case "stream.settled":
-            // Tela parou de mudar: e o instante certo de reler a hierarquia,
-            // porque ler durante a animacao devolve arvore inconsistente.
-            await refreshHierarchy()
+            // Tela parou de mudar: relê a hierarquia de forma desacoplada para
+            // não travar a recepção contínua dos quadros do espelho.
+            debouncedRefreshHierarchy()
 
         case "proxy.event":
             guard let event = decodeParams(notification, as: EngineDTO.NetworkEventPayload.self) else { return }
@@ -803,6 +1205,9 @@ final class EngineSession {
     }
 
     private func report(_ error: Error) {
+        // Cancelamento foi pedido por alguém (prazo, tarefa, encerramento) e
+        // não é falha a mostrar.
+        if let engineError = error as? EngineError, engineError == .cancelled { return }
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         lastError = message
         state.statusMessage = message
