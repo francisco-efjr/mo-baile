@@ -1314,7 +1314,10 @@ class EngineServer:
             with self._state_lock:
                 if self._flow_cancelled or self._shutdown_done:
                     raise RequestCancelledError("Execucao cancelada antes de iniciar.")
-                self._flow_thread = flows.run_flow_in_background(script, ao_sair, ao_terminar)
+                self._flow_thread = flows.run_flow_in_background(
+                    script, ao_sair, ao_terminar,
+                    sensitive_texts=[p.input_text for p in passos if p.input_text],
+                )
         except Exception:
             with self._state_lock:
                 self._flow_running = False

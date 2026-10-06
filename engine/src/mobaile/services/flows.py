@@ -6,7 +6,7 @@ import subprocess
 import sys
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from mobaile.config import settings
@@ -15,6 +15,10 @@ from mobaile.security import validate_device_id, write_executable_script
 from mobaile.services.codegen import AutomationStep
 
 logger = logging.getLogger(__name__)
+
+# O que substitui um texto digitado que, por engano, aparecesse no log.
+MASK = "***"
+MIN_MASKED_TEXT = 3
 
 
 class _TemporaryScript(str):
@@ -137,7 +141,9 @@ def generate_hidden_runner_script(
             "strategy": s.strategy.value if hasattr(s.strategy, "value") else str(s.strategy),
             "locator_value": s.locator_value,
             "coords": list(s.coords) if s.coords else [0, 0],
-            "input_text": s.input_text or "Texto de Exemplo",
+            # Sem valor padrao: digitar um texto inventado no aparelho e dado falso
+            # com cara de verdadeiro. Passo sem texto falha na execucao.
+            "input_text": s.input_text,
             "package": s.package,
             "platform": s.platform,
         })
@@ -239,14 +245,18 @@ def execute_android_step(step):
     var_name = step.get("var_name", "ELEMENTO")
 
     if action == "input":
-        text = step.get("input_text", "Texto de Teste")
+        text = step.get("input_text")
+        if not isinstance(text, str) or not text:
+            log(f"❌ Passo {{var_name}} de digitação sem texto gravado; nada foi digitado.")
+            return False
         log(f"-> Clicando no campo {{var_name}} em ({{x}}, {{y}})...")
         tap = subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
         if tap.returncode != 0:
             return False
         time.sleep(0.5)
         encoded = text.replace(" ", "%s")
-        log(f"-> Preenchendo texto '{{text}}'...")
+        # Nunca o valor: o log vira `flow.log` na interface e pode conter senha.
+        log(f"-> Digitando {{len(text)}} caracteres em {{var_name}}...")
         result = subprocess.run(
             [ADB_PATH, "-s", DEVICE_ID, "shell", "input text " + _quote_for_device_shell(encoded)],
             timeout=5,
@@ -345,7 +355,9 @@ def main():
             elif PLATFORM == "ios":
                 success = execute_ios_step(step)
         except Exception as e:
-            log(f"❌ Erro inesperado ao executar o passo {{i}}: {{e}}")
+            # So o tipo: a mensagem de TimeoutExpired, por exemplo, repete o
+            # comando inteiro, inclusive o texto digitado.
+            log(f"❌ Erro inesperado ao executar o passo {{i}}: {{type(e).__name__}}")
             success = False
 
         if not success:
@@ -384,8 +396,15 @@ if __name__ == "__main__":
 class FlowExecution(threading.Thread):
     """Thread de execução com cancelamento cooperativo do script gerado."""
 
-    def __init__(self, script_path, on_output, on_finished):
+    def __init__(self, script_path, on_output, on_finished, sensitive_texts=()):
         super().__init__(daemon=True, name="mobaile-flow")
+        # Rede de seguranca, nao o mecanismo principal: o runner ja nao imprime o
+        # que digita, mas um traceback inesperado poderia repetir o comando. Texto
+        # curto demais nao e mascarado para nao corromper palavras comuns do log.
+        self._segredos = sorted(
+            {t for t in sensitive_texts if isinstance(t, str) and len(t) >= MIN_MASKED_TEXT},
+            key=len, reverse=True,
+        )
         self.script_path = script_path
         self._temporary_script = isinstance(script_path, _TemporaryScript)
         self.on_output = on_output
@@ -393,6 +412,11 @@ class FlowExecution(threading.Thread):
         self._cancelled = threading.Event()
         self._process_lock = threading.Lock()
         self._process: subprocess.Popen | None = None
+
+    def _mascarar(self, linha: str) -> str:
+        for segredo in self._segredos:
+            linha = linha.replace(segredo, MASK)
+        return linha
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -424,7 +448,7 @@ class FlowExecution(threading.Thread):
             for line in iter(proc.stdout.readline, ""):
                 stripped = line.rstrip()
                 if stripped:
-                    self.on_output(stripped)
+                    self.on_output(self._mascarar(stripped))
 
             proc.stdout.close()
             return_code = proc.wait()
@@ -466,9 +490,10 @@ def run_flow_in_background(
     script_path: str,
     on_output: Callable[[str], None],
     on_finished: Callable[[bool, str], None],
+    sensitive_texts: Iterable[str] = (),
 ) -> FlowExecution:
     """Executa o script em processo próprio; `cancel()` para entre passos."""
 
-    t = FlowExecution(script_path, on_output, on_finished)
+    t = FlowExecution(script_path, on_output, on_finished, sensitive_texts)
     t.start()
     return t
