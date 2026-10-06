@@ -22,6 +22,7 @@ struct EmptyStateView: View {
                 Text("Conecte um dispositivo para começar")
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundColor(theme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("O Mo baile detecta simuladores, emuladores e aparelhos físicos automaticamente. Se não houver nenhum ligado, dá para abrir um daqui.")
                     .font(.system(size: 12.5))

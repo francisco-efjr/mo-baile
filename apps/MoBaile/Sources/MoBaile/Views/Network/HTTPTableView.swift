@@ -20,6 +20,9 @@ struct HTTPTableView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(theme.current.bgSubtle)
+            // Cada linha já diz o que é cada valor; o cabeçalho lido à parte
+            // seria seis palavras soltas.
+            .accessibilityHidden(true)
             
             Divider().background(theme.current.borderSubtle)
             
@@ -77,6 +80,13 @@ struct HTTPTableView: View {
                         .onTapGesture {
                             appState.selectedRequest = event
                         }
+                        // A linha era seis textos soltos e a seleção só se via pela
+                        // cor. Agora é um elemento, com o estado e a ação de
+                        // selecionar expostos.
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(event.accessibilitySummary)
+                        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { appState.selectedRequest = event }
                         
                         Divider().background(theme.current.borderSubtle)
                     }
@@ -103,5 +113,14 @@ struct HTTPTableView: View {
         case 400...599: return theme.current.danger
         default: return theme.current.textSecondary
         }
+    }
+}
+
+extension NetworkEvent {
+    /// A frase que o leitor de tela lê no lugar das células da linha.
+    var accessibilitySummary: String {
+        var partes = ["\(method) \(host)\(path)", statusCode.map { "status \($0)" } ?? "sem status", formattedSize]
+        if durationMs != nil { partes.append(formattedDuration) }
+        return partes.joined(separator: ", ")
     }
 }

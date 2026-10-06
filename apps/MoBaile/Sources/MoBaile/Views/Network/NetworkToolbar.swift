@@ -23,11 +23,14 @@ struct NetworkToolbar: View {
             HStack {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .foregroundColor(theme.current.textTertiary)
+                    .accessibilityHidden(true)
                 @Bindable var state = appState
                 TextField("Filtrar host, path ou status", text: $state.httpFilterText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundColor(theme.current.textPrimary)
+                    // O texto-sugestão some ao digitar; o nome fica.
+                    .accessibilityLabel("Filtrar requisições por host, caminho ou status")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

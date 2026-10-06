@@ -44,8 +44,10 @@ public struct UnderlineTabBar: View {
                     .frame(height: height)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedIndex == index ? .isSelected : [])
             }
             Spacer()
         }
+        .accessibilityElement(children: .contain)
     }
 }

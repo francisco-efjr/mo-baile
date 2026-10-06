@@ -4,6 +4,9 @@ import SwiftUI
 /// Editor de código com Python colorido e numeração de linha real no estilo IDE.
 struct CodeEditorView: NSViewRepresentable {
     @Binding var text: String
+    /// Nome da área de texto para o leitor de tela. Com dois editores lado a
+    /// lado, "área de texto" sem nome não diz qual é qual.
+    var accessibilityLabel: String = "Editor de código"
     @Environment(ThemeManager.self) var themeManager
 
     private static let fonte = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
@@ -20,6 +23,7 @@ struct CodeEditorView: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.font = Self.fonte
         textView.backgroundColor = .clear
+        textView.setAccessibilityLabel(accessibilityLabel)
 
         return container
     }
@@ -27,6 +31,7 @@ struct CodeEditorView: NSViewRepresentable {
     func updateNSView(_ container: IDEEditorContainerView, context: Context) {
         let textView = container.textView
         let tema = themeManager.current
+        textView.setAccessibilityLabel(accessibilityLabel)
 
         context.coordinator.aplicando = true
         defer { context.coordinator.aplicando = false }

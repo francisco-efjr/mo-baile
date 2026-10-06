@@ -18,13 +18,31 @@ public struct FluidPillButton: View {
     let icon: String?
     let action: () -> Void
     let style: Style
+    let accessibilityLabelText: String?
+    let accessibilityValueText: String?
+    let accessibilityHintText: String?
     
     @State private var isHovered = false
     
-    public init(text: String, icon: String? = nil, style: Style = .primary, action: @escaping () -> Void) {
+    /// Os três parâmetros de acessibilidade são opcionais e só valem quando o
+    /// texto visível não basta: botão que mostra só o ícone (`text` vazio), ou
+    /// interruptor que precisa dizer se está ligado. Sem eles, o leitor lê o
+    /// próprio `text`, como antes.
+    public init(
+        text: String,
+        icon: String? = nil,
+        style: Style = .primary,
+        accessibilityLabel: String? = nil,
+        accessibilityValue: String? = nil,
+        accessibilityHint: String? = nil,
+        action: @escaping () -> Void
+    ) {
         self.text = text
         self.icon = icon
         self.style = style
+        self.accessibilityLabelText = accessibilityLabel
+        self.accessibilityValueText = accessibilityValue
+        self.accessibilityHintText = accessibilityHint
         self.action = action
     }
     
@@ -64,6 +82,38 @@ public struct FluidPillButton: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .modifier(PillAccessibility(
+            label: accessibilityLabelText,
+            value: accessibilityValueText,
+            hint: accessibilityHintText
+        ))
+    }
+}
+
+/// Aplica só o que foi informado. `accessibilityLabel("")` não equivale a não
+/// ter rótulo: ele apaga o nome que o leitor tiraria do texto do botão.
+private struct PillAccessibility: ViewModifier {
+    let label: String?
+    let value: String?
+    let hint: String?
+
+    func body(content: Content) -> some View {
+        comDica(comValor(comRotulo(content)))
+    }
+
+    @ViewBuilder
+    private func comRotulo(_ content: Content) -> some View {
+        if let label { content.accessibilityLabel(label) } else { content }
+    }
+
+    @ViewBuilder
+    private func comValor(_ content: some View) -> some View {
+        if let value { content.accessibilityValue(value) } else { content }
+    }
+
+    @ViewBuilder
+    private func comDica(_ content: some View) -> some View {
+        if let hint { content.accessibilityHint(hint) } else { content }
     }
 }
 
