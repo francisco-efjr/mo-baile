@@ -3,6 +3,7 @@ import sys
 """FLUXO 3 — so Android: espelho, hierarquia, toque, digitacao e proxy."""
 import json
 import pathlib
+import socket
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -31,7 +32,10 @@ print("=" * 78)
 open(str(pathlib.Path(__file__).resolve().parent / "calls.log"), "w").close()
 SERIAL = "emulator-5554"
 
-m = Motor(android=True, ios=False)
+with socket.socket() as reserva:
+    reserva.bind(("127.0.0.1", 0))
+    porta_proxy = reserva.getsockname()[1]
+m = Motor(android=True, ios=False, extra_env={"PROXY_PORT": str(porta_proxy)})
 try:
     devs = m.ok("devices.list", {"platform": "android"})["devices"]
     check("aparelho aparece na lista", len(devs) == 1 and devs[0]["id"] == SERIAL, str(devs))
@@ -129,7 +133,7 @@ try:
     check("proxy sobe", r["running"] is True)
     check("adb reverse configurado", any("reverse" in " ".join(a) for a in novos), str(novos))
     check("proxy global apontado para loopback",
-          any("127.0.0.1:8082" in " ".join(a) for a in novos), str(novos))
+          any("http_proxy" in a and f"127.0.0.1:{porta_proxy}" in a for a in novos), str(novos))
     check("proxy do aparelho configurado com sucesso", r["device_configured"] is True)
 
     antes = len(chamadas_adb())

@@ -8,7 +8,7 @@ produto, o caminho certo era liga-lo ao contrato, e nao remove-lo.
 import threading
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from mobaile.services.devices import DeviceWatcher
 
@@ -127,6 +127,60 @@ class TestFerramentaIndisponivel(unittest.TestCase):
 
 
 class TestCicloDeVida(unittest.TestCase):
+    def test_stop_descarta_listagem_que_termina_depois_da_parada(self):
+        started, release = threading.Event(), threading.Event()
+        notifications = []
+        adb = FakeADB()
+
+        def list_devices():
+            started.set()
+            release.wait(3)
+            return [("emulator-5554", "device")]
+
+        adb.list_devices = list_devices
+        w = watcher(adb=adb, handler=lambda *args: notifications.append(args))
+        w.start()
+        worker = w._thread
+        try:
+            self.assertTrue(started.wait(1))
+            with patch.object(worker, "join"):
+                w.stop()
+            release.set()
+            worker.join(1)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(notifications, [], "vigia parado nao pode selecionar alvo tardiamente")
+        finally:
+            w._stop_event.set()
+            release.set()
+            worker.join(1)
+
+    def test_start_nao_ressuscita_vigia_que_ainda_esta_parando(self):
+        started, release = threading.Event(), threading.Event()
+        adb = FakeADB()
+
+        def list_devices():
+            started.set()
+            release.wait(3)
+            return []
+
+        adb.list_devices = list_devices
+        w = watcher(adb=adb)
+        w.start()
+        worker = w._thread
+        try:
+            self.assertTrue(started.wait(1))
+            with patch.object(worker, "join"):
+                w.stop()
+            w.start()
+            self.assertIs(w._thread, worker, "listagem anterior ainda viva: nao pode criar outra")
+            self.assertTrue(w._stop_event.is_set())
+        finally:
+            w._stop_event.set()
+            release.set()
+            worker.join(1)
+            if w._thread is not None and w._thread is not worker:
+                w._thread.join(1)
+
     def test_start_e_stop(self):
         w = watcher()
         self.assertFalse(w.is_running())

@@ -2,12 +2,16 @@
 
 ## Estado atual
 
+Atualizado em 05/10/2026. Detalhes das correções, evidências e limites em
+[QA_2026-10-05.md](QA_2026-10-05.md).
+
 | Suite | Onde | Testes | Precisa de |
 |---|---|---|---|
-| Motor | `engine/tests` | 91 | nada além de Python |
-| Contrato RPC | `engine/tests/contract` | 22 (inclusos acima) | nada |
-| Front nativo | `apps/MoBaile/Tests` | 4 arquivos | macOS com Swift |
-| UI Tkinter | `apps/tk-legacy/tests` | 4 arquivos | sessão gráfica |
+| Motor e contrato RPC | `engine/tests` | 326 + 110 subtests aprovados | Python e sockets locais para integração |
+| Front nativo | `apps/MoBaile/Tests` | 120 aprovados; 10 skips | macOS com Swift; dispositivo para 2 casos |
+| UI Tkinter | `apps/tk-legacy/tests` | 18 aprovados | sessão gráfica |
+| Harness de QA | `qa/tests` | 11 aprovados | Python |
+| Fluxos de ponta a ponta | `qa/qa_fluxo*.py` | 119 verificações aprovadas | Python, openssl e sockets locais |
 
 ```bash
 make check      # lint + bandit + suites Python
@@ -46,6 +50,10 @@ máquina com scrcpy instalado em `/opt/homebrew/bin/scrcpy`.
 
 ## Cobertura por camada
 
+Medição histórica, anterior à revisão de 05/10/2026. A cobertura não foi
+recalculada nesta revisão; os resultados atuais de execução estão na tabela
+de estado e no relatório da data.
+
 ```
 security/          91–94%   toda a validação e o escaping
 config             96%
@@ -56,7 +64,7 @@ proxy              71%
 domain/models      78%
 ```
 
-O número global do motor é 58%. A distribuição importa mais que o total: o que
+O número global do motor nessa medição era 58%. A distribuição importa mais que o total: o que
 está bem coberto é justamente validação de entrada, fronteira do contrato e
 detecção de mudança de tela. O que puxa a média para baixo são adapters que só
 executam com aparelho conectado, e para esses o teste de integração real vale

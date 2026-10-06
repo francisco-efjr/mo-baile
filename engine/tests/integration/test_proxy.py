@@ -11,7 +11,9 @@ linha de requisicao com URI absoluta. Ficou deterministico e ainda exercita o
 parser real do proxy.
 """
 
+import http.client
 import http.server
+import io
 import socket
 import socketserver
 import threading
@@ -36,6 +38,13 @@ def free_port() -> int:
 
 class DummyHTTPHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path.startswith("/chunked"):
+            self.send_response(200)
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"5\r\nhello\r\n7\r\n mobile\r\n0\r\n\r\n")
+            return
         if self.path.startswith("/grande"):
             payload = b"x" * (MAX_BODY_CAPTURE + 5000)
             self.send_response(200)
@@ -60,6 +69,15 @@ class DummyHTTPHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        response = str(len(body)).encode("ascii")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
 
     def log_message(self, *_args):
         pass
@@ -150,6 +168,48 @@ class TestProxyLifecycle(unittest.TestCase):
 
 
 class TestProxyInterception(ProxyTestBase):
+    def test_resposta_chunked_continua_legivel_pelo_cliente_http(self):
+        forwarded = self.get("/chunked")
+        class ResponseSocket:
+            def makefile(self, *_args):
+                return io.BytesIO(forwarded)
+        response = http.client.HTTPResponse(ResponseSocket())
+        self.addCleanup(response.close)
+        response.begin()
+        self.assertEqual(response.read(), b"hello mobile")
+        event = self.last_event()
+        self.assertEqual(event.response_body, "hello mobile")
+        self.assertEqual(event.response_bytes, 12)
+
+    def test_form_e_url_redigidos_sem_alterar_trafego_encaminhado(self):
+        body = b"user=bella&password=segredo-sintetico&token=token-sintetico"
+        request = (
+            f"POST http://127.0.0.1:{self.origin_port}/login?access_token=url-sintetico&item=1 HTTP/1.1\r\n"
+            f"host:127.0.0.1:{self.origin_port}\r\n"
+            "Content-Type:application/x-www-form-urlencoded\r\n"
+            f"CONTENT-LENGTH:{len(body)}\r\nConnection:close\r\n\r\n"
+        ).encode("ascii") + body
+        forwarded = self.send_through_proxy(request)
+        self.assertIn(b"200 OK", forwarded)
+        self.assertEqual(forwarded.split(b"\r\n\r\n", 1)[1], str(len(body)).encode("ascii"))
+        event = self.last_event()
+        for secret in ("segredo-sintetico", "token-sintetico", "url-sintetico"):
+            self.assertNotIn(secret, str(event.to_dict()))
+        self.assertIn("user=bella", event.request_body)
+        self.assertIn("item=1", event.url)
+
+    def test_corpo_nao_e_interpretado_como_cabecalho(self):
+        body = b"X-Injected: marcador-sintetico"
+        request = (
+            f"POST http://127.0.0.1:{self.origin_port}/api HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{self.origin_port}\r\nContent-Length: {len(body)}\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode("ascii") + body
+        self.assertIn(b"200 OK", self.send_through_proxy(request))
+        event = self.last_event()
+        self.assertNotIn("X-Injected", event.request_headers)
+        self.assertEqual(event.request_body, body.decode("ascii"))
+
     def test_requisicao_http_e_interceptada(self):
         response = self.get()
         self.assertIn(b"hello mobile", response)

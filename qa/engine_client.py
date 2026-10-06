@@ -16,14 +16,26 @@ import time
 class Motor:
     def __init__(self, *, android=False, ios=False, ios_booted=False, extra_env=None):
         env = dict(os.environ)
-        env["PATH"] = str(pathlib.Path(__file__).resolve().parent / "fakebin") + ":" + env["PATH"]
+        fakebin = pathlib.Path(__file__).resolve().parent / "fakebin"
+        # Os falsos usam /usr/bin/env python3: resolva suas dependências no
+        # mesmo ambiente virtual do motor, mesmo sem `source .venv/bin/activate`.
+        env["PATH"] = os.pathsep.join((str(fakebin), str(pathlib.Path(sys.executable).parent), env["PATH"]))
+        env["ADB_PATH"] = str(fakebin / "adb")
         env["PYTHONPATH"] = str(pathlib.Path(__file__).resolve().parent.parent / "engine" / "src")
         env["PYTHONUNBUFFERED"] = "1"
         env["QA_ANDROID"] = "1" if android else "0"
         env["QA_IOS"] = "1" if ios else "0"
         env["QA_IOS_BOOTED"] = "1" if ios_booted else "0"
         env["QA_LOG"] = str(pathlib.Path(__file__).resolve().parent / "calls.log")
-        env.setdefault("WDA_URL", "http://127.0.0.1:8100")
+        # Nunca alcance o WDA/ADB reais por uma configuração exportada no shell.
+        # O cenário iOS fornece a porta efêmera de seu próprio WDA falso.
+        env["WDA_URL"] = "http://127.0.0.1:0"
+        env["APPIUM_URL"] = "http://127.0.0.1:0"
+        env["PROXY_HOST"] = "127.0.0.1"
+        env["MOBAILE_REDACT"] = "1"
+        env["QA_ANIMADO"] = "0"
+        env["QA_CAPTURE_DELAY_MS"] = "0"
+        env["NO_PROXY"] = env["no_proxy"] = "127.0.0.1,localhost"
         env.update(extra_env or {})
 
         self.proc = subprocess.Popen(

@@ -4,8 +4,15 @@ Roda os quatro fluxos principais do Mo baile sem precisar de aparelho, de Xcode
 nem de Android SDK.
 
 ```bash
-python3 qa/run_all.py
+make qa
+make test-qa
 ```
+
+`make qa` usa o mesmo ambiente virtual das suítes Python. Cada fluxo precisa
+terminar com código zero e um resumo com verificações executadas e nenhuma
+falha; resumo ausente, zero verificações e timeout reprovam o gate. Em falha,
+stdout e stderr são exibidos para diagnóstico. O limite por fluxo é 120 s;
+um timeout encerra também o motor filho e o próximo fluxo ainda é executado.
 
 ## Como funciona
 
@@ -19,6 +26,11 @@ aparelho**.
 
 `fake_wda.py` é um WebDriverAgent mínimo, com `/status`, `/session`, `/source` e
 `/session/<id>/wda/tap`.
+
+O cenário iOS usa uma porta efêmera para o WDA falso, e o cenário Android usa
+uma porta efêmera para o proxy. O cliente força o ADB falso e endpoints locais,
+substituindo a configuração herdada do shell. Configuração específica de um
+cenário é passada explicitamente em `extra_env`.
 
 `engine_client.py` sobe o motor de verdade como subprocesso
 (`python -m mobaile.rpc`) e fala o mesmo JSON-RPC sobre stdio que o front
@@ -40,3 +52,6 @@ proxy com CONNECT e handshake TLS de verdade.
 
 Python 3.10+, `Pillow`, `requests` e `openssl` no PATH (para gerar o certificado
 do fluxo 4). Nenhum aparelho, nenhum simulador.
+
+O CI executa as regressões do gate e os quatro fluxos na matriz Python do
+motor, incluindo o lint de `qa/`.

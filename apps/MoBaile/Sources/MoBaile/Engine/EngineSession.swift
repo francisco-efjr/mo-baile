@@ -75,6 +75,11 @@ final class EngineSession {
     /// depois da troca de aparelho não pode repintar a moldura com a tela do
     /// aparelho anterior.
     private var frameGeneration = 0
+    /// Só a leitura de hierarquia mais recente pode substituir a árvore.
+    /// Duas leituras concorrentes podem terminar fora da ordem em que começaram.
+    private var hierarchyRequestGeneration = 0
+    private var recordingOperationInProgress = false
+    private var recordingStateGeneration = 0
 
     /// Token de progresso da operação longa em andamento. Progresso com outro
     /// token é de uma chamada que já terminou ou estourou o prazo, e não pode
@@ -225,6 +230,9 @@ final class EngineSession {
     }
 
     private func stopBackgroundWork() {
+        // Chamadas já em andamento podem devolver depois do encerramento.
+        frameGeneration += 1
+        hierarchyRequestGeneration += 1
         for task in [notificationTask, frameTask, terminationTask, daemonTask, hierarchyRefreshTask] {
             task?.cancel()
         }
@@ -424,6 +432,8 @@ final class EngineSession {
         if let wda: EngineDTO.WDAStatus = try? await client.call("wda.status") {
             state.daemonStatus.wda = wda.wdaRunning ? .ok : (wda.appiumRunning ? .warn : .off)
         }
+
+        await refreshScreenRecordingState()
 
         state.daemonStatus.fa = state.analyticsListenerActive ? .ok : .off
     }
@@ -737,11 +747,24 @@ final class EngineSession {
 
     func refreshHierarchy() async {
         guard let client else { return }
+        hierarchyRequestGeneration += 1
+        let requestGeneration = hierarchyRequestGeneration
+        let deviceGeneration = frameGeneration
+        let deviceID = state.selectedDevice
+        let platform = state.platform
         do {
             let dump: EngineDTO.HierarchyDump = try await client.call("hierarchy.dump")
+            guard !Task.isCancelled,
+                  requestGeneration == hierarchyRequestGeneration,
+                  deviceGeneration == frameGeneration,
+                  deviceID == state.selectedDevice,
+                  platform == state.platform else { return }
             state.hierarchyElements = dump.elements.map { $0.toModel() }
             state.daemonStatus.wda = state.platform == .ios ? .ok : state.daemonStatus.wda
         } catch let error as EngineError {
+            guard !Task.isCancelled,
+                  requestGeneration == hierarchyRequestGeneration,
+                  deviceGeneration == frameGeneration else { return }
             // Hierarquia indisponivel e rotina durante transicao de tela: nao
             // vale interromper o usuario com dialogo.
             if case .engine = error {
@@ -880,10 +903,13 @@ final class EngineSession {
     /// Grava video da tela pelo motor: `screenrecord` no Android, `simctl io`
     /// no iOS. Qual das duas ferramentas usar e decisao do motor.
     func startScreenRecording() async {
-        guard let client, !state.screenRecording else { return }
+        guard let client, !state.screenRecording, !recordingOperationInProgress else { return }
+        recordingStateGeneration += 1
+        recordingOperationInProgress = true
+        defer { recordingOperationInProgress = false }
         do {
             let inicio: EngineDTO.RecordingState = try await client.call("recording.start")
-            state.screenRecording = true
+            state.screenRecording = inicio.recording
             state.screenRecordingPath = inicio.path
             if let limite = inicio.limitSeconds {
                 state.statusMessage = "Gravando a tela (limite de \(limite)s no Android)"
@@ -891,23 +917,39 @@ final class EngineSession {
                 state.statusMessage = "Gravando a tela"
             }
         } catch {
-            state.screenRecording = false
             report(error)
+            await refreshScreenRecordingState(afterOperation: true)
         }
     }
 
     func stopScreenRecording() async {
-        guard let client else { return }
-        defer { state.screenRecording = false }
+        guard let client, !recordingOperationInProgress else { return }
+        recordingStateGeneration += 1
+        recordingOperationInProgress = true
+        defer { recordingOperationInProgress = false }
         do {
             let fim: EngineDTO.RecordingResult = try await client.call("recording.stop")
+            state.screenRecording = fim.recording
             state.screenRecordingPath = fim.path
             if let caminho = fim.path {
                 state.statusMessage = "Video salvo: \(caminho)"
             }
         } catch {
             report(error)
+            // Timeout não prova que a operação terminou. Consulte o motor e
+            // mantenha o último estado conhecido se ele também não responder.
+            await refreshScreenRecordingState(afterOperation: true)
         }
+    }
+
+    private func refreshScreenRecordingState(afterOperation: Bool = false) async {
+        guard let client, afterOperation || !recordingOperationInProgress else { return }
+        let generation = recordingStateGeneration
+        guard let recording = try? await client.call("recording.status", as: EngineDTO.RecordingState.self),
+              generation == recordingStateGeneration,
+              self.client === client else { return }
+        state.screenRecording = recording.recording
+        if let path = recording.path { state.screenRecordingPath = path }
     }
 
     func refreshSteps() async {
@@ -970,8 +1012,12 @@ final class EngineSession {
 
     func clearSteps() async {
         guard let client else { return }
-        try? await client.callIgnoringResult("codegen.reset")
-        state.clearSteps()
+        do {
+            try await client.callIgnoringResult("codegen.reset")
+            state.clearSteps()
+        } catch {
+            report(error)
+        }
     }
 
     // MARK: - Rede
@@ -1000,8 +1046,12 @@ final class EngineSession {
 
     func clearTraffic() async {
         guard let client else { return }
-        try? await client.callIgnoringResult("proxy.clear")
-        state.clearHTTPTraffic()
+        do {
+            try await client.callIgnoringResult("proxy.clear")
+            state.clearHTTPTraffic()
+        } catch {
+            report(error)
+        }
     }
 
     // MARK: - Analytics
@@ -1049,8 +1099,12 @@ final class EngineSession {
 
     func clearAnalytics() async {
         guard let client else { return }
-        try? await client.callIgnoringResult("analytics.clear")
-        state.clearAnalyticsEvents()
+        do {
+            try await client.callIgnoringResult("analytics.clear")
+            state.clearAnalyticsEvents()
+        } catch {
+            report(error)
+        }
     }
 
     // MARK: - Notificacoes do motor
@@ -1089,6 +1143,11 @@ final class EngineSession {
                 }
             }
             guard let change = decodeParams(notification, as: Change.self) else { return }
+            if state.selectedDevice != change.deviceId {
+                state.hierarchyElements = []
+                state.selectedElement = nil
+                clearFrame()
+            }
             state.selectedDevice = change.deviceId
             if change.deviceId != nil {
                 // A ativação vem antes de reler a lista de propósito. O aviso é

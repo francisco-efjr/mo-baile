@@ -8,11 +8,13 @@ class TestUITheme(unittest.TestCase):
     def setUp(self):
         try:
             self.root = tk.Tk()
-            self.root.withdraw()
-            self.app = MobileRecorderApp(self.root)
         except tk.TclError:
             self.root = None
             self.app = None
+            return
+        self.addCleanup(self.root.destroy)
+        self.root.withdraw()
+        self.app = MobileRecorderApp(self.root)
 
     def tearDown(self):
         if self.app:
@@ -20,11 +22,6 @@ class TestUITheme(unittest.TestCase):
                 self.app.stream_engine.stop()
                 self.app.watcher.stop()
                 self.app._stop_passive_listeners()
-            except Exception:
-                pass
-        if self.root:
-            try:
-                self.root.destroy()
             except Exception:
                 pass
 

@@ -116,11 +116,12 @@ class RealTimeStreamEngine:
     def stop(self):
         self._stop_event.set()
         self._pause_event.set()
-        if self._thread:
+        if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2.0)
             if self._thread.is_alive():
                 logger.warning("Thread de streaming nao encerrou no tempo esperado.")
-        self._thread = None
+        if self._thread and not self._thread.is_alive():
+            self._thread = None
 
     def pause(self):
         self._pause_event.set()
@@ -143,6 +144,8 @@ class RealTimeStreamEngine:
             loop_start = time.time()
             try:
                 img = self.get_frame_fn()
+                if self._stop_event.is_set():
+                    break  # Captura iniciada antes da parada não vira evento tardio.
                 if img is not None:
                     self.stats.frames_captured += 1
                     self.stats.last_capture_ms = (time.time() - loop_start) * 1000
@@ -167,7 +170,7 @@ class RealTimeStreamEngine:
                     else:
                         self.stats.frames_skipped += 1
 
-                    if is_settled:
+                    if is_settled and not self._stop_event.is_set():
                         self.on_screen_settled_callback()
             except Exception:
                 logger.exception("Falha ao processar quadro do espelho.")

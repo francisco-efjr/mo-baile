@@ -37,7 +37,7 @@ from collections.abc import Callable
 
 from mobaile.config import settings
 from mobaile.domain.models import NetworkEvent
-from mobaile.security import redact_body, redact_headers
+from mobaile.security import redact_body, redact_headers, redact_url
 
 logger = logging.getLogger(__name__)
 
@@ -63,25 +63,27 @@ _TEXTUAL_HINTS = ("json", "text", "xml", "javascript", "html", "urlencoded", "gr
 def _looks_textual(headers: dict[str, str]) -> bool:
     ctype = ""
     for key, value in headers.items():
+        if key.lower() == "content-encoding" and value.strip().lower() not in ("", "identity"):
+            return False  # payload comprimido é encaminhado, sem armazenar bytes ilegíveis
         if key.lower() == "content-type":
             ctype = value.lower()
-            break
     if not ctype:
         return True  # sem pista, tenta decodificar
     return any(hint in ctype for hint in _TEXTUAL_HINTS)
 
 
-def _decode_body(raw: bytes, headers: dict[str, str]) -> tuple[str, bool]:
+def _decode_body(raw: bytes, headers: dict[str, str], total_bytes: int | None = None) -> tuple[str, bool]:
     """Devolve (texto_para_exibicao, foi_truncado)."""
     if not raw:
         return "", False
-    truncated = len(raw) > MAX_BODY_CAPTURE
+    total_bytes = len(raw) if total_bytes is None else total_bytes
+    truncated = total_bytes > MAX_BODY_CAPTURE
     chunk = raw[:MAX_BODY_CAPTURE]
     if not _looks_textual(headers):
-        return f"«{len(raw)} bytes binários não capturados»", truncated
+        return f"«{total_bytes} bytes binários não capturados»", truncated
     text = chunk.decode("utf-8", errors="replace")
     if truncated:
-        text += f"\n\n«truncado: {len(raw)} bytes no total, {MAX_BODY_CAPTURE} capturados»"
+        text += f"\n\n«truncado: {total_bytes} bytes no total, {MAX_BODY_CAPTURE} capturados»"
     return text, truncated
 
 
@@ -104,7 +106,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             if not raw_request:
                 return
 
-            header_lines = raw_request.decode("utf-8", errors="replace").split("\r\n")
+            header_lines = raw_request.split(b"\r\n\r\n", 1)[0].decode("latin1").split("\r\n")
             request_line = header_lines[0].strip() if header_lines else ""
             parts = request_line.split()
             if len(parts) < 2:
@@ -116,8 +118,12 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
 
             headers: dict[str, str] = {}
             for line in header_lines[1:]:
-                if ": " in line:
-                    key, value = line.split(": ", 1)
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    existing = next((name for name in headers if name.lower() == key.strip().lower()), None)
+                    if existing is not None and key.strip().lower() == "content-length":
+                        self._reject_request(client_sock, 400)
+                        return
                     headers[key.strip()] = value.strip()
 
             event_id = server.get_next_event_id()
@@ -131,7 +137,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                     event_id, start_time, time_str, server,
                 )
         except (OSError, ValueError) as exc:
-            logger.debug("Conexão encerrada com erro tratado: %s", exc)
+            logger.debug("Conexão encerrada com erro tratado: %s", type(exc).__name__)
         finally:
             server.release_slot()
 
@@ -145,6 +151,13 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             pass
 
     @staticmethod
+    def _reject_request(client_sock: socket.socket, status: int) -> None:
+        client_sock.sendall(
+            f"HTTP/1.1 {status} {http.client.responses[status]}\r\n"
+            "Content-Length: 0\r\nConnection: close\r\n\r\n".encode("ascii")
+        )
+
+    @staticmethod
     def _read_headers(sock: socket.socket) -> bytes:
         """Lê até o fim do cabeçalho, com teto de tamanho."""
         data = bytearray()
@@ -153,7 +166,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
         except OSError:
             pass
         while b"\r\n\r\n" not in data:
-            if len(data) > MAX_HEADER_BYTES:
+            if len(data) >= MAX_HEADER_BYTES:
                 logger.warning("Cabeçalho acima de %d bytes; conexão descartada.", MAX_HEADER_BYTES)
                 return b""
             try:
@@ -163,12 +176,15 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             if not chunk:
                 break
             data.extend(chunk)
+        header_end = data.find(b"\r\n\r\n")
+        if header_end < 0 or header_end + 4 > MAX_HEADER_BYTES:
+            return b""
         return bytes(data)
 
     @staticmethod
     def _parse_content_length(headers: dict[str, str]) -> int:
         """Content-Length é entrada externa: valor inválido vira 0, valor absurdo é limitado."""
-        raw = headers.get("Content-Length") or headers.get("content-length") or "0"
+        raw = next((value for key, value in headers.items() if key.lower() == "content-length"), "0")
         try:
             length = int(raw)
         except (TypeError, ValueError):
@@ -225,7 +241,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                         return
                     bytes_transferred += len(data)
         except OSError as exc:
-            error_msg = str(exc)
+            error_msg = type(exc).__name__
             status_code = 502
             try:
                 client_sock.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
@@ -240,7 +256,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                     timestamp=start_time,
                     time_str=time_str,
                     method="CONNECT",
-                    url=f"https://{target}",
+                    url=redact_url(f"https://{target}"),
                     host=host,
                     path=f":{port}",
                     status_code=status_code,
@@ -261,11 +277,25 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
 
     def _handle_http(self, client_sock, method, target, headers, protocol, raw_request,
                      event_id, start_time, time_str, server) -> None:
+        normalized_headers = {key.lower(): value for key, value in headers.items()}
+        if "transfer-encoding" in normalized_headers:
+            # Não interpretamos chunks de requisição. Recusar explicitamente
+            # evita encaminhar uma operação com o corpo vazio ou truncado.
+            self._reject_request(client_sock, 501)
+            return
+        raw_length = normalized_headers.get("content-length", "0")
+        if not raw_length.isascii() or not raw_length.isdecimal():
+            self._reject_request(client_sock, 400)
+            return
+        significant_length = raw_length.lstrip("0") or "0"
+        if len(significant_length) > len(str(MAX_REQUEST_BODY)) or int(significant_length) > MAX_REQUEST_BODY:
+            self._reject_request(client_sock, 413)
+            return
         parsed = urllib.parse.urlparse(target)
         host = parsed.hostname
         port = parsed.port
         if not host:
-            host_header = headers.get("Host", "localhost")
+            host_header = next((value for key, value in headers.items() if key.lower() == "host"), "localhost")
             if ":" in host_header:
                 h, _, p = host_header.partition(":")
                 host = h
@@ -302,8 +332,8 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             server.emit_event(
                 NetworkEvent(
                     id=event_id, timestamp=start_time, time_str=time_str, method=method,
-                    url=target if target.startswith("http") else f"http://{host}:{port}{path}",
-                    host=host or "connectivitycheck", path=path, status_code=204,
+                    url=redact_url(target if target.startswith("http") else f"http://{host}:{port}{path}"),
+                    host=host or "connectivitycheck", path=redact_url(path), status_code=204,
                     status_text="No Content (Connectivity Check)",
                     request_headers=redact_headers(headers), response_headers={"Content-Length": "0"},
                     duration_ms=(time.time() - start_time) * 1000, protocol=protocol,
@@ -312,6 +342,9 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             return
 
         body_bytes = self._read_request_body(client_sock, headers, raw_request)
+        if len(body_bytes) != int(significant_length):
+            self._reject_request(client_sock, 400)
+            return
         request_body_str, req_truncated = _decode_body(body_bytes, headers)
         request_body_str = redact_body(request_body_str)
 
@@ -321,6 +354,8 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
         response_body_str, error_msg = "", None
         resp_truncated = False
         resp_len = 0
+        response_started = False
+        captured_response = bytearray()
 
         try:
             conn_cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
@@ -328,7 +363,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
 
             fwd_headers = {
                 k: v for k, v in headers.items()
-                if k.lower() not in ("proxy-connection", "connection", "keep-alive", "transfer-encoding")
+                if k.lower() not in ("proxy-connection", "proxy-authorization", "connection", "keep-alive", "transfer-encoding")
             }
             fwd_headers["Connection"] = "close"
 
@@ -336,36 +371,67 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             resp = remote_conn.getresponse()
             status_code, status_text = resp.status, resp.reason
             resp_headers = dict(resp.getheaders())
-
-            resp_data = resp.read()
-            resp_len = len(resp_data)
-            response_body_str, resp_truncated = _decode_body(resp_data, resp_headers)
-            response_body_str = redact_body(response_body_str)
+            transfer_encodings = [value.strip().lower() for key, value in resp.getheaders()
+                                  if key.lower() == "transfer-encoding"]
+            if transfer_encodings and (transfer_encodings != ["chunked"] or not resp.chunked):
+                # http.client só decodifica o coding único "chunked". Não
+                # retire o header de codings que continuariam no payload.
+                raise http.client.HTTPException("Transfer-Encoding de resposta não suportado.")
 
             client_response = f"HTTP/1.1 {status_code} {status_text}\r\n"
+            # HTTPResponse já remove o framing chunked. O cliente recebe o
+            # corpo decodificado e usa o fechamento da conexão como limite.
+            hop_headers = {"connection", "proxy-connection", "transfer-encoding", "trailer", "keep-alive"}
             for key, value in resp.getheaders():
-                if key.lower() not in ("connection", "proxy-connection"):
+                if key.lower() == "connection":
+                    hop_headers.update(part.strip().lower() for part in value.split(","))
+            if transfer_encodings:
+                hop_headers.add("content-length")
+            for key, value in resp.getheaders():
+                if key.lower() not in hop_headers:
                     client_response += f"{key}: {value}\r\n"
             client_response += "Connection: close\r\n\r\n"
-            client_sock.sendall(client_response.encode("latin1", errors="replace") + resp_data)
+            client_sock.sendall(client_response.encode("latin1", errors="replace"))
+            response_started = True
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    # read(amt) não levanta IncompleteRead ao chegar em EOF
+                    # antes do Content-Length. O HTTPResponse zera length em
+                    # HEAD/204/304, evitando falsos erros nesses casos.
+                    remaining_length = resp.length
+                    if isinstance(remaining_length, int) and remaining_length > 0:
+                        raise http.client.IncompleteRead(b"", remaining_length)
+                    break
+                resp_len += len(chunk)
+                remaining = MAX_BODY_CAPTURE - len(captured_response)
+                if remaining > 0:
+                    captured_response.extend(chunk[:remaining])
+                client_sock.sendall(chunk)
 
         except (OSError, http.client.HTTPException) as exc:
-            error_msg = str(exc)
-            status_code, status_text = 502, "Bad Gateway"
-            logger.debug("Falha ao encaminhar %s %s: %s", method, target, exc)
+            # Algumas exceções de http.client incluem a URL original com
+            # credenciais. Guardamos a categoria útil para depuração.
+            error_msg = type(exc).__name__
+            if not response_started:
+                status_code, status_text = 502, "Bad Gateway"
+            logger.debug("Falha ao encaminhar %s %s (%s).", method, redact_url(target), type(exc).__name__)
             try:
                 # Corpo genérico: devolver str(exc) ao cliente vazaria detalhes
                 # da rede interna do host para o app sob teste.
                 body = b"O proxy nao conseguiu encaminhar a requisicao."
-                client_sock.sendall(
-                    b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: "
-                    + str(len(body)).encode()
-                    + b"\r\nConnection: close\r\n\r\n"
-                    + body
-                )
+                if not response_started:
+                    client_sock.sendall(
+                        b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: "
+                        + str(len(body)).encode()
+                        + b"\r\nConnection: close\r\n\r\n"
+                        + body
+                    )
             except OSError:
                 pass
         finally:
+            response_body_str, resp_truncated = _decode_body(bytes(captured_response), resp_headers, resp_len)
+            response_body_str = redact_body(response_body_str)
             if remote_conn:
                 try:
                     remote_conn.close()
@@ -374,8 +440,8 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             server.emit_event(
                 NetworkEvent(
                     id=event_id, timestamp=start_time, time_str=time_str, method=method,
-                    url=target if target.startswith("http") else f"http://{host}:{port}{path}",
-                    host=host, path=path, status_code=status_code, status_text=status_text,
+                    url=redact_url(target if target.startswith("http") else f"http://{host}:{port}{path}"),
+                    host=host, path=redact_url(path), status_code=status_code, status_text=status_text,
                     request_headers=redact_headers(headers), request_body=request_body_str,
                     # Encontrado em QA: só a requisição era redigida. O
                     # `Set-Cookie` da resposta carrega o cookie de sessão que o
@@ -395,7 +461,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
         header_end = raw_request.find(b"\r\n\r\n")
         if header_end == -1:
             return b""
-        body = bytearray(raw_request[header_end + 4:])
+        body = bytearray(raw_request[header_end + 4:header_end + 4 + content_length])
         remaining = content_length - len(body)
         while remaining > 0:
             try:
