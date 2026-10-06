@@ -1268,59 +1268,84 @@ class EngineServer:
         front nativo nao tinha como rodar automacao nenhuma. O andamento sai por
         `flow.log`, linha a linha, como o espelho faz com `stream.frame`.
         """
-        if self._flow_running:
-            raise InvalidInputError("Ja existe uma execucao em andamento.")
-
         passos = self.codegen.get_steps()
         if not passos:
             raise InvalidInputError("Nenhum passo gravado para executar.")
 
         sessao = self._require_session()
         device = sessao.device_id
-        ok, motivo = flows.verify_preconditions(
-            platform=sessao.platform.value, device_id=device, adb_path=self.adb.adb_path
-        )
-        if not ok:
-            raise EngineError(motivo)
-
-        script = flows.generate_hidden_runner_script(
-            steps=passos,
-            platform=sessao.platform.value,
-            device_id=device,
-            wda_url=settings.wda_url,
-            adb_path=self.adb.adb_path,
-        )
-
-        self._flow_running = True
-        self._flow_cancelled = False
+        with self._state_lock:
+            if self._shutdown_done:
+                raise InvalidInputError("O motor esta encerrando.")
+            if self._flow_running:
+                raise InvalidInputError("Ja existe uma execucao em andamento.")
+            self._flow_running = True
+            self._flow_cancelled = False
+            self._flow_thread = None
 
         def ao_sair(linha: str) -> None:
             self.notify("flow.log", {"line": linha})
 
         def ao_terminar(sucesso: bool, mensagem: str) -> None:
-            self._flow_running = False
+            with self._state_lock:
+                self._flow_running = False
+                self._flow_thread = None
+                cancelado = self._flow_cancelled
             self.notify(
                 "flow.finished",
-                {"success": sucesso and not self._flow_cancelled, "message": mensagem},
+                {"success": sucesso and not cancelado, "message": mensagem},
             )
 
-        self._flow_thread = flows.run_flow_in_background(script, ao_sair, ao_terminar)
+        try:
+            ok, motivo = flows.verify_preconditions(
+                platform=sessao.platform.value, device_id=device, adb_path=self.adb.adb_path
+            )
+            if not ok:
+                raise EngineError(motivo)
+            self._check_cancelled()
+            script = flows.generate_hidden_runner_script(
+                steps=passos,
+                platform=sessao.platform.value,
+                device_id=device,
+                wda_url=settings.wda_url,
+                adb_path=self.adb.adb_path,
+            )
+            self._check_cancelled()
+            with self._state_lock:
+                if self._flow_cancelled or self._shutdown_done:
+                    raise RequestCancelledError("Execucao cancelada antes de iniciar.")
+                self._flow_thread = flows.run_flow_in_background(
+                    script, ao_sair, ao_terminar,
+                    sensitive_texts=[p.input_text for p in passos if p.input_text],
+                )
+        except Exception:
+            with self._state_lock:
+                self._flow_running = False
+                self._flow_thread = None
+            raise
         return {"running": True, "steps": len(passos), "script": script}
 
     def flow_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Pede a interrupcao. Idempotente.
 
-        O script roda em processo proprio; marcar a intencao e avisar a interface
-        e o que o motor pode fazer sem matar o processo no meio de um toque.
+        SIGTERM pede ao script que termine apos a acao atual, antes de iniciar
+        outro passo. Tambem impede iniciar um processo ainda em preparacao.
         """
-        if not self._flow_running:
-            return {"running": False, "stopped": False}
-        self._flow_cancelled = True
+        with self._state_lock:
+            if not self._flow_running:
+                return {"running": False, "stopped": False}
+            if self._flow_cancelled:
+                return {"running": True, "stopped": True}
+            self._flow_cancelled = True
+            execution = self._flow_thread
+        if execution is not None:
+            execution.cancel()
         self.notify("flow.log", {"line": "Interrupcao pedida; encerrando apos o passo atual."})
         return {"running": True, "stopped": True}
 
     def flow_status(self, _params: dict[str, Any]) -> dict[str, Any]:
-        return {"running": self._flow_running, "cancelled": self._flow_cancelled}
+        with self._state_lock:
+            return {"running": self._flow_running, "cancelled": self._flow_cancelled}
 
     def codegen_steps(self, _params: dict[str, Any]) -> dict[str, Any]:
         return {"steps": [step.to_dict() for step in self.codegen.get_steps()]}
@@ -1354,7 +1379,9 @@ class EngineServer:
             return None, protocol.error(None, protocol.INVALID_REQUEST, "id deve ser texto, numero ou nulo.")
 
         method = message.get("method")
-        params = message.get("params") or {}
+        if not isinstance(method, str):
+            return None, protocol.error(request_id, protocol.INVALID_REQUEST, "method deve ser texto.")
+        params = message.get("params", {})
         if not isinstance(params, dict):
             return None, protocol.error(request_id, protocol.INVALID_PARAMS, "params deve ser objeto.")
 
@@ -1488,6 +1515,7 @@ class EngineServer:
                 return
             self._shutdown_done = True
         self._running = False
+        self.flow_stop({})
         self.stream_stop({})
         self.devices_watch_stop({})
         sessao = self._sessao()

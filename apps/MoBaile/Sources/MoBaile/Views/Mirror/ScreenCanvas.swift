@@ -102,11 +102,14 @@ struct ScreenCanvas: View {
                 handleTap(at: location, projection: projection)
             }
             .accessibilityElement(children: .ignore)
+            // Sem papel, o leitor anunciava o espelho como elemento
+            // desconhecido, e nada dizia o que um clique ali faria.
+            .accessibilityAddTraits(.isImage)
             .accessibilityLabel("Espelho do dispositivo")
             .accessibilityValue(
                 appState.currentFrame == nil
                     ? "Sem imagem"
-                    : "\(appState.hierarchyElements.count) elementos na tela"
+                    : "\(appState.hierarchyElements.count) elementos na tela. Clique: \(appState.interactionMode.displayName)"
             )
         }
     }

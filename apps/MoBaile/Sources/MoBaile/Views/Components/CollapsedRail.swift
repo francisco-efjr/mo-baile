@@ -56,5 +56,9 @@ public struct CollapsedRail: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        // O texto visível é girado e começa por "›": lido em voz alta vira
+        // "maior que, Espelho ⌥1". O nome diz o que o botão faz.
+        .accessibilityLabel("Mostrar \(label)")
+        .help("Mostrar \(label) (\(shortcut))")
     }
 }

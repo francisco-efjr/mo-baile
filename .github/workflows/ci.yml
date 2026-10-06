@@ -60,10 +60,17 @@ jobs:
       # O motor roda sem servidor gráfico e sem aparelho de propósito. Foi o
       # que permitiu tirar a suite do estado em que ela sequer era coletada.
       - name: Testes
-        run: cd engine && python -m pytest --cov --cov-report=term-missing
+        run: |
+          cd engine
+          python -m pytest --cov --cov-report=term-missing
+          cd ..
+          python -m pytest qa/tests -q
+
+      - name: Fluxos de ponta a ponta com dispositivos falsos
+        run: python qa/run_all.py
 
       - name: Lint
-        run: python -m ruff check engine apps tools
+        run: python -m ruff check engine apps tools qa
 
       - name: Padrões inseguros (bandit)
         run: python -m bandit -q -r engine/src -ll

@@ -27,6 +27,8 @@ struct AnalyticsInspectorView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(theme.current.bgSubtle)
+                    // Cada linha já diz o que é cada valor.
+                    .accessibilityHidden(true)
                     
                     Divider().background(theme.current.borderSubtle)
                     
@@ -58,6 +60,12 @@ struct AnalyticsInspectorView: View {
                                 .onTapGesture {
                                     appState.selectedAnalyticsEvent = event
                                 }
+                                // A linha era quatro textos soltos e a seleção só se via
+                                // pela cor.
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(event.accessibilitySummary)
+                                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                                .accessibilityAction { appState.selectedAnalyticsEvent = event }
                                 
                                 Divider().background(theme.current.borderSubtle)
                             }
@@ -112,6 +120,7 @@ struct AnalyticsInspectorView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .help("Copiar parâmetros")
+                                .accessibilityLabel(copiedParams ? "Copiado" : "Copiar parâmetros")
                             }
                             .padding(.horizontal, 14)
                             .frame(height: 38)
@@ -204,6 +213,7 @@ struct AnalyticsInspectorView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .help("Copiar log bruto")
+                                .accessibilityLabel(copiedRaw ? "Copiado" : "Copiar log bruto")
                             }
                             .padding(.horizontal, 14)
                             .frame(height: 38)
@@ -273,5 +283,13 @@ struct AnalyticsInspectorView: View {
                 copiedParams = false
             }
         }
+    }
+}
+
+extension AnalyticsEvent {
+    /// A frase que o leitor de tela lê no lugar das células da linha.
+    var accessibilitySummary: String {
+        let parametros = paramCount == 1 ? "1 parâmetro" : "\(paramCount) parâmetros"
+        return "\(eventName), \(parametros), origem \(tag), \(timeStr)"
     }
 }

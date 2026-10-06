@@ -68,6 +68,8 @@ struct SplashView: View {
                                 y: reduceMotion ? 0 : (phase >= 2 ? (sin(Date().timeIntervalSince1970 * 2) * 11) : (phase >= 1 ? 0 : 26))
                             )
                             .scaleEffect(phase >= 1 ? 1 : 0.94)
+                            // Ilustração decorativa: o nome do produto já está no texto.
+                            .accessibilityHidden(true)
                     } else {
                         // Fallback shape
                         Circle().fill(Color.white.opacity(0.5)).frame(width: 300, height: 300)
@@ -79,6 +81,7 @@ struct SplashView: View {
                             .font(.system(size: 96, weight: .bold))
                             .tracking(-0.045 * 96)
                             .opacity(phase >= 2 ? 1 : 0)
+                            .accessibilityAddTraits(.isHeader)
                         
                         VStack(alignment: .leading, spacing: 4) {
                             Text("ELEMENT RECORDER")
@@ -129,6 +132,7 @@ struct SplashView: View {
                 .frame(width: 4, height: 4)
                 .offset(x: 100, y: -100)
                 .opacity(phase >= 2 ? (sin(Date().timeIntervalSince1970 * 5) > 0 ? 1 : 0) : 0)
+                .accessibilityHidden(true)
         }
         .frame(width: 1280, height: 720)
         .onAppear {

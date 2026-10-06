@@ -74,11 +74,14 @@ class DeviceWatcher:
 
     def stop(self) -> None:
         self._stop_event.set()
-        if self._thread:
+        if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2.0)
             if self._thread.is_alive():
                 logger.warning("Vigia de dispositivos nao encerrou no tempo esperado.")
-        self._thread = None
+        # Mantém a referência enquanto uma listagem ainda está em voo. Senão
+        # start() limparia o Event e reativaria a thread antiga junto da nova.
+        if self._thread and not self._thread.is_alive():
+            self._thread = None
 
     def is_running(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
@@ -124,6 +127,8 @@ class DeviceWatcher:
             targets = []
 
         with self._lock:
+            if self._stop_event.is_set():
+                return None
             if generation != self._generation:
                 logger.debug("Listagem de %s descartada: a plataforma mudou durante ela.", platform)
                 return None

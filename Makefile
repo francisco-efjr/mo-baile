@@ -9,7 +9,7 @@ VENV_PY := $(VENV)/bin/python
 SWIFT_APP := apps/MoBaile
 
 .DEFAULT_GOAL := help
-.PHONY: help setup hooks version test test-engine test-ui test-swift qa lint format security audit fixtures check run run-engine install-app build-native clean
+.PHONY: help setup hooks version test test-engine test-ui test-qa test-swift qa coverage lint format security audit fixtures check run run-engine install-app build-native clean
 
 help: ## Lista os alvos disponiveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -28,7 +28,7 @@ hooks: ## Liga o portao de versionamento no push (docs/VERSIONAMENTO.md)
 version: ## Mostra a versao e confere se as copias e o CHANGELOG batem
 	$(PYTHON) tools/version.py check
 
-test: test-engine test-ui ## Roda as suites Python
+test: test-engine test-ui test-qa ## Roda as suites Python
 
 test-engine: ## Suite do motor (nao precisa de aparelho nem de servidor grafico)
 	cd engine && $(abspath $(VENV_PY)) -m pytest
@@ -36,20 +36,23 @@ test-engine: ## Suite do motor (nao precisa de aparelho nem de servidor grafico)
 test-ui: ## Suite da UI Tkinter (precisa de sessao grafica)
 	cd apps/tk-legacy && PYTHONPATH=.:../../engine/src $(abspath $(VENV_PY)) -m pytest
 
+test-qa: ## Regressao do gate de QA (recusa falso verde e timeout)
+	$(VENV_PY) -m pytest qa/tests -q
+
 test-swift: ## Suite do front nativo (so no macOS, com Swift instalado)
 	cd $(SWIFT_APP) && swift test
 
 qa: ## Fluxos de ponta a ponta com aparelho falso (sem device, iOS, Android, HTTPS)
-	$(PYTHON) qa/run_all.py
+	$(VENV_PY) qa/run_all.py
 
 coverage: ## Cobertura do motor
 	cd engine && $(abspath $(VENV_PY)) -m pytest --cov --cov-report=term-missing
 
 lint: ## Analise estatica
-	$(VENV_PY) -m ruff check engine apps tools
+	$(VENV_PY) -m ruff check engine apps tools qa
 
 format: ## Corrige o que o lint sabe corrigir sozinho
-	$(VENV_PY) -m ruff check --fix engine apps tools
+	$(VENV_PY) -m ruff check --fix engine apps tools qa
 
 security: ## Varredura de padroes inseguros no codigo
 	$(VENV_PY) -m bandit -q -r engine/src apps/tk-legacy -ll

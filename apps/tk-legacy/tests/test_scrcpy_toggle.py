@@ -16,18 +16,18 @@ class TestScrcpyToggleFromUI(unittest.TestCase):
         from mobaile_tk.main_window import MobileRecorderApp
         try:
             root = tk.Tk()
-            root.withdraw()
-            app = MobileRecorderApp(root)
-            app.active_platform = "android"
-            app.selected_device = None
-            app._toggle_scrcpy_mirror()
-            mock_msgbox.showwarning.assert_called_once()
-            app.stream_engine.stop()
-            app.watcher.stop()
-            app._stop_passive_listeners()
-            root.destroy()
-        except tk.TclError:
-            pass
+        except tk.TclError as exc:
+            self.skipTest(f"Sessão gráfica Tkinter indisponível: {exc}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        app = MobileRecorderApp(root)
+        self.addCleanup(app._stop_passive_listeners)
+        self.addCleanup(app.watcher.stop)
+        self.addCleanup(app.stream_engine.stop)
+        app.active_platform = "android"
+        app.selected_device = None
+        app._toggle_scrcpy_mirror()
+        mock_msgbox.showwarning.assert_called_once()
 
 
 if __name__ == "__main__":

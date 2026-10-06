@@ -7,6 +7,9 @@ O harness sobe o motor de verdade como subprocesso e fala o mesmo JSON-RPC que
 o front SwiftUI fala, com `adb`, `xcrun` e WebDriverAgent falsos no PATH. Ou
 seja, o que passa aqui é o que a interface vai ver.
 """
+import os
+import re
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -18,22 +21,58 @@ FLUXOS = [
     ("3 · só Android", "qa_fluxo3.py"),
     ("4 · HTTPS", "qa_fluxo4.py"),
 ]
+TIMEOUT_FLUXO = 120
+RESULTADO = re.compile(r"^\s*RESULTADO: (\d+) passaram, (\d+) falharam\s*$", re.MULTILINE)
+
+
+def _diagnostico(titulo, stdout, stderr):
+    print(f"\nFalha em {titulo}")
+    for canal, conteudo in (("stdout", stdout), ("stderr", stderr)):
+        if conteudo:
+            if isinstance(conteudo, bytes):
+                conteudo = conteudo.decode("utf-8", errors="replace")
+            print(f"  {canal}:\n{conteudo[-3000:]}")
 
 
 def main() -> int:
     resumo, falhou = [], False
     for titulo, script in FLUXOS:
-        proc = subprocess.run(
-            [sys.executable, script], cwd=AQUI, capture_output=True, text=True, check=False
-        )
-        linha = next(
-            (ln.strip() for ln in proc.stdout.splitlines() if "RESULTADO:" in ln),
-            "sem resultado",
-        )
-        if proc.returncode != 0:
+        try:
+            with subprocess.Popen(
+                [sys.executable, script], cwd=AQUI, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True,
+                start_new_session=True,
+            ) as proc:
+                try:
+                    stdout, stderr = proc.communicate(timeout=TIMEOUT_FLUXO)
+                except subprocess.TimeoutExpired:
+                    # O motor é subprocesso do fluxo: encerre o grupo inteiro
+                    # para não deixar processos nem portas ocupadas após timeout.
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    stdout, stderr = proc.communicate()
+                    falhou = True
+                    _diagnostico(titulo, stdout, stderr)
+                    resumo.append((titulo, f"timeout após {TIMEOUT_FLUXO}s", False))
+                    continue
+        except OSError as exc:
             falhou = True
-            print(proc.stdout[-3000:])
-        resumo.append((titulo, linha, proc.returncode == 0))
+            resumo.append((titulo, f"não executado: {exc}", False))
+            continue
+
+        resultados = list(RESULTADO.finditer(stdout))
+        valido = len(resultados) == 1
+        linha = resultados[0].group().strip() if valido else "resumo ausente ou inválido"
+        ok = (
+            proc.returncode == 0 and valido
+            and int(resultados[0][1]) > 0 and int(resultados[0][2]) == 0
+        )
+        if not ok:
+            falhou = True
+            _diagnostico(titulo, stdout, stderr)
+        resumo.append((titulo, linha, ok))
 
     print("\n" + "=" * 70)
     print("RESUMO DO QA")

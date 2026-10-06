@@ -69,6 +69,7 @@ struct ResponseDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copiar conteúdo atual da resposta")
+                .accessibilityLabel(copiedFeedback ? "Copiado" : "Copiar resposta")
             }
             .padding(.horizontal, 14)
             .frame(height: 38)

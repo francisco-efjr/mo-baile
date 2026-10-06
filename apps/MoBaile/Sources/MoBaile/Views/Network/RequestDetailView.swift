@@ -55,6 +55,7 @@ struct RequestDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copiar conteúdo atual da requisição")
+                .accessibilityLabel(copiedFeedback ? "Copiado" : "Copiar requisição")
             }
             .padding(.horizontal, 14)
             .frame(height: 38)

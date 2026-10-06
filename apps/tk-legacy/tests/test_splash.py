@@ -48,21 +48,21 @@ class TestSplashAndGeometry(unittest.TestCase):
         from mobaile_tk.splash import SplashScreen
         try:
             root = tk.Tk()
-            root.withdraw()
-            completed = []
-            splash = SplashScreen(
-                on_complete=lambda: completed.append(True),
-                root=root,
-            )
-            self.assertEqual(splash.width, 1280)
-            self.assertEqual(splash.height, 720)
-            self.assertFalse(splash.is_closed)
-            splash._close()
-            self.assertTrue(splash.is_closed)
-            self.assertEqual(len(completed), 1)
-            root.destroy()
-        except tk.TclError:
-            pass
+        except tk.TclError as exc:
+            self.skipTest(f"Sessão gráfica Tkinter indisponível: {exc}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        completed = []
+        splash = SplashScreen(
+            on_complete=lambda: completed.append(True),
+            root=root,
+        )
+        self.assertEqual(splash.width, 1280)
+        self.assertEqual(splash.height, 720)
+        self.assertFalse(splash.is_closed)
+        splash._close()
+        self.assertTrue(splash.is_closed)
+        self.assertEqual(len(completed), 1)
 
 
 if __name__ == "__main__":

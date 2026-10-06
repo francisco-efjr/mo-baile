@@ -22,23 +22,34 @@ public struct CanvasSwitch: View {
                 .foregroundColor(theme.current.textPrimary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                // O botão ao lado já leva este nome; lido à parte, repetiria.
+                .accessibilityHidden(true)
             
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isOn ? theme.current.accent : theme.current.bgControlTrack)
-                    .frame(width: 34, height: 20)
-                
-                Circle()
-                    .fill(isOn ? Color.white : theme.current.bgControl)
-                    .frame(width: 16, height: 16)
-                    .shadow(color: Color.black.opacity(0.15), radius: 1, x: 0, y: 1)
-                    .offset(x: isOn ? 7 : -7)
-            }
-            .onTapGesture {
+            // Era um `ZStack` com `onTapGesture`: não recebia foco do teclado e o
+            // leitor de tela não o reconhecia como controle. Como `Button`, ganha
+            // as duas coisas sem mudar o desenho.
+            Button {
                 withAnimation(.easeOut(duration: 0.16)) {
                     isOn.toggle()
                 }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isOn ? theme.current.accent : theme.current.bgControlTrack)
+                        .frame(width: 34, height: 20)
+
+                    Circle()
+                        .fill(isOn ? Color.white : theme.current.bgControl)
+                        .frame(width: 16, height: 16)
+                        .shadow(color: Color.black.opacity(0.15), radius: 1, x: 0, y: 1)
+                        .offset(x: isOn ? 7 : -7)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .accessibilityValue(isOn ? "ligado" : "desligado")
+            .accessibilityAddTraits(.isToggle)
         }
     }
 }

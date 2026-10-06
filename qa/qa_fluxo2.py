@@ -18,11 +18,13 @@ print("=" * 78)
 print("FLUXO 2 — SO iOS")
 print("=" * 78)
 
-servidor = fake_wda.start(8100)
+servidor = fake_wda.start(0)
 open(str(pathlib.Path(__file__).resolve().parent / "calls.log"), "w").close()
 UDID = "A1B2C3D4-1111-2222-3333-444455556666"
 
-m = Motor(android=False, ios=True)
+m = Motor(android=False, ios=True, extra_env={
+    "WDA_URL": f"http://127.0.0.1:{servidor.server_address[1]}",
+})
 try:
     # --- deteccao -----------------------------------------------------------
     sims = m.ok("devices.list", {"platform": "ios"})["devices"]
@@ -107,6 +109,7 @@ try:
 finally:
     m.encerrar()
     servidor.shutdown()
+    servidor.server_close()
 
 print(f"\n  RESULTADO: {len(passes)} passaram, {len(falhas)} falharam")
 if falhas: print("  FALHAS:", falhas)

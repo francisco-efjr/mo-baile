@@ -18,13 +18,14 @@ struct DualEditorPane: View {
                         file: "\(chaveDoArquivo).py",
                         accentColor: themeManager.current.fileTitleActions ?? Color.blue,
                         conteudo: appState.actionsCode,
+                        copyLabel: "Copiar código das ações",
                         onCopy: { copiar(appState.actionsCode) },
                         onSave: { Task { await session.saveCode() } },
                         onClear: { Task { await session.clearSteps() } },
                         canSave: !appState.actionsCode.isEmpty || !appState.locatorsCode.isEmpty,
                         canClear: !appState.steps.isEmpty || !appState.actionsCode.isEmpty
                     )
-                    CodeEditorContainer(text: $state.actionsCode)
+                    CodeEditorContainer(text: $state.actionsCode, accessibilityLabel: "Código das ações (pages)")
                 }
                 
                 if appState.splitEditors {
@@ -37,13 +38,14 @@ struct DualEditorPane: View {
                             file: "\(chaveDoArquivo).py",
                             accentColor: themeManager.current.fileTitleLocators ?? Color.orange,
                             conteudo: appState.locatorsCode,
+                            copyLabel: "Copiar localizadores",
                             onCopy: { copiar(appState.locatorsCode) },
                             onSave: { Task { await session.saveCode() } },
                             onClear: { Task { await session.clearSteps() } },
                             canSave: !appState.actionsCode.isEmpty || !appState.locatorsCode.isEmpty,
                             canClear: !appState.steps.isEmpty || !appState.locatorsCode.isEmpty
                         )
-                        CodeEditorContainer(text: $state.locatorsCode)
+                        CodeEditorContainer(text: $state.locatorsCode, accessibilityLabel: "Código dos localizadores (locators)")
                     }
                 }
             }
@@ -81,6 +83,7 @@ struct DualEditorPane: View {
         file: String,
         accentColor: Color,
         conteudo: String,
+        copyLabel: String,
         onCopy: @escaping () -> Void,
         onSave: @escaping () -> Void,
         onClear: @escaping () -> Void,
@@ -124,6 +127,12 @@ struct DualEditorPane: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 32)
+            // Os ícones eram lidos pela descrição automática do símbolo ("Mover",
+            // "Código Incorporado") e a pasta e o arquivo, como textos soltos
+            // ("pages", "/", "feature.py"). Vira uma frase só.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Arquivo \(folder)/\(file)")
+            .accessibilityValue(conteudo.isEmpty ? "vazio" : contagemDeLinhas(conteudo))
             .background(themeManager.current.bgContent)
             .overlay(
                 Rectangle()
@@ -146,18 +155,23 @@ struct DualEditorPane: View {
                     title: "Copiar",
                     icon: "doc.on.doc",
                     disabled: conteudo.isEmpty,
+                    accessibilityLabel: copyLabel,
                     action: onCopy
                 )
+                // Salvar e Limpar agem sobre os dois arquivos e os passos, não
+                // só sobre o editor do cabeçalho: o rótulo diz o que acontece.
                 IDEActionButton(
                     title: "Salvar",
                     icon: "arrow.down.doc",
                     disabled: !canSave,
+                    accessibilityLabel: "Salvar pages e locators",
                     action: onSave
                 )
                 IDEActionButton(
                     title: "Limpar",
                     icon: "trash",
                     disabled: !canClear,
+                    accessibilityLabel: "Limpar passos e código",
                     action: onClear
                 )
             }
@@ -179,6 +193,9 @@ struct IDEActionButton: View {
     let title: String
     let icon: String
     let disabled: Bool
+    /// Nome para o leitor de tela quando o título curto ("Copiar") é ambíguo,
+    /// como nos dois cabeçalhos de editor, que têm os mesmos três botões.
+    var accessibilityLabel: String? = nil
     let action: () -> Void
     @Environment(ThemeManager.self) var themeManager
     @State private var isHovered = false
@@ -208,14 +225,16 @@ struct IDEActionButton: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .accessibilityLabel(accessibilityLabel ?? title)
     }
 }
 
 struct CodeEditorContainer: View {
     @Binding var text: String
+    var accessibilityLabel: String = "Editor de código"
     @Environment(ThemeManager.self) var themeManager
     
     var body: some View {
-        CodeEditorView(text: $text)
+        CodeEditorView(text: $text, accessibilityLabel: accessibilityLabel)
     }
 }

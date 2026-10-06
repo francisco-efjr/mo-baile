@@ -47,8 +47,17 @@ public struct SegmentedControl: View {
                     )
                 }
                 .buttonStyle(.plain)
+                // O segmento escolhido só se distinguia pela cor e pela sombra.
+                // O leitor de tela precisa do estado, e a cada segmento cabe o
+                // próprio nome.
+                .accessibilityAddTraits(selectedIndex == index ? .isSelected : [])
             }
         }
+        // Sem virar um elemento de grupo, o `.accessibilityLabel` que quem usa o
+        // controle aplica de fora ("Plataforma") era herdado por cada segmento, e
+        // "iOS" e "Android" saíam do leitor com o mesmo nome. Como grupo, o
+        // rótulo de fora descreve o conjunto e cada botão mantém o seu.
+        .accessibilityElement(children: .contain)
         .padding(2)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

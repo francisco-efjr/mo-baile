@@ -5,8 +5,10 @@ o callback era chamado a cada ciclo, e uma tela parada custava um redesenho
 completo por ciclo, indefinidamente.
 """
 
+import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -66,6 +68,57 @@ class TestScreenDiffDetector(unittest.TestCase):
 
 
 class TestRealTimeStreamEngine(unittest.TestCase):
+    def test_stop_descarta_captura_que_termina_depois_da_parada(self):
+        started, release = threading.Event(), threading.Event()
+        frames, settled = [], []
+
+        def capture():
+            started.set()
+            release.wait(3)
+            return tela("black")
+
+        motor = RealTimeStreamEngine(capture, frames.append, lambda: settled.append(True), fps=60)
+        motor.start()
+        worker = motor._thread
+        try:
+            self.assertTrue(started.wait(1))
+            with patch.object(worker, "join"):
+                motor.stop()
+            release.set()
+            worker.join(1)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(frames, [], "nenhum quadro pode sair depois de stop")
+            self.assertEqual(settled, [])
+        finally:
+            motor._stop_event.set()
+            release.set()
+            worker.join(1)
+
+    def test_start_nao_ressuscita_thread_que_ainda_esta_parando(self):
+        started, release = threading.Event(), threading.Event()
+
+        def capture():
+            started.set()
+            release.wait(3)
+            return tela("black")
+
+        motor = RealTimeStreamEngine(capture, lambda _f: None, lambda: None, fps=60)
+        motor.start()
+        worker = motor._thread
+        try:
+            self.assertTrue(started.wait(1))
+            with patch.object(worker, "join"):
+                motor.stop()
+            motor.start()
+            self.assertIs(motor._thread, worker, "captura anterior ainda viva: nao pode criar outra")
+            self.assertTrue(motor._stop_event.is_set())
+        finally:
+            motor._stop_event.set()
+            release.set()
+            worker.join(1)
+            if motor._thread is not None and motor._thread is not worker:
+                motor._thread.join(1)
+
     def test_tela_parada_nao_gera_redesenho_continuo(self):
         quadros = []
         parada = tela("black")

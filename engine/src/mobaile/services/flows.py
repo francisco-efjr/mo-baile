@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
 import json
+import logging
 import os
 import subprocess
 import sys
 import threading
-from collections.abc import Callable
+import uuid
+from collections.abc import Callable, Iterable
+from pathlib import Path
 
 from mobaile.config import settings
 from mobaile.domain.errors import InvalidInputError
 from mobaile.security import validate_device_id, write_executable_script
 from mobaile.services.codegen import AutomationStep
+
+logger = logging.getLogger(__name__)
+
+# O que substitui um texto digitado que, por engano, aparecesse no log.
+MASK = "***"
+MIN_MASKED_TEXT = 3
+
+
+class _TemporaryScript(str):
+    """Caminho gerado pelo motor, distinguido de um script exportado pelo usuário."""
 
 
 def verify_preconditions(
@@ -128,7 +141,9 @@ def generate_hidden_runner_script(
             "strategy": s.strategy.value if hasattr(s.strategy, "value") else str(s.strategy),
             "locator_value": s.locator_value,
             "coords": list(s.coords) if s.coords else [0, 0],
-            "input_text": s.input_text or "Texto de Exemplo",
+            # Sem valor padrao: digitar um texto inventado no aparelho e dado falso
+            # com cara de verdadeiro. Passo sem texto falha na execucao.
+            "input_text": s.input_text,
             "package": s.package,
             "platform": s.platform,
         })
@@ -147,6 +162,7 @@ Total de Passos: {len(steps)}
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -158,6 +174,25 @@ WDA_URL = {wda_url!r}
 # Os passos entram como JSON e são desserializados em tempo de execução: assim
 # nenhum conteúdo gravado pelo usuário é interpretado como código Python.
 STEPS = json.loads({steps_json!r})
+STOP_REQUESTED = False
+
+def request_stop(_signal, _frame):
+    global STOP_REQUESTED
+    STOP_REQUESTED = True
+
+def check_cancelled():
+    if STOP_REQUESTED:
+        log("Execução cancelada; nenhum novo passo será iniciado.")
+        sys.exit(130)
+
+def wait_between_steps(seconds):
+    deadline = time.monotonic() + seconds
+    while True:
+        check_cancelled()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.05, remaining))
 
 # Aspas simples: o unico quoting em que o sh do aparelho nao interpreta nada dentro.
 def _quote_for_device_shell(raw):
@@ -210,20 +245,27 @@ def execute_android_step(step):
     var_name = step.get("var_name", "ELEMENTO")
 
     if action == "input":
-        text = step.get("input_text", "Texto de Teste")
+        text = step.get("input_text")
+        if not isinstance(text, str) or not text:
+            log(f"❌ Passo {{var_name}} de digitação sem texto gravado; nada foi digitado.")
+            return False
         log(f"-> Clicando no campo {{var_name}} em ({{x}}, {{y}})...")
-        subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
+        tap = subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
+        if tap.returncode != 0:
+            return False
         time.sleep(0.5)
         encoded = text.replace(" ", "%s")
-        log(f"-> Preenchendo texto '{{text}}'...")
-        subprocess.run(
+        # Nunca o valor: o log vira `flow.log` na interface e pode conter senha.
+        log(f"-> Digitando {{len(text)}} caracteres em {{var_name}}...")
+        result = subprocess.run(
             [ADB_PATH, "-s", DEVICE_ID, "shell", "input text " + _quote_for_device_shell(encoded)],
             timeout=5,
         )
+        return result.returncode == 0
     else:
         log(f"-> Clicando em {{var_name}} em ({{x}}, {{y}})...")
-        subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
-    return True
+        result = subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
+        return result.returncode == 0
 
 def execute_ios_step(step):
     import requests
@@ -274,6 +316,10 @@ def execute_ios_step(step):
     return res2.status_code == 200
 
 def main():
+    # SIGTERM apenas pede a parada: a ação atual pode terminar, e o próximo
+    # passo não começa. O handler fica no processo filho, nunca no motor.
+    signal.signal(signal.SIGTERM, request_stop)
+    check_cancelled()
     log("================================================================")
     log(f"🚀 INICIANDO EXECUÇÃO DO FLUXO ({{len(STEPS)}} PASSOS)")
     log(f"Plataforma: {{PLATFORM.upper()}} | Dispositivo: {{DEVICE_ID}}")
@@ -288,12 +334,14 @@ def main():
         log("❌ ABORTADO: Pré-condições falharam. Corrija o dispositivo e tente novamente.")
         sys.exit(1)
 
+    check_cancelled()
     log("✔ Pré-condições validadas! Iniciando passos sequenciais...")
-    time.sleep(0.8)
+    wait_between_steps(0.8)
 
     # 2. Execução dos passos
     total = len(STEPS)
     for i, step in enumerate(STEPS, start=1):
+        check_cancelled()
         var_name = step.get("var_name", f"PASSO_{{i}}")
         coords = step.get("coords", [0, 0])
         action = step.get("action_type", "click")
@@ -307,7 +355,9 @@ def main():
             elif PLATFORM == "ios":
                 success = execute_ios_step(step)
         except Exception as e:
-            log(f"❌ Erro inesperado ao executar o passo {{i}}: {{e}}")
+            # So o tipo: a mensagem de TimeoutExpired, por exemplo, repete o
+            # comando inteiro, inclusive o texto digitado.
+            log(f"❌ Erro inesperado ao executar o passo {{i}}: {{type(e).__name__}}")
             success = False
 
         if not success:
@@ -315,7 +365,7 @@ def main():
             sys.exit(1)
 
         log(f"✔ [{{i}}/{{total}}] Passo {{var_name}} concluído com sucesso!")
-        time.sleep(1.0)  # Delay para observabilidade visual no espelho
+        wait_between_steps(1.0)  # Delay para observabilidade visual no espelho
 
     log("================================================================")
     log("🎉 AUTOMAÇÃO EXECUTADA COM SUCESSO TOTAL!")
@@ -338,50 +388,112 @@ if __name__ == "__main__":
         os.chmod(target, 0o600)
         return target
 
-    return str(write_executable_script(script_content))
+    return _TemporaryScript(write_executable_script(
+        script_content, filename=f"flow_runner_{uuid.uuid4().hex}.py",
+    ))
+
+
+class FlowExecution(threading.Thread):
+    """Thread de execução com cancelamento cooperativo do script gerado."""
+
+    def __init__(self, script_path, on_output, on_finished, sensitive_texts=()):
+        super().__init__(daemon=True, name="mobaile-flow")
+        # Rede de seguranca, nao o mecanismo principal: o runner ja nao imprime o
+        # que digita, mas um traceback inesperado poderia repetir o comando. Texto
+        # curto demais nao e mascarado para nao corromper palavras comuns do log.
+        self._segredos = sorted(
+            {t for t in sensitive_texts if isinstance(t, str) and len(t) >= MIN_MASKED_TEXT},
+            key=len, reverse=True,
+        )
+        self.script_path = script_path
+        self._temporary_script = isinstance(script_path, _TemporaryScript)
+        self.on_output = on_output
+        self.on_finished = on_finished
+        self._cancelled = threading.Event()
+        self._process_lock = threading.Lock()
+        self._process: subprocess.Popen | None = None
+
+    def _mascarar(self, linha: str) -> str:
+        for segredo in self._segredos:
+            linha = linha.replace(segredo, MASK)
+        return linha
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        with self._process_lock:
+            if self._process is not None and self._process.poll() is None:
+                try:
+                    self._process.terminate()
+                except ProcessLookupError:
+                    pass  # O processo terminou entre poll() e o envio do sinal.
+
+    def run(self) -> None:
+        proc = None
+        success, message = False, "Automação não iniciada."
+        try:
+            with self._process_lock:
+                if self._cancelled.is_set():
+                    return
+                proc = self._process = subprocess.Popen(
+                    [sys.executable, self.script_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    # DEVNULL evita que o filho consuma linhas do canal RPC.
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True,
+                )
+
+            for line in iter(proc.stdout.readline, ""):
+                stripped = line.rstrip()
+                if stripped:
+                    self.on_output(self._mascarar(stripped))
+
+            proc.stdout.close()
+            return_code = proc.wait()
+
+            success = return_code == 0
+            message = ("Automação executada com sucesso!" if success else
+                       f"Automação falhou (código de saída: {return_code}).")
+        except Exception as ex:
+            success = False
+            message = f"Exceção durante execução: {ex}"
+        finally:
+            if proc is not None:
+                if proc.poll() is None:
+                    try:
+                        proc.terminate()
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        proc.wait(timeout=6)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            proc.kill()
+                        except ProcessLookupError:
+                            pass
+                        proc.wait()
+                if proc.stdout is not None:
+                    proc.stdout.close()
+            if self._cancelled.is_set():
+                success, message = False, "Automação cancelada."
+            if self._temporary_script:
+                try:
+                    Path(self.script_path).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Falha ao remover script temporário %s: %s", self.script_path, exc)
+            self.on_finished(success, message)
 
 
 def run_flow_in_background(
     script_path: str,
     on_output: Callable[[str], None],
     on_finished: Callable[[bool, str], None],
-) -> threading.Thread:
-    """
-    Executa o script oculto em um subprocesso de forma assíncrona,
-    repassando cada linha de log para `on_output` e notificando em `on_finished`.
-    """
-    def worker():
-        try:
-            proc = subprocess.Popen(
-                [sys.executable, script_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                # DEVNULL de proposito: sem isto o filho herda o stdin do
-                # motor, que e o canal JSON-RPC, e passa a consumir as
-                # linhas do protocolo. O sintoma e a chamada seguinte nunca
-                # responder — no app, janela travada sem erro.
-                stdin=subprocess.DEVNULL,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-            )
+    sensitive_texts: Iterable[str] = (),
+) -> FlowExecution:
+    """Executa o script em processo próprio; `cancel()` para entre passos."""
 
-            for line in iter(proc.stdout.readline, ""):
-                stripped = line.rstrip()
-                if stripped:
-                    on_output(stripped)
-
-            proc.stdout.close()
-            return_code = proc.wait()
-
-            if return_code == 0:
-                on_finished(True, "Automação executada com sucesso!")
-            else:
-                on_finished(False, f"Automação falhou (código de saída: {return_code}).")
-        except Exception as ex:
-            on_output(f"Erro de execução: {ex}")
-            on_finished(False, f"Exceção durante execução: {ex}")
-
-    t = threading.Thread(target=worker, daemon=True)
+    t = FlowExecution(script_path, on_output, on_finished, sensitive_texts)
     t.start()
     return t

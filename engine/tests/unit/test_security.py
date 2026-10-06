@@ -4,9 +4,11 @@ Cada teste aqui corresponde a um vetor concreto que existia no codigo antes da
 reorganizacao. Se algum voltar a passar como "aceito", a falha voltou.
 """
 
+import json
 import os
 import stat
 import unittest
+from unittest.mock import patch
 
 from mobaile.domain.errors import InvalidInputError
 from mobaile.security import (
@@ -123,6 +125,50 @@ class TestParsingDeXML(unittest.TestCase):
 
 
 class TestRedacao(unittest.TestCase):
+    def test_json_redige_aspas_escapadas_e_valores_nao_textuais(self):
+        body = json.dumps({
+            "password": 'prefixo"segredo-sintetico',
+            "cpf": 12345678901,
+            "token": {"value": "token-sintetico"},
+            "items": [{"senha": "senha-sintetica", "name": "produto"}],
+        })
+        redacted = redact_body(body)
+        for secret in ("segredo-sintetico", "12345678901", "token-sintetico", "senha-sintetica"):
+            self.assertNotIn(secret, redacted)
+        self.assertEqual(json.loads(redacted)["items"][0]["name"], "produto")
+
+    def test_json_truncado_nao_vaza_o_final_do_segredo(self):
+        redacted = redact_body('{"user":"bella","password":"segredo-sintetico')
+        self.assertNotIn("segredo-sintetico", redacted)
+        self.assertIn('"user":"bella"', redacted)
+
+    def test_chaves_json_camel_case_e_unicode_sao_redigidas(self):
+        redacted = redact_body('{"accessToken":"token-sintetico","\\u0070assword":"senha-sintetica"}')
+        self.assertNotIn("token-sintetico", redacted)
+        self.assertNotIn("senha-sintetica", redacted)
+
+    def test_formulario_redige_chaves_codificadas(self):
+        redacted = redact_body("user=bella&%70assword=segredo-sintetico&token=token-sintetico")
+        self.assertNotIn("segredo-sintetico", redacted)
+        self.assertNotIn("token-sintetico", redacted)
+        self.assertIn("user=bella", redacted)
+
+    def test_location_e_referer_nao_vazam_tokens_na_url(self):
+        redacted = redact_headers({
+            "Location": "https://usuario:senha-sintetica@example.test/callback?access_token=token-sintetico&next=home",
+            "Referer": "https://example.test/?client_secret=segredo-sintetico",
+        })
+        for value in redacted.values():
+            self.assertNotIn("senha-sintetica", value)
+            self.assertNotIn("token-sintetico", value)
+            self.assertNotIn("segredo-sintetico", value)
+        self.assertIn("next=home", redacted["Location"])
+
+    def test_opt_out_explicito_preserva_corpo_original(self):
+        body = '{"password":"segredo-sintetico"}'
+        with patch.dict(os.environ, {"MOBAILE_REDACT": "0"}):
+            self.assertEqual(redact_body(body), body)
+
     def test_headers_de_credencial(self):
         redigidos = redact_headers({
             "Authorization": "Bearer token-do-cliente",

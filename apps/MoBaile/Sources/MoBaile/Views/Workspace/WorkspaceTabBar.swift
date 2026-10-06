@@ -102,10 +102,15 @@ struct WorkspaceTabBar: View {
     @ViewBuilder
     private func acoes(compactas: Bool) -> some View {
             HStack(spacing: 8) {
+                // Na coluna estreita os botões ficam só com o ícone ou o número, e o
+                // leitor anunciava o nome do símbolo, "0" e "Reproduzir". Os
+                // rótulos abaixo valem nos dois tamanhos.
                 FluidPillButton(
                     text: compactas ? "\(appState.stepCount)" : "Estrutura · \(appState.stepCount)",
                     icon: compactas ? "list.number" : nil,
-                    style: appState.steps.isEmpty ? .disabled : .secondary
+                    style: appState.steps.isEmpty ? .disabled : .secondary,
+                    accessibilityLabel: "Estrutura dos passos",
+                    accessibilityValue: appState.stepCount == 1 ? "1 passo" : "\(appState.stepCount) passos"
                 ) {
                     appState.showingStructure = true
                 }
@@ -115,7 +120,10 @@ struct WorkspaceTabBar: View {
                 FluidPillButton(
                     text: compactas ? "" : "Split",
                     icon: compactas ? "rectangle.split.2x1" : nil,
-                    style: appState.splitEditors ? .primary : .secondary
+                    style: appState.splitEditors ? .primary : .secondary,
+                    accessibilityLabel: "Dividir editores",
+                    // O estado só aparecia na cor do botão.
+                    accessibilityValue: appState.splitEditors ? "ligado" : "desligado"
                 ) {
                     withAnimation(.easeOut(duration: 0.15)) { appState.splitEditors.toggle() }
                 }
@@ -124,7 +132,8 @@ struct WorkspaceTabBar: View {
                 FluidPillButton(
                     text: compactas ? "" : "Rodar",
                     icon: compactas ? "play.fill" : nil,
-                    style: podeRodar ? .run : .disabled
+                    style: podeRodar ? .run : .disabled,
+                    accessibilityLabel: "Rodar fluxo"
                 ) {
                     withAnimation(.easeOut(duration: 0.18)) {
                         appState.showingFlowRunner = true

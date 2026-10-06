@@ -9,7 +9,7 @@ import io
 import json
 import unittest
 from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
@@ -65,6 +65,23 @@ class TestEnvelope(ContractBase):
         )
         self.assertEqual(response["error"]["code"], protocol.INVALID_PARAMS)
 
+    def test_metodo_com_tipo_invalido_nao_derruba_o_transporte(self):
+        for method in ([], {}, 1, True, None):
+            with self.subTest(method=method):
+                response = self.server.handle_message(json.dumps(
+                    {"jsonrpc": "2.0", "id": 7, "method": method, "params": {}}
+                ))
+                self.assertEqual(response["error"]["code"], protocol.INVALID_REQUEST)
+                self.assertEqual(self.ok("codegen.steps"), {"steps": []})
+
+    def test_params_vazio_de_tipo_invalido_tambem_e_recusado(self):
+        for params in ([], "", 0, False, None):
+            with self.subTest(params=params):
+                response = self.server.handle_message(json.dumps(
+                    {"jsonrpc": "2.0", "id": 7, "method": "engine.info", "params": params}
+                ))
+                self.assertEqual(response["error"]["code"], protocol.INVALID_PARAMS)
+
     def test_notificacao_nao_gera_resposta(self):
         self.assertIsNone(
             self.server.handle_message(json.dumps({"jsonrpc": "2.0", "method": "engine.info"}))
@@ -74,6 +91,44 @@ class TestEnvelope(ContractBase):
         erro = self.erro("hierarchy.dump")
         self.assertEqual(erro["code"], protocol.ENGINE_ERROR)
         self.assertEqual(erro["data"]["code"], "invalid_input")
+
+
+class TestFlowLifecycle(ContractBase):
+    def start_flow(self, execution):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        with patch.object(self.server.codegen, "get_steps", return_value=[MagicMock()]), \
+             patch("mobaile.rpc.server.flows.verify_preconditions", return_value=(True, "ok")), \
+             patch("mobaile.rpc.server.flows.generate_hidden_runner_script", return_value="/tmp/test-flow.py"), \
+             patch("mobaile.rpc.server.flows.run_flow_in_background", return_value=execution):
+            return self.ok("flow.run")
+
+    def test_flow_stop_encaminha_cancelamento_ao_processo(self):
+        execution = MagicMock()
+        self.assertTrue(self.start_flow(execution)["running"])
+        self.assertTrue(self.ok("flow.stop")["stopped"])
+        execution.cancel.assert_called_once()
+        self.assertTrue(self.ok("flow.status")["cancelled"])
+
+    def test_shutdown_cancela_o_fluxo_em_execucao(self):
+        execution = MagicMock()
+        self.start_flow(execution)
+        self.server.shutdown()
+        execution.cancel.assert_called_once()
+
+    def test_shutdown_durante_pre_condicoes_nao_inicia_processo_depois(self):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+
+        def preconditions(**_kwargs):
+            self.server.shutdown()
+            return True, "ok"
+
+        with patch.object(self.server.codegen, "get_steps", return_value=[MagicMock()]), \
+             patch("mobaile.rpc.server.flows.verify_preconditions", side_effect=preconditions), \
+             patch("mobaile.rpc.server.flows.generate_hidden_runner_script", return_value="/tmp/test-flow.py"), \
+             patch("mobaile.rpc.server.flows.run_flow_in_background") as run:
+            self.assertIn("error", self.call("flow.run"))
+        run.assert_not_called()
+        self.assertFalse(self.ok("flow.status")["running"])
 
 
 class TestSuperficie(ContractBase):

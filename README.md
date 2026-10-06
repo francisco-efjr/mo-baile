@@ -54,8 +54,8 @@ make run          # interface Python a partir do código-fonte
 make install-app  # instala /Applications/Mo baile.app
 ```
 
-O front nativo ainda não está terminado. Ele compila e abre, mas até `swift test`
-passar na sua máquina, ele mostra o estado vazio e não reconhece dispositivo:
+O front nativo possui suíte própria. Valide compilação e testes na sua máquina
+antes de empacotá-lo:
 
 ```bash
 cd apps/MoBaile && swift build && swift test
@@ -99,6 +99,7 @@ em proxy aberto para quem estiver na mesma rede.
 | [PROTOCOLO_RPC.md](docs/PROTOCOLO_RPC.md) | Contrato completo entre motor e front |
 | [SEGURANCA.md](docs/SEGURANCA.md) | Auditoria, correções e pendências |
 | [QA.md](docs/QA.md) | Estado da suite e roteiro de verificação manual |
+| [QA_2026-10-05.md](docs/QA_2026-10-05.md) | Análise por risco, melhorias e validação de 05/10/2026 |
 | [RELATORIO_QA.md](docs/RELATORIO_QA.md) | Resultado dos quatro fluxos e os defeitos encontrados |
 | [qa/README.md](qa/README.md) | Harness de ponta a ponta dos quatro fluxos |
 | [ESTADO_ATUAL.md](docs/ESTADO_ATUAL.md) | O que funciona, o que depende de aparelho e o que é fachada |

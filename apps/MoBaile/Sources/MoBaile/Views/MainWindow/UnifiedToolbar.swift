@@ -272,7 +272,7 @@ struct UnifiedToolbar: View {
         .disabled(!appState.isDeviceConnected)
         .opacity(appState.isDeviceConnected ? 1 : 0.5)
         .help("Define o que acontece ao clicar no espelho")
-        .accessibilityLabel("Acao do clique no espelho")
+        .accessibilityLabel("Ação do clique no espelho")
     }
 
     private var interactionIndexBinding: Binding<Int> {
