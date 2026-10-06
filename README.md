@@ -60,7 +60,12 @@ antes de empacotá-lo:
 ```bash
 cd apps/MoBaile && swift build && swift test
 make build-native   # instala como "Mo baile (nativo).app", app separado
+make verify-native  # confere se o app instalado esta com o codigo do repositorio
 ```
+
+Toda tarefa que mexe em `engine/src/`, `apps/MoBaile/` ou `assets/` termina com
+`make update-native` (empacota e verifica). A regra vale para qualquer agente e
+esta em [AGENTS.md](AGENTS.md).
 
 O app separado é proposital. Instalar a build nativa por cima do app em uso já
 derrubou o ambiente uma vez, e agora exige confirmação explícita.
@@ -90,6 +95,8 @@ em proxy aberto para quem estiver na mesma rede.
 | `make run-engine` | Motor em modo JSON-RPC, útil para depurar o contrato |
 | `make install-app` | Instala `/Applications/Mo baile.app` com a interface Python |
 | `make build-native` | Empacota o front SwiftUI como app separado, após os testes passarem |
+| `make verify-native` | Confere versão, motor embutido e handshake do app nativo instalado |
+| `make update-native` | `build-native` + `verify-native`; obrigatório ao fim de tarefa que mexe no app |
 
 ## Documentação
 
