@@ -5,6 +5,18 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [2.1.2] - 2026-10-06
+
+### Adicionado
+
+- `AGENTS.md` (importado pelo `CLAUDE.md`): todo agente que mexe em
+  `engine/src/`, `apps/MoBaile/` ou `assets/` só conclui a tarefa com o
+  "Mo baile (nativo).app" desta máquina reempacotado e verificado.
+- `make verify-native` (`tools/verify_native_app.sh`): confere se a versão
+  instalada é igual a `VERSION`, se o motor embutido é idêntico a
+  `engine/src` e se o `engine.hello` responde pelo Python que o app usa.
+  `make update-native` empacota e verifica.
+
 ## [2.1.1] - 2026-10-06
 
 ### Corrigido

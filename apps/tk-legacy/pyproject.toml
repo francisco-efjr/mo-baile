@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mobaile-tk"
-version = "2.1.1"
+version = "2.1.2"
 description = "Interface Tkinter do Mo baile (camada de transicao para o front SwiftUI)"
 requires-python = ">=3.10"
 dependencies = [
