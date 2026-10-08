@@ -1,51 +1,80 @@
 import SwiftUI
 import AppKit
 
+/// Escolhe o conjunto de tokens em uso.
+///
+/// Combina três entradas: a aparência pedida em Ajustes (Sistema, Claro ou
+/// Escuro), a aparência efetiva do macOS (quando o pedido é Sistema) e a opção
+/// de acessibilidade Aumentar contraste, que troca os rótulos, separadores e o
+/// destaque por versões mais fortes.
 @Observable
 class ThemeManager {
-    var mode: ThemeMode = .system
-    
-    private(set) var current: any ThemeTokens = PraiaDarkTheme()
-    
-    private var appearanceObserver: NSKeyValueObservation?
-    
-    init() {
+    private(set) var mode: ThemeMode = .system
+    private(set) var increaseContrast = false
+    private(set) var current: any ThemeTokens = PraiaLightTheme()
+
+    @ObservationIgnored private var appearanceObserver: NSKeyValueObservation?
+    @ObservationIgnored private var contrastObserver: NSObjectProtocol?
+    @ObservationIgnored private let defaults: UserDefaults
+
+    static let modeKey = "mobaile.aparencia"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let salvo = defaults.string(forKey: Self.modeKey), let modo = ThemeMode(rawValue: salvo) {
+            mode = modo
+        }
+        increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         updateTheme()
-        // Observe system appearance changes
+
         if let app = NSApp {
             appearanceObserver = app.observe(\.effectiveAppearance) { [weak self] _, _ in
-                Task { @MainActor in
-                    self?.updateTheme()
-                }
+                Task { @MainActor in self?.updateTheme() }
+            }
+        }
+        contrastObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+                self?.updateTheme()
             }
         }
     }
-    
+
+    deinit {
+        if let contrastObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(contrastObserver)
+        }
+    }
+
     func setMode(_ newMode: ThemeMode) {
         mode = newMode
+        defaults.set(newMode.rawValue, forKey: Self.modeKey)
         updateTheme()
     }
-    
+
     private func updateTheme() {
+        let dark: Bool
         switch mode {
         case .system:
             if let app = NSApp {
-                let appearance = app.effectiveAppearance
-                let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                current = isDark ? PraiaDarkTheme() : PraiaLightTheme()
+                dark = app.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             } else {
-                current = PraiaDarkTheme() // fallback for tests
+                dark = false
             }
         case .dark:
-            current = PraiaDarkTheme()
+            dark = true
         case .light:
-            current = PraiaLightTheme()
+            dark = false
         }
+        current = dark
+            ? PraiaDarkTheme(highContrast: increaseContrast)
+            : PraiaLightTheme(highContrast: increaseContrast)
     }
-    
-    var isDark: Bool {
-        current.id == "praia_dark"
-    }
+
+    var isDark: Bool { current.isDark }
 
     /// Esquema entregue ao SwiftUI.
     ///

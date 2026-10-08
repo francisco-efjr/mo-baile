@@ -1,186 +1,122 @@
 import SwiftUI
 import AppKit
 
-public class SplashWindow: NSWindow {
-    public init() {
-        super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 720),
+/// Splash de abertura: mascote, piscina e barra de progresso.
+///
+/// Aparece por 1,5 s ao abrir o app e pode ser reaberto em Janela › Mostrar
+/// Splash. É a única ilustração da interface (além do ícone): o resto do app
+/// tem fundos lisos.
+@MainActor
+final class SplashController {
+    static let shared = SplashController()
+    private var window: NSWindow?
+
+    func show(duration: TimeInterval = 1.5) {
+        window?.close()
+        let size = NSSize(width: 640, height: 380)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
-        
-        self.center()
-        self.isOpaque = false
-        self.backgroundColor = .clear
-        self.level = .floating // Keep it on top initially
-        
-        let contentView = NSHostingView(rootView: SplashView { [weak self] in
-            self?.close()
-        })
-        
-        self.contentView = contentView
-    }
-    
-    public override var canBecomeKey: Bool {
-        return true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.level = .floating
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: SplashView(duration: duration))
+        window.center()
+        window.orderFrontRegardless()
+        self.window = window
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self, weak window] in
+            guard let window, self?.window === window else { return }
+            NSAnimationContext.runAnimationGroup { contexto in
+                contexto.duration = 0.24
+                window.animator().alphaValue = 0
+            } completionHandler: {
+                Task { @MainActor in
+                    window.close()
+                    if self?.window === window { self?.window = nil }
+                }
+            }
+        }
     }
 }
 
 struct SplashView: View {
-    @Environment(\.accessibilityReduceMotion) var reduceMotion
-    let onClose: () -> Void
-    
-    @State private var phase = 0 // Controls timeline
-    @State private var bootLabel = "iniciando ADB server"
-    
-    private let labels = [
-        "iniciando ADB server",
-        "conectando WebDriverAgent · 8100",
-        "iniciando Proxy MITM · 8082",
-        "pronto!"
-    ]
-    
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let duration: TimeInterval
+
+    @State private var progresso: Double = 0
+    @State private var visivel = false
+
+    private static let navy = Color(hex: "#141543")
+
     var body: some View {
         ZStack {
-            // Background gradient
-            RadialGradient(
-                gradient: Gradient(colors: [
-                    Color(hex: "B4E4F6"),
-                    Color(hex: "97D5EF"),
-                    Color(hex: "7FC7E6")
-                ]),
-                center: .center,
-                startRadius: 100,
-                endRadius: 600
-            )
-            
-            VStack {
-                HStack(spacing: 40) {
-                    // Mascot
-                    if let img = NSImage(named: "mascot") {
-                        Image(nsImage: img)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 580, height: 540)
-                            .offset(
-                                x: reduceMotion ? 0 : (phase >= 1 ? 0 : -180),
-                                y: reduceMotion ? 0 : (phase >= 2 ? (sin(Date().timeIntervalSince1970 * 2) * 11) : (phase >= 1 ? 0 : 26))
-                            )
-                            .scaleEffect(phase >= 1 ? 1 : 0.94)
-                            // Ilustração decorativa: o nome do produto já está no texto.
-                            .accessibilityHidden(true)
-                    } else {
-                        // Fallback shape
-                        Circle().fill(Color.white.opacity(0.5)).frame(width: 300, height: 300)
-                    }
-                    
-                    // Texts
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Mo baile")
-                            .font(.system(size: 96, weight: .bold))
-                            .tracking(-0.045 * 96)
-                            .opacity(phase >= 2 ? 1 : 0)
-                            .accessibilityAddTraits(.isHeader)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("ELEMENT RECORDER")
-                                .font(.system(size: 13, weight: .semibold))
-                                .tracking(0.08 * 13)
-                            
-                            Rectangle()
-                                .fill(Color(hex: "E88BA5"))
-                                .frame(height: 2)
-                                .frame(width: 160)
+            fundo
+            HStack(spacing: 20) {
+                if let mascote = NSImage(named: "mascot") {
+                    Image(nsImage: mascote)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 260)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Mo baile")
+                        .font(.system(size: 48, weight: .bold))
+                        .tracking(-1.4)
+                        .foregroundStyle(Self.navy)
+                    Text("ELEMENT RECORDER")
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(0.9)
+                        .foregroundStyle(Self.navy.opacity(0.75))
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.55))
+                            Capsule()
+                                .fill(Color(hex: "#C2456E"))
+                                .frame(width: geo.size.width * progresso)
                         }
-                        .opacity(phase >= 2 ? 1 : 0)
-                        
-                        Spacer().frame(height: 40)
-                        
-                        // Progress
-                        VStack(alignment: .leading, spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.3))
-                                    .frame(width: 300, height: 4)
-                                    .cornerRadius(2)
-                                
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color(hex: "E88BA5"), Color(hex: "6BBF6A")]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                                .frame(width: phase >= 3 ? 300 : 0, height: 4)
-                                .cornerRadius(2)
-                                .animation(.linear(duration: 1.24), value: phase)
-                            }
-                            
-                            Text(bootLabel)
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundColor(bootLabel == "pronto!" ? Color(hex: "6BBF6A") : Color.black.opacity(0.7))
-                        }
-                        .opacity(phase >= 2 ? 1 : 0)
                     }
+                    .frame(width: 190, height: 5)
+                    .padding(.top, 16)
+                    Text("Iniciando o motor…")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Self.navy.opacity(0.7))
+                        .padding(.top, 6)
                 }
             }
-            .scaleEffect(phase >= 5 ? 1.035 : (phase >= 1 ? 1 : 1.04))
-            .opacity(phase >= 5 ? 0 : (phase >= 1 ? 1 : 0))
-            
-            // Sparkles (simplified)
-            Circle()
-                .fill(Color.white)
-                .frame(width: 4, height: 4)
-                .offset(x: 100, y: -100)
-                .opacity(phase >= 2 ? (sin(Date().timeIntervalSince1970 * 5) > 0 ? 1 : 0) : 0)
-                .accessibilityHidden(true)
         }
-        .frame(width: 1280, height: 720)
+        .frame(width: 640, height: 380)
+        .clipShape(RoundedRectangle(cornerRadius: DesignMetrics.Radius.window, style: .continuous))
+        .opacity(visivel ? 1 : 0)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Mo baile. Iniciando o motor.")
         .onAppear {
-            runAnimation()
+            withAnimation(.linear(duration: 0.24)) { visivel = true }
+            withAnimation(reduceMotion ? .linear(duration: 0.2) : .linear(duration: max(0.2, duration - 0.1))) {
+                progresso = 1
+            }
         }
-        // Dismiss on interact
-        .onTapGesture { onClose() }
     }
-    
-    private func runAnimation() {
-        if reduceMotion {
-            phase = 4
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { onClose() }
-            return
-        }
-        
-        // 0-380ms: stage fade + scale
-        withAnimation(.easeOut(duration: 0.38)) { phase = 1 }
-        
-        // 80-900ms: mascot drift
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.8)) { phase = 2 }
-        }
-        
-        // Boot labels rotation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.92) {
-            bootLabel = labels[1]
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            bootLabel = labels[2]
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
-            bootLabel = labels[3]
-        }
-        
-        // 900-2140ms: progress fill
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-            phase = 3
-        }
-        
-        // 2220-2560ms: fade out
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.22) {
-            withAnimation(.easeIn(duration: 0.34)) { phase = 5 }
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.56) {
-            onClose()
+
+    @ViewBuilder
+    private var fundo: some View {
+        if let imagem = NSImage(named: "splash_bg") {
+            Image(nsImage: imagem)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            // Rodando fora do bundle (swift run), sem a imagem copiada: o
+            // degradê azul-piscina do ícone.
+            LinearGradient(
+                colors: [Color(hex: "#BFE6F5"), Color(hex: "#9BDCF3"), Color(hex: "#86CDE8")],
+                startPoint: .top, endPoint: .bottom
+            )
         }
     }
 }
-

@@ -19,6 +19,7 @@ hook de `pre-push` recusa o push, e o CI recusa o PR, quando a versão não sobe
 | Mudou… | Sobe | Exemplo |
 |---|---|---|
 | Algo que quebra quem usa: protocolo RPC incompatível (`PROTOCOL_VERSION` sobe), formato de arquivo salvo, remoção de recurso | MAIOR | 2.1.0 → 3.0.0 |
+| Mudança drástica de interface: estrutura da janela, navegação ou fluxo de uso redesenhados (quem usa precisa reaprender onde as coisas estão) | MAIOR | 2.1.2 → 3.0.0 (redesenho Liquid Glass) |
 | Recurso novo, compatível com o que já existe | MENOR | 2.1.0 → 2.2.0 |
 | Correção, ajuste interno, documentação, teste | CORREÇÃO | 2.1.0 → 2.1.1 |
 

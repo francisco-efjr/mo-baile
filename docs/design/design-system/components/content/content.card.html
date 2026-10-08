@@ -1,0 +1,21 @@
+<!-- @dsCard group="Components" viewport="700x320" name="Conteúdo" subtitle="Tabela, cartão de diagnóstico, estado vazio e erro em linha" -->
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Conteúdo</title><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;background:#fff}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.lab{font-size:10px;color:var(--label-tertiary);font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin:0 0 6px}</style></head>
+<body><div id="r" data-mb-portal></div><script type="text/babel">
+const NS = window.MoBaileDesignSystem_ce6669;
+function Pane({dark, children, style}){return <div className="mb-root" data-theme={dark?"dark":undefined} style={{background:"var(--bg-content)",color:"var(--label-primary)",padding:16,display:"flex",flexDirection:"column",gap:14,...style}}>{children}</div>;}
+
+const {DataTable,DiagnosticCard,EmptyState,InlineError}=NS;
+const rows=[{id:1,m:"POST",s:201,h:"api.bancopraia.com.br",p:"/v2/credito/simulacao",t:"812 ms"},{id:2,m:"GET",s:500,h:"api.bancopraia.com.br",p:"/v2/clientes/me/preferencias",t:"1,8 s"},{id:3,m:"POST",s:422,h:"api.bancopraia.com.br",p:"/v2/credito/contratacao",t:"266 ms"},{id:4,m:"CONNECT",s:200,h:"app-measurement.com",p:":443",t:"58 ms"}];
+function App(){const [sel,setSel]=React.useState([1]);const [sort,setSort]=React.useState({key:"t",dir:"desc"});
+return <div className="mb-root" style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:16,padding:16,height:320,background:"var(--bg-content)"}}>
+<div style={{display:"flex",flexDirection:"column",gap:10,minWidth:0}}><DataTable style={{height:140,boxShadow:"inset 0 0 0 .5px var(--separator)",borderRadius:8}} columns={[{key:"m",label:"Método",width:70,sortable:true,mono:true},{key:"s",label:"Status",width:56,sortable:true,align:"right"},{key:"p",label:"Caminho",sortable:true,mono:true},{key:"t",label:"Tempo",width:64,align:"right",sortable:true}]} rows={rows} selected={sel} onSelectionChange={setSel} sort={sort} onSortChange={setSort}/>
+<InlineError title="Não foi possível iniciar o proxy." text="A porta 8082 está em uso. Feche o outro app ou escolha outra porta em Ajustes."/>
+<EmptyState compact icon="list-tree" title="Nenhum passo gravado" text="Clique em um elemento no espelho para gerar o primeiro passo."/></div>
+<DiagnosticCard platform="ios" title="iOS · WebDriverAgent" checks={[{label:"Ferramentas do Xcode",detail:"xcrun disponível",state:"ok"},{label:"Simulador ligado",detail:"iPhone 16 Pro",state:"ok"},{label:"WebDriverAgent",detail:"Sem resposta em localhost:8100.",state:"warn"}]} actionLabel="Iniciar WebDriverAgent"/>
+</div>;}
+ReactDOM.createRoot(document.getElementById("r")).render(<App/>);</script></body></html>

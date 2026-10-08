@@ -1,84 +1,124 @@
 import SwiftUI
 
+/// Inspector recolhível (⌥⌘I): hierarquia de acessibilidade com busca (⌘F) e
+/// atributos do elemento escolhido.
+///
+/// A coluna de hierarquia existia no código e nunca era mostrada: o estado que
+/// a ligava começava desligado e nenhum controle o mudava.
+struct InspectorPane: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @FocusState private var buscaFocada: Bool
+
+    var body: some View {
+        @Bindable var state = appState
+        let theme = themeManager.current
+
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Text("Hierarquia")
+                    .font(DSFont.headline)
+                    .foregroundStyle(theme.labelPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                if !appState.hierarchyElements.isEmpty {
+                    CountBadge(value: appState.hierarchyElements.count)
+                        .accessibilityLabel("\(appState.hierarchyElements.count) elementos")
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+
+            DSSearchField(
+                text: $state.hierarchySearchText,
+                prompt: "Buscar texto, ID ou XPath",
+                shortcut: "⌘F",
+                accessibilityLabel: "Buscar na hierarquia",
+                focus: $buscaFocada
+            )
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+
+            Rectangle().fill(theme.separator).frame(height: 1)
+
+            HierarchyTreeView()
+                .frame(maxHeight: .infinity)
+
+            Rectangle().fill(theme.separator).frame(height: 1)
+
+            AttributesPanel()
+                .frame(height: DesignMetrics.Heights.attributesPanel)
+        }
+        .background(theme.bgContent)
+        .onChange(of: appState.hierarchySearchFocusRequest) { _, _ in
+            buscaFocada = true
+        }
+        .onAppear {
+            // A janela entrega o foco ao primeiro campo de texto que encontra,
+            // e o campo da busca acendia o anel ao abrir o app. A busca só
+            // ganha foco quando pedida (⌘F ou clique).
+            DispatchQueue.main.async { buscaFocada = false }
+        }
+    }
+}
+
+/// Atributos do elemento escolhido, em fonte mono e selecionáveis.
 struct AttributesPanel: View {
     @Environment(AppState.self) var appState
     @Environment(ThemeManager.self) var themeManager
-    
+
     var body: some View {
-        VStack(spacing: 8) {
+        let theme = themeManager.current
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("ATRIBUTOS")
-                    .font(.system(size: 10, weight: .semibold))
-                    .textCase(.uppercase)
-                    .foregroundColor(themeManager.current.textLabel ?? Color.gray)
-                    .tracking(0.09) // letter-spacing .09em
-                
+                Text("Atributos")
+                    .font(DSFont.subheadlineSemibold)
+                    .foregroundStyle(theme.labelSecondary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
-                
-                Button(action: copyAll) {
-                    Text("Copiar tudo")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(themeManager.current.accent ?? Color.blue)
-                }
-                .buttonStyle(.plain)
+                Button("Copiar Tudo") { copiarTudo() }
+                    .buttonStyle(PlainTextButtonStyle(theme: theme))
+                    .controlSize(.mini)
+                    .disabled(appState.selectedElement == nil)
+                    .help("Copia todos os atributos do elemento")
             }
-            
+
             if let element = appState.selectedElement {
                 ScrollView {
-                    VStack(spacing: 4) {
-                        AttributeRow(key: "type", value: element.className ?? "-")
-                        AttributeRow(key: "name", value: element.resourceId ?? "-")
-                        AttributeRow(key: "label", value: element.text ?? element.contentDesc ?? "-")
-                        AttributeRow(key: "bounds", value: string(from: element.bounds))
-                        AttributeRow(key: "center", value: string(from: element.center))
-                        AttributeRow(key: "enabled", value: element.clickable == true ? "true" : "false")
+                    Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 3) {
+                        ForEach(element.attributeRows, id: \.key) { row in
+                            GridRow {
+                                Text(row.key)
+                                    .foregroundStyle(theme.labelSecondary)
+                                    .frame(width: 64, alignment: .trailing)
+                                Text(row.value.isEmpty ? "—" : row.value)
+                                    .foregroundStyle(theme.labelPrimary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                                    .help(row.value)
+                            }
+                            .font(DSFont.mono(11))
+                            .accessibilityElement(children: .combine)
+                        }
                     }
                 }
             } else {
                 Text("Nenhum elemento selecionado")
-                    .font(.system(size: 10.5))
-                    .foregroundColor(themeManager.current.textSecondary ?? Color.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    .font(DSFont.callout)
+                    .foregroundStyle(theme.labelSecondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding()
-        .frame(minHeight: 38)
-        .background(themeManager.current.bgPanel ?? Color.clear)
+        .padding(.top, 8)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
     }
-    
-    private func copyAll() {
-        // Implement copy all
-    }
-    
-    private func string(from rect: CGRect?) -> String {
-        guard let rect = rect else { return "-" }
-        return "[\(Int(rect.minX)),\(Int(rect.minY))][\(Int(rect.maxX)),\(Int(rect.maxY))]"
-    }
-    
-    private func string(from point: CGPoint?) -> String {
-        guard let point = point else { return "-" }
-        return "[\(Int(point.x)),\(Int(point.y))]"
-    }
-}
 
-struct AttributeRow: View {
-    @Environment(ThemeManager.self) var themeManager
-    let key: String
-    let value: String
-    
-    var body: some View {
-        HStack(alignment: .top) {
-            Text(key)
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundColor(themeManager.current.textLabel ?? Color.gray)
-                .frame(width: 82, alignment: .leading)
-            
-            Text(value)
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundColor(themeManager.current.textPrimary ?? Color.primary)
-                .lineSpacing(1.6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-        }
+    private func copiarTudo() {
+        guard let element = appState.selectedElement else { return }
+        Exporters.copy(element.attributesText)
+        appState.statusMessage = "Atributos copiados"
     }
 }
