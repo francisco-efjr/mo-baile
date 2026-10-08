@@ -42,6 +42,7 @@ from mobaile.adapters import ios_device_log
 from mobaile.adapters.adb import ADBBridge
 from mobaile.adapters.analytics_logcat import FirebaseAnalyticsListener
 from mobaile.adapters.appium import AppiumBridge
+from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
 from mobaile.adapters.ios_wda import IOSBridge
 from mobaile.adapters.proxy import MobileNetworkProxy
 from mobaile.adapters.scrcpy import ScrcpyManager
@@ -196,6 +197,9 @@ class EngineServer:
         self.ios = IOSBridge()
         self.scrcpy = ScrcpyManager()
         self.proxy = MobileNetworkProxy()
+        # Mesmo historico e mesma notificacao do proxy: para o front, e so
+        # outra origem de requisicoes.
+        self.ios_netlog = IOSDebugNetworkCapture(emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id)
         self.recorder = ScreenRecorder(self.adb, self.ios)
         self.analytics = FirebaseAnalyticsListener(adb_bridge=self.adb)
         # Uma vez so: registrar a cada analytics.start duplicava cada evento
@@ -260,6 +264,8 @@ class EngineServer:
             "proxy.stop": self.proxy_stop,
             "proxy.events": self.proxy_events,
             "proxy.clear": self.proxy_clear,
+            "netlog.start": self.netlog_start,
+            "netlog.stop": self.netlog_stop,
             "analytics.start": self.analytics_start,
             "analytics.stop": self.analytics_stop,
             "analytics.events": self.analytics_events,
@@ -864,8 +870,14 @@ class EngineServer:
 
     # ------------------------------------------------------------------ proxy
 
+    def _ensure_proxy_notify(self) -> None:
+        # Uma vez so: registrar a cada start duplicava cada evento no front.
+        if not getattr(self, "_proxy_notify_on", False):
+            self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
+            self._proxy_notify_on = True
+
     def proxy_start(self, params: dict[str, Any]) -> dict[str, Any]:
-        self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
+        self._ensure_proxy_notify()
         started = self.proxy.start()
         configured = False
         sessao = self._sessao()
@@ -879,6 +891,35 @@ class EngineServer:
             self.adb.teardown_reverse_proxy(sessao.device_id, self.proxy.port)
         self.proxy.stop()
         return {"running": self.proxy.is_running()}
+
+    def netlog_start(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Trafego de app em debug no iPhone por cabo, via `CFNETWORK_DIAGNOSTICS`.
+
+        `udid` opcional: sem ele, vale o primeiro iPhone conectado e confiado.
+        """
+        self._ensure_proxy_notify()
+        udid = params.get("udid") if isinstance(params, dict) else None
+        if udid:
+            udid = validate_device_id(udid)
+        else:
+            if not ios_device_log.is_available():
+                raise DeviceNotFoundError(
+                    "Para ler o trafego do iPhone por cabo, instale o pymobiledevice3.",
+                    detail=ios_device_log.INSTALL_HINT,
+                )
+            devices = ios_device_log.list_devices()
+            if not devices:
+                raise DeviceNotFoundError("Nenhum iPhone conectado por cabo.")
+            usable = [d for d in devices if not d.get("problem")]
+            if not usable:
+                raise DeviceNotReadyError(devices[0]["problem"])
+            udid = usable[0]["udid"]
+        self.ios_netlog.start(udid)
+        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": str(RAW_LOG_PATH)}
+
+    def netlog_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
+        self.ios_netlog.stop()
+        return {"running": self.ios_netlog.is_running()}
 
     def proxy_events(self, params: dict[str, Any]) -> dict[str, Any]:
         limit = int(params.get("limit") or 200)
@@ -1536,6 +1577,7 @@ class EngineServer:
         if self._passive is not None:
             self.passive_stop({})
         self.proxy.stop()
+        self.ios_netlog.stop()
         self.analytics.stop()
         self.scrcpy.stop_mirror()
         # Encerra apenas o servidor Appium que este processo iniciou. Um Appium

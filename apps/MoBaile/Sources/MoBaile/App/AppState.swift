@@ -49,6 +49,8 @@ class AppState {
     var selectedRequest: NetworkEvent? = nil
     var httpFilterText: String = ""
     var proxyRunning: Bool = false
+    /// iOS: lendo pelo cabo o log `CFNETWORK_DIAGNOSTICS` do app em debug.
+    var iosDebugNetActive: Bool = false
     
     // --- Analytics Events ---
     var analyticsEvents: [AnalyticsEvent] = []
@@ -113,10 +115,17 @@ class AppState {
     var analyticsBadgeCount: Int { analyticsEvents.count }
     var stepCount: Int { steps.count }
     
+    /// O que as listas de Rede e Analytics exibem: o mais novo no topo.
+    ///
+    /// Com o mais novo embaixo, cada evento que chegava saía da área visível e
+    /// era preciso rolar até o fim para achar a requisição que acabou de
+    /// acontecer. Só a exibição inverte: `httpRequests` e `analyticsEvents`
+    /// seguem em ordem de chegada, que é o que HAR, TSV e o cartão de
+    /// correlação usam.
     var filteredHTTPRequests: [NetworkEvent] {
-        guard !httpFilterText.isEmpty else { return httpRequests }
+        guard !httpFilterText.isEmpty else { return httpRequests.reversed() }
         let query = httpFilterText.lowercased()
-        return httpRequests.filter {
+        return httpRequests.reversed().filter {
             $0.host.lowercased().contains(query) ||
             $0.path.lowercased().contains(query) ||
             $0.method.lowercased().contains(query) ||
@@ -125,9 +134,9 @@ class AppState {
     }
     
     var filteredAnalyticsEvents: [AnalyticsEvent] {
-        guard !analyticsFilterText.isEmpty else { return analyticsEvents }
+        guard !analyticsFilterText.isEmpty else { return analyticsEvents.reversed() }
         let query = analyticsFilterText.lowercased()
-        return analyticsEvents.filter {
+        return analyticsEvents.reversed().filter {
             $0.eventName.lowercased().contains(query) ||
             $0.tag.lowercased().contains(query)
         }

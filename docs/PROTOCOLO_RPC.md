@@ -236,6 +236,8 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `proxy.stop` | — | desfaz também a configuração de proxy do aparelho |
 | `proxy.events` | `limit` | histórico recente |
 | `proxy.clear` | — | limpa o histórico |
+| `netlog.start` | `udid` (opcional; sem ele, o primeiro iPhone confiado) | lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` do app em debug e emite cada requisição como `proxy.event`, sem proxy nem certificado. O app precisa rodar com `CFNETWORK_DIAGNOSTICS=3` no scheme. Corpo normalmente indisponível. Devolve `running`, `device_id`, `raw_log` (blocos brutos, headers sensíveis mascarados) |
+| `netlog.stop` | — | para a leitura; devolve `running` |
 | `analytics.start` | `package` (opcional), `ios_source` (iOS: `auto`, `simulator` ou UDID do iPhone) | começa a escutar o tagueamento; no iOS sem simulador, `auto` usa o iPhone conectado por cabo. Devolve `running`, `source`, `device_id` |
 | `analytics.stop` | — | para de escutar |
 | `analytics.events` | `limit` | histórico recente |
@@ -246,7 +248,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object, bloco da ação |
+| `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object (`NOME = (AppiumBy.X, "valor")`), bloco da ação (`def` + `wait_to_be_visible(..., 15)` + `click(..., 2)` ou `send_keys`). A coordenada não entra no código: fica no passo, em `coords` |
 | `codegen.steps` | — | passos gravados |
 | `codegen.reset` | — | limpa a gravação |
 | `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos |

@@ -44,6 +44,20 @@ struct NetworkToolbar: View {
             
             // Buttons
             HStack(spacing: 8) {
+                if appState.platform == .ios {
+                    FluidPillButton(
+                        text: appState.iosDebugNetActive ? "Parar iPhone debug" : "iPhone em debug",
+                        icon: "cable.connector",
+                        style: appState.iosDebugNetActive ? .primary : .secondary
+                    ) {
+                        Task {
+                            await session.toggleIOSDebugNet()
+                        }
+                    }
+                    .help("Lê pelo cabo as requisições do app em debug, sem proxy nem certificado. No scheme do Xcode, adicione a variável de ambiente CFNETWORK_DIAGNOSTICS=3.")
+                    .accessibilityLabel(appState.iosDebugNetActive ? "Parar leitura de tráfego do iPhone em debug" : "Ler tráfego do iPhone em debug")
+                }
+
                 FluidPillButton(
                     text: appState.proxyRunning ? "Parar proxy" : "Configurar proxy",
                     icon: "network",

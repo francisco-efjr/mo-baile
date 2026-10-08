@@ -78,6 +78,7 @@ class TestTabelaDeMetodos(Base):
             contract.LANE_QUERY: {"devices.list", "wda.status", "simulators.list", "emulators.list",
                                   "diagnostics.check", "analytics.ios_devices"},
             contract.LANE_SERVICES: {"proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+                                     "netlog.start", "netlog.stop",
                                      "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
                                      "flow.run", "flow.stop", "flow.status", "recording.start", "recording.stop"},
             contract.LANE_CAPTURE: {"hierarchy.dump", "screen.capture", "screen.size", "passive.start",

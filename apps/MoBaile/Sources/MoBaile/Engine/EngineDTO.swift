@@ -589,6 +589,19 @@ enum EngineDTO {
         }
     }
 
+    /// `netlog.start` / `netlog.stop`.
+    struct NetlogState: Decodable {
+        let running: Bool
+        let deviceId: String?
+        let rawLog: String?
+
+        enum CodingKeys: String, CodingKey {
+            case running
+            case deviceId = "device_id"
+            case rawLog = "raw_log"
+        }
+    }
+
     struct AnalyticsState: Decodable {
         let running: Bool
     }

@@ -113,6 +113,9 @@ METHODS: dict[str, dict[str, Any]] = {
     "proxy.stop": _spec(LANE_SERVICES, 60),
     "proxy.events": _spec(LANE_SERVICES),
     "proxy.clear": _spec(LANE_SERVICES),
+    # Lista os iPhones (ate 15 s) e espera o log comecar (ate 20 s).
+    "netlog.start": _spec(LANE_SERVICES, 45),
+    "netlog.stop": _spec(LANE_SERVICES, 60),
     "analytics.start": _spec(LANE_SERVICES, 20),
     "analytics.stop": _spec(LANE_SERVICES, 60),
     "analytics.events": _spec(LANE_SERVICES),

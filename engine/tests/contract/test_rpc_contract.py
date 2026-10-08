@@ -141,6 +141,7 @@ class TestSuperficie(ContractBase):
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",
         "scrcpy.start", "scrcpy.stop", "scrcpy.status",
         "proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+        "netlog.start", "netlog.stop",
         "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
         "codegen.record", "codegen.steps", "codegen.reset",
     }
@@ -258,7 +259,10 @@ class TestFluxoDeInspecao(ContractBase):
         self.assertEqual(gravado["element"]["text"], "pos_900_1600")
         self.assertEqual(gravado["element"]["bounds"], [900, 1600, 900, 1600])
         self.assertTrue(gravado["element"]["clickable"])
-        self.assertIn("900", gravado["action_code"] + gravado["object_code"])
+        # A coordenada fica no passo, que e o que a execucao repete; o codigo
+        # exibido segue o padrao do Page Object e nao a carrega.
+        passos = self.ok("codegen.steps")["steps"]
+        self.assertEqual(passos[-1]["coords"], [900, 1600])
 
     def test_elemento_sintetico_usa_a_classe_da_plataforma_ativa(self):
         """iOS e Android nomeiam o no generico de formas diferentes, e o codigo

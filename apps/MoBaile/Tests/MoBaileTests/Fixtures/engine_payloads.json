@@ -42,6 +42,8 @@
         "hierarchy.element_at",
         "input.tap",
         "input.text",
+        "netlog.start",
+        "netlog.stop",
         "passive.start",
         "passive.status",
         "passive.stop",
@@ -251,6 +253,16 @@
           "timeout_s": 15,
           "progress": false
         },
+        "netlog.start": {
+          "lane": "services",
+          "timeout_s": 45,
+          "progress": false
+        },
+        "netlog.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
         "analytics.start": {
           "lane": "services",
           "timeout_s": 20,
@@ -425,7 +437,7 @@
     "result": {
       "var_name": "BOTAO_CONTINUAR",
       "object_code": "    BOTAO_CONTINUAR = (AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
-      "action_code": "    def click_continuar(self):\n        self.click_at_position(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 60, 45)\n",
+      "action_code": "    def click_continuar(self):\n        self.wait_to_be_visible(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 15)\n        self.click(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 2)\n",
       "element": {
         "tag": "node",
         "class_name": "android.widget.Button",

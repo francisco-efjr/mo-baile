@@ -1044,6 +1044,27 @@ final class EngineSession {
         }
     }
 
+    /// Tráfego do app em debug no iPhone por cabo, sem proxy: o motor lê o log
+    /// `CFNETWORK_DIAGNOSTICS` e entrega cada requisição como `proxy.event`.
+    func toggleIOSDebugNet() async {
+        guard let client else { return }
+        do {
+            if state.iosDebugNetActive {
+                let result: EngineDTO.NetlogState = try await client.call("netlog.stop")
+                state.iosDebugNetActive = result.running
+            } else {
+                let result: EngineDTO.NetlogState = try await client.call("netlog.start")
+                state.iosDebugNetActive = result.running
+                if result.running {
+                    state.statusMessage = "Lendo o tráfego do iPhone. O app precisa rodar com CFNETWORK_DIAGNOSTICS=3."
+                }
+            }
+        } catch {
+            state.iosDebugNetActive = false
+            report(error)
+        }
+    }
+
     func clearTraffic() async {
         guard let client else { return }
         do {
