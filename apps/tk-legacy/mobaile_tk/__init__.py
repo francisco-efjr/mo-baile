@@ -8,4 +8,4 @@ e importando o motor por `mobaile.*`, exatamente como o front nativo fara.
 Regra para mudancas aqui: logica nova vai para o motor, nao para o widget.
 """
 
-__version__ = "2.1.2"
+__version__ = "3.0.0"

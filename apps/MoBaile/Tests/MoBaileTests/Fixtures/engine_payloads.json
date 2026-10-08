@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "2.1.2",
+      "version": "3.0.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -74,7 +74,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "2.1.2",
+      "engine_version": "3.0.0",
       "capabilities": [
         "cancel",
         "progress",
