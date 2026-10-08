@@ -94,18 +94,24 @@ final class ModelTests: XCTestCase {
     func testAppStateToggleZenMode() {
         let state = AppState()
         
-        state.mirrorVisible = true
+        state.mirrorVisible = false
         state.zenMode = false
-        
+
+        // Modo Zen esconde barra lateral e inspector e deixa o espaço para
+        // espelho e workspace, que voltam a aparecer se estavam ocultos.
         state.toggleZenMode()
-        
+
         XCTAssertTrue(state.zenMode)
-        XCTAssertFalse(state.mirrorVisible)
-        
-        state.toggleZenMode()
-        
-        XCTAssertFalse(state.zenMode)
+        XCTAssertEqual(state.sidebarVisibility, .detailOnly)
+        XCTAssertFalse(state.inspectorVisible)
         XCTAssertTrue(state.mirrorVisible)
+        XCTAssertTrue(state.workspaceVisible)
+
+        state.toggleZenMode()
+
+        XCTAssertFalse(state.zenMode)
+        XCTAssertEqual(state.sidebarVisibility, .all)
+        XCTAssertTrue(state.inspectorVisible)
     }
 
     func testHARExporterGeneratesValidJSON() throws {

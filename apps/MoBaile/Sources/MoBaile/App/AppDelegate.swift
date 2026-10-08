@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Customize main menu
         configureMainMenu()
+
+        // Splash de abertura, enquanto o motor sobe junto com a janela.
+        SplashController.shared.show()
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

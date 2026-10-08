@@ -1,0 +1,204 @@
+/* Mo baile — cores. Paleta da marca (ícone flamingo + alien) + tokens semânticos no padrão macOS.
+   Aparências: :root = Claro · [data-theme="dark"] = Escuro · [data-contrast="high"] = Aumentar contraste. */
+:root{
+  /* Marca (valores literais do ícone) */
+  --brand-pool: #9BDCF3;
+  --brand-pool-2: #A1DAEF;
+  --brand-flamingo: #F389A9;
+  --brand-alien: #7EC674;
+  --brand-alien-shade: #5E9664;
+  --brand-navy: #141543;
+  --brand-graphite: #51545F;
+  /* Derivados acessíveis */
+  --flamingo-600: #C2456E;
+  --flamingo-700: #A8365C;
+  --flamingo-300: #F7AFC4;
+  --pool-700: #1F6F92;
+  --pool-300: #C8EBF8;
+  --alien-700: #3E7A45;
+  --platform-ios: #0A84FF;
+  --platform-android: #34C759;
+  --traffic-close: #FF5F57;
+  --traffic-minimize: #FEBC2E;
+  --traffic-zoom: #28C840;
+
+  /* Rótulos */
+  --label-primary: rgba(20,21,67,.90);
+  --label-secondary: rgba(20,21,67,.62);
+  --label-tertiary: rgba(20,21,67,.40);
+  --label-quaternary: rgba(20,21,67,.20);
+  /* Separadores e preenchimentos (para separar elementos sobre vidro) */
+  --separator: rgba(20,21,67,.11);
+  --separator-strong: rgba(20,21,67,.20);
+  --fill-primary: rgba(20,21,67,.10);
+  --fill-secondary: rgba(20,21,67,.07);
+  --fill-tertiary: rgba(20,21,67,.045);
+  --fill-quaternary: rgba(20,21,67,.025);
+  /* Fundos */
+  --bg-desktop: #C9E9F5;
+  --bg-window: #ECECF1;
+  --bg-sidebar: rgba(232,233,240,.78);
+  --bg-sidebar-solid: #E6E7EE;
+  --bg-content: #FFFFFF;
+  --bg-content-alt: #F6F6F9;
+  --bg-group: rgba(20,21,67,.035);
+  --bg-control: #FFFFFF;
+  --bg-control-hover: rgba(20,21,67,.06);
+  --bg-control-pressed: rgba(20,21,67,.12);
+  --bg-field: #FFFFFF;
+  --bg-terminal: #15182B;
+  --bg-device-screen: #A8E1F2;
+  --device-bezel: #15182B;
+  --control-border: rgba(20,21,67,.14);
+  --scrim: rgba(20,21,67,.18);
+  /* Destaque */
+  --accent: var(--flamingo-600);
+  --accent-hover: #B73F67;
+  --accent-pressed: var(--flamingo-700);
+  --on-accent: #FFFFFF;
+  --accent-text: #B23A63;
+  --accent-tint: rgba(243,137,169,.20);
+  --focus-ring: rgba(194,69,110,.55);
+  /* Seleção */
+  --selection: var(--accent);
+  --selection-text: #FFFFFF;
+  --selection-inactive: rgba(20,21,67,.10);
+  --selection-inactive-text: var(--label-primary);
+  --selection-content: rgba(243,137,169,.18);
+  /* Semânticas */
+  --destructive: #D70015;
+  --destructive-fill: #D70015;
+  --on-destructive: #FFFFFF;
+  --success: var(--alien-700);
+  --success-fill: var(--brand-alien);
+  --success-tint: rgba(126,198,116,.20);
+  --warning: #8A6100;
+  --warning-fill: #F5C451;
+  --warning-tint: rgba(245,196,81,.24);
+  --danger-tint: rgba(215,0,21,.10);
+  --info: var(--pool-700);
+  --recording: #D70015;
+  /* Categorias da sidebar */
+  --cat-1: #C94C75;
+  --cat-2: #4A8550;
+  --cat-3: #2878A3;
+  /* Tipos de nó da hierarquia (TypeChip) */
+  --chip-window: rgba(20,21,67,.55);
+  --chip-view: #2878A3;
+  --chip-text: #8A6100;
+  --chip-input: #3E7A45;
+  --chip-button: #B23A63;
+  /* Sintaxe (de PraiaLightTheme.swift) */
+  --syntax-keyword: #C2557A;
+  --syntax-function: #2E7FA6;
+  --syntax-type: #7B62B8;
+  --syntax-string: #3F8F4E;
+  --syntax-number: #A8601E;
+  --syntax-comment: #7A8E98;
+  --syntax-plain: #17323F;
+  --syntax-gutter: #9AAAB4;
+  /* HTTP */
+  --http-get: #2878A3;
+  --http-post: #8A6100;
+  --http-delete: #D70015;
+  --http-connect: #1E7F74;
+  --status-2xx: var(--alien-700);
+  --status-3xx: #8A6100;
+  --status-4xx: #D70015;
+}
+[data-theme="dark"]{
+  --label-primary: rgba(255,255,255,.90);
+  --label-secondary: rgba(255,255,255,.60);
+  --label-tertiary: rgba(255,255,255,.34);
+  --label-quaternary: rgba(255,255,255,.17);
+  --separator: rgba(255,255,255,.10);
+  --separator-strong: rgba(255,255,255,.18);
+  --fill-primary: rgba(255,255,255,.12);
+  --fill-secondary: rgba(255,255,255,.08);
+  --fill-tertiary: rgba(255,255,255,.05);
+  --fill-quaternary: rgba(255,255,255,.03);
+  --bg-desktop: #1B2A3A;
+  --bg-window: #24242C;
+  --bg-sidebar: rgba(38,38,48,.78);
+  --bg-sidebar-solid: #2A2A33;
+  --bg-content: #18181E;
+  --bg-content-alt: #1E1E25;
+  --bg-group: rgba(255,255,255,.04);
+  --bg-control: rgba(255,255,255,.10);
+  --bg-control-hover: rgba(255,255,255,.08);
+  --bg-control-pressed: rgba(255,255,255,.15);
+  --bg-field: rgba(255,255,255,.06);
+  --bg-terminal: #0E0F18;
+  --bg-device-screen: #1E3A48;
+  --device-bezel: #0B0C14;
+  --control-border: rgba(255,255,255,.12);
+  --scrim: rgba(0,0,0,.35);
+  --accent: #C2456E;
+  --accent-hover: #CC5079;
+  --accent-pressed: #A8365C;
+  --accent-text: #F389A9;
+  --accent-tint: rgba(243,137,169,.26);
+  --focus-ring: rgba(243,137,169,.60);
+  --selection-inactive: rgba(255,255,255,.12);
+  --selection-content: rgba(243,137,169,.20);
+  --destructive: #FF6961;
+  --destructive-fill: #E5303F;
+  --success: #8FD685;
+  --success-tint: rgba(126,198,116,.18);
+  --warning: #F5C451;
+  --warning-tint: rgba(245,196,81,.16);
+  --danger-tint: rgba(255,105,97,.14);
+  --info: #9BDCF3;
+  --recording: #FF453A;
+  --cat-1: #F389A9;
+  --cat-2: #7EC674;
+  --cat-3: #7FCFEC;
+  --chip-window: rgba(255,255,255,.55);
+  --chip-view: #7FCFEC;
+  --chip-text: #F5C451;
+  --chip-input: #8FD685;
+  --chip-button: #F389A9;
+  --syntax-keyword: #CBA6F7;
+  --syntax-function: #89B4FA;
+  --syntax-type: #F9E2AF;
+  --syntax-string: #A6E3A1;
+  --syntax-number: #FAB387;
+  --syntax-comment: #7F849C;
+  --syntax-plain: #CDD6F4;
+  --syntax-gutter: #585B70;
+  --http-get: #7FCFEC;
+  --http-post: #F5C451;
+  --http-delete: #FF6961;
+  --http-connect: #94E2D5;
+  --status-2xx: #8FD685;
+  --status-3xx: #F5C451;
+  --status-4xx: #FF6961;
+}
+/* Aumentar contraste — Claro */
+[data-contrast="high"]{
+  --label-primary: #0B0C2E;
+  --label-secondary: rgba(11,12,46,.80);
+  --label-tertiary: rgba(11,12,46,.62);
+  --separator: rgba(11,12,46,.34);
+  --separator-strong: rgba(11,12,46,.55);
+  --control-border: rgba(11,12,46,.60);
+  --accent: #A8365C;
+  --accent-text: #8E2A4C;
+  --selection: #A8365C;
+  --selection-inactive: rgba(11,12,46,.22);
+  --bg-sidebar: #E2E3EB;
+}
+/* Aumentar contraste — Escuro */
+[data-theme="dark"][data-contrast="high"]{
+  --label-primary: #FFFFFF;
+  --label-secondary: rgba(255,255,255,.82);
+  --label-tertiary: rgba(255,255,255,.62);
+  --separator: rgba(255,255,255,.34);
+  --separator-strong: rgba(255,255,255,.55);
+  --control-border: rgba(255,255,255,.62);
+  --accent: #D9567F;
+  --accent-text: #FFB3C9;
+  --selection: #D9567F;
+  --selection-inactive: rgba(255,255,255,.26);
+  --bg-sidebar: #2C2C36;
+}

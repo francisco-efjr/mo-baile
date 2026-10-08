@@ -30,6 +30,13 @@ enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
+    static let defaultKey = "mobaile.seletorPadrao"
+
+    /// Estratégia escolhida em Ajustes › Geral › Seletor padrão.
+    static var storedDefault: LocatorStrategy {
+        UserDefaults.standard.string(forKey: defaultKey).flatMap(LocatorStrategy.init(rawValue:)) ?? .auto
+    }
+
     /// Nome do lado do motor. A interface chama de `coords` o que o contrato
     /// chama de `position`.
     var engineName: String {
@@ -95,4 +102,10 @@ enum InteractionMode: String, CaseIterable, Identifiable, Sendable {
         case .record: return "record.circle"
         }
     }
+}
+
+/// O que uma confirmação de limpeza apaga.
+enum ClearKind: String, Identifiable, Sendable {
+    case network, analytics, steps
+    var id: String { rawValue }
 }

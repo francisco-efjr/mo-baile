@@ -604,7 +604,10 @@ final class EngineSession {
         await refreshDeviceSize()
         await refreshFrame()
         await refreshHierarchy()
-        await startStream()
+        // Ajustes › Geral › "Iniciar o espelho automaticamente".
+        if state.autoStartStream {
+            await startStream()
+        }
     }
 
     func switchPlatform(to platform: Platform) async {

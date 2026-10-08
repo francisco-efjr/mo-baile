@@ -1,166 +1,157 @@
 import XCTest
 import SwiftUI
+import AppKit
 @testable import MoBaile
 
-/// Guarda de layout da barra superior.
+/// Guarda da toolbar unificada.
 ///
-/// Diferente de `LayoutSnapshotTests`, que só grava PNG para inspeção, esta
-/// suíte afirma e falha sozinha. Ela existe porque a barra sumiu da janela sem
-/// que nada quebrasse: desenhada isolada continuava correta, e só empilhada no
-/// `VStack` da janela é que colapsava.
+/// A barra antiga sumiu da janela uma vez sem que nada quebrasse: desenhada
+/// isolada continuava certa, e só empilhada na janela é que colapsava. Com a
+/// toolbar nativa o risco equivalente é ela não ser instalada na janela (um
+/// `.toolbar` no lugar errado da hierarquia não dá erro, só não aparece).
+/// Por isso a primeira guarda abre a janela de verdade e confere os itens.
 @MainActor
 final class ToolbarLayoutTests: XCTestCase {
 
-    private func barraEmpilhada() -> some View {
+    private func ambiente(
+        plataforma: Platform = .ios,
+        aparelho: (id: String, name: String)? = (id: "7303D258", name: "iPhone 16")
+    ) -> (AppState, EngineSession, ThemeManager) {
         let estado = AppState()
-        estado.selectedDevice = "7303D258"
-        estado.availableDevices = [(id: "7303D258", name: "iPhone 16")]
+        estado.platform = plataforma
+        if let aparelho {
+            estado.availableDevices = [aparelho]
+            estado.selectedDevice = aparelho.id
+        }
         let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
-        return VStack(spacing: 0) {
-            UnifiedToolbar()
-            Rectangle().fill(Color.gray)
-        }
-        .environment(estado)
-        .environment(sessao)
-        .environment(ThemeManager())
+        return (estado, sessao, ThemeManager())
     }
 
-    /// Lê os pixels de uma faixa horizontal do desenho.
-    private func coresDaFaixa<V: View>(_ view: V, largura: CGFloat, altura: CGFloat, y: Int) throws -> Set<String> {
-        let renderer = ImageRenderer(content: view.frame(width: largura, height: altura))
-        renderer.scale = 1
-        let imagem = try XCTUnwrap(renderer.nsImage)
-        let tiff = try XCTUnwrap(imagem.tiffRepresentation)
-        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: tiff))
-
-        var cores: Set<String> = []
-        for x in stride(from: 0, to: Int(largura), by: 4) {
-            guard let cor = bitmap.colorAt(x: x, y: y) else { continue }
-            cores.insert(String(format: "%.2f,%.2f,%.2f", cor.redComponent, cor.greenComponent, cor.blueComponent))
+    /// Abre a janela principal e devolve os itens da toolbar instalada.
+    private func itensDaToolbar(_ estado: AppState, _ sessao: EngineSession, _ tema: ThemeManager) throws -> (NSWindow, [NSToolbarItem]) {
+        let controller = NSHostingController(
+            rootView: ContentView().environment(estado).environment(sessao).environment(tema)
+        )
+        controller.sceneBridgingOptions = [.toolbars, .title]
+        let janela = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered, defer: false
+        )
+        janela.isReleasedWhenClosed = false
+        janela.contentViewController = controller
+        janela.orderFront(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        guard let toolbar = janela.toolbar else {
+            janela.close()
+            throw XCTSkip("O SwiftUI não instalou a toolbar neste ambiente (sem sessão gráfica?)")
         }
-        return cores
+        return (janela, toolbar.items)
     }
 
-    /// Regressão: envolver a barra num `GeometryReader` a deixou sem altura
-    /// intrínseca, e no `VStack` da janela ela colapsou — o preenchimento de
-    /// baixo subiu e ocupou a faixa dela.
-    ///
-    /// A faixa de 26 pontos (meio da barra de 52) tem de conter os controles,
-    /// ou seja, várias cores. Colapsada, ela vira uma cor só, a do que estiver
-    /// atrás.
-    func testBarraOcupaAFaixaDoTopoQuandoEmpilhada() throws {
-        let cores = try coresDaFaixa(barraEmpilhada(), largura: 1440, altura: 200, y: 26)
-        XCTAssertGreaterThan(
-            cores.count, 3,
-            "a faixa da barra saiu com \(cores.count) cor(es): a barra colapsou no VStack"
+    func testToolbarEInstaladaNaJanelaComTituloDaSecao() throws {
+        let (estado, sessao, tema) = ambiente()
+        let (janela, itens) = try itensDaToolbar(estado, sessao, tema)
+        defer { janela.close() }
+
+        // Aparelho, modo do clique, três de gravação, Rodar, Buscar, Inspector
+        // e o botão da barra lateral: a contagem exata depende do macOS, mas
+        // uma toolbar com menos de seis itens perdeu controles.
+        XCTAssertGreaterThanOrEqual(itens.count, 6, "itens: \(itens.map(\.itemIdentifier.rawValue))")
+        // O título mostra a seção, nunca o nome do app.
+        XCTAssertEqual(janela.title, "Page Objects")
+    }
+
+    func testTituloSemAparelho() throws {
+        let (estado, sessao, tema) = ambiente(aparelho: nil)
+        let (janela, _) = try itensDaToolbar(estado, sessao, tema)
+        defer { janela.close() }
+        XCTAssertEqual(janela.title, "Sem dispositivo")
+    }
+
+    func testTituloAcompanhaAArea() throws {
+        let (estado, sessao, tema) = ambiente()
+        estado.workspaceTab = .network
+        let (janela, _) = try itensDaToolbar(estado, sessao, tema)
+        defer { janela.close() }
+        XCTAssertEqual(janela.title, "Rede HTTP")
+    }
+
+    // MARK: - Componentes
+
+    private func arvore<V: View>(_ view: V, _ estado: AppState, _ sessao: EngineSession, _ tema: ThemeManager, largura: CGFloat = 420) throws -> AXNode {
+        try AccessibilityInspector.arvore(
+            de: HStack { view }.environment(estado).environment(sessao).environment(tema),
+            largura: largura, altura: 60
         )
     }
 
-    /// E o que está abaixo dela continua sendo o conteúdo, não a barra
-    /// esticada: o outro modo de errar é a barra tomar a janela inteira, que é
-    /// o comportamento natural de um `GeometryReader` solto.
-    func testBarraNaoInvadeOConteudoAbaixo() throws {
-        let cores = try coresDaFaixa(barraEmpilhada(), largura: 1440, altura: 200, y: 150)
-        XCTAssertEqual(
-            cores.count, 1,
-            "abaixo da barra deveria haver só o preenchimento; vieram \(cores.count) cores"
-        )
+    /// O pop-up absorveu o seletor iOS | Android: tem de dizer qual aparelho
+    /// está escolhido, ou "Nenhum dispositivo".
+    func testPopUpDeAparelhoDizOAparelho() throws {
+        let (estado, sessao, tema) = ambiente()
+        let ax = try arvore(DeviceMenu(), estado, sessao, tema)
+        let popup = ax.node(label: "Dispositivo")
+        XCTAssertNotNil(popup, ax.dump)
+        XCTAssertEqual(popup?.value, "iPhone 16", ax.dump)
+
+        let (vazio, sessaoVazia, temaVazio) = ambiente(aparelho: nil)
+        let axVazio = try arvore(DeviceMenu(), vazio, sessaoVazia, temaVazio)
+        XCTAssertEqual(axVazio.node(label: "Dispositivo")?.value, "Nenhum dispositivo", axVazio.dump)
     }
 
-    /// Valida que a barra renderiza perfeitamente no estado desconectado
-    func testBarraRenderizaDesconectadaSemErros() throws {
-        let estado = AppState()
-        estado.selectedDevice = nil
-        estado.availableDevices = []
-        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
-        let toolbar = UnifiedToolbar()
-            .environment(estado)
-            .environment(sessao)
-            .environment(ThemeManager())
-
-        let renderer = ImageRenderer(content: toolbar.frame(width: 1440, height: 52))
-        XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar desconectada")
+    /// Os segmentos do modo do clique têm nome próprio e o grupo, o dele.
+    func testModoDoCliqueNomeiaOsSegmentos() throws {
+        let (estado, sessao, tema) = ambiente()
+        let ax = try arvore(InteractionModePicker(), estado, sessao, tema)
+        let rotulos = ax.all.map(\.label)
+        for esperado in ["Repassar toque", "Gravar passo"] {
+            XCTAssertTrue(rotulos.contains(esperado), "falta '\(esperado)': \(rotulos)\n\(ax.dump)")
+        }
+        XCTAssertNotNil(ax.node(label: "Ação do clique no espelho"), ax.dump)
     }
 
-    /// Valida renderização no Android com scrcpy ativo e inativo
-    func testBarraRenderizaAndroidComScrcpy() throws {
-        let estado = AppState()
-        estado.platform = .android
-        estado.selectedDevice = "emulator-5554"
-        estado.availableDevices = [(id: "emulator-5554", name: "Pixel 7 Pro")]
+    /// Gravando, os botões trocam de nome: o leitor precisa saber que o
+    /// próximo clique para a gravação.
+    func testBotoesDeGravacaoTrocamDeNomeEnquantoGravam() throws {
+        let (estado, sessao, tema) = ambiente(plataforma: .android, aparelho: (id: "emulator-5554", name: "Pixel 7"))
         estado.scrcpyAvailable = true
-        estado.scrcpyRunning = true
-        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
-        let toolbar = UnifiedToolbar()
-            .environment(estado)
-            .environment(sessao)
-            .environment(ThemeManager())
+        let parado = try arvore(HStack { PassiveCaptureButton(); ScreenRecordingButton(); ScrcpyButton() }, estado, sessao, tema)
+        let rotulosParado = parado.buttons.map(\.label)
+        XCTAssertTrue(rotulosParado.contains("Gravar do Aparelho"), "\(rotulosParado)")
+        XCTAssertTrue(rotulosParado.contains("Gravar a Tela"), "\(rotulosParado)")
+        XCTAssertTrue(rotulosParado.contains("Espelho 60 FPS"), "\(rotulosParado)")
 
-        let renderer = ImageRenderer(content: toolbar.frame(width: 1440, height: 52))
-        XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar Android com scrcpy ativo")
-    }
-
-    /// Valida renderização no iOS físico vs iOS simulador
-    func testBarraRenderizaIOSFisicoESimulador() throws {
-        let estado = AppState()
-        estado.platform = .ios
-        estado.selectedDevice = "00008110-0012345678" // Dispositivo físico
-        estado.availableDevices = [(id: "00008110-0012345678", name: "iPhone 15 Pro Max")]
-        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
-        let toolbarFisico = UnifiedToolbar()
-            .environment(estado)
-            .environment(sessao)
-            .environment(ThemeManager())
-
-        let rendererFisico = ImageRenderer(content: toolbarFisico.frame(width: 1440, height: 52))
-        XCTAssertNotNil(rendererFisico.nsImage, "Falha ao renderizar toolbar no iOS físico")
-
-        // Agora simulador (deve ter escuta passiva habilitada se UDID estiver em simulators)
-        estado.selectedDevice = "7303D258"
-        estado.availableDevices = [(id: "7303D258", name: "iPhone 16")]
-        let toolbarSim = UnifiedToolbar()
-            .environment(estado)
-            .environment(sessao)
-            .environment(ThemeManager())
-
-        let rendererSim = ImageRenderer(content: toolbarSim.frame(width: 1440, height: 52))
-        XCTAssertNotNil(rendererSim.nsImage, "Falha ao renderizar toolbar no iOS simulador")
-    }
-
-    /// Valida renderização nos estados de gravação de tela e escuta passiva simultâneos
-    func testBarraRenderizaEstadosDeGravacao() throws {
-        let estado = AppState()
-        estado.platform = .android
-        estado.selectedDevice = "emulator-5554"
-        estado.availableDevices = [(id: "emulator-5554", name: "Pixel 7")]
-        estado.screenRecording = true
         estado.passiveListening = true
-        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
-        let toolbar = UnifiedToolbar()
-            .environment(estado)
-            .environment(sessao)
-            .environment(ThemeManager())
-
-        let renderer = ImageRenderer(content: toolbar.frame(width: 1440, height: 52))
-        XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar gravando tela e escuta passiva")
+        estado.screenRecording = true
+        estado.scrcpyRunning = true
+        let gravando = try arvore(HStack { PassiveCaptureButton(); ScreenRecordingButton(); ScrcpyButton() }, estado, sessao, tema)
+        let rotulos = gravando.buttons.map(\.label)
+        XCTAssertTrue(rotulos.contains("Parar Captura"), "\(rotulos)")
+        XCTAssertTrue(rotulos.contains("Parar de Gravar a Tela"), "\(rotulos)")
+        XCTAssertTrue(rotulos.contains("Fechar Espelho 60 FPS"), "\(rotulos)")
     }
 
-    /// Valida que a barra alterna para o modo compacto sem cortar elementos nem crashar em larguras menores
-    func testBarraModoCompactoRenderizaSemErros() throws {
-        let estado = AppState()
-        estado.platform = .android
-        estado.selectedDevice = "emulator-5554"
-        estado.availableDevices = [(id: "emulator-5554", name: "Pixel 7 Pro Extra Long Name")]
-        estado.screenRecording = true
-        let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
-        let toolbar = UnifiedToolbar()
-            .environment(estado)
-            .environment(sessao)
-            .environment(ThemeManager())
+    /// O 60 FPS é do Android: no iOS o botão não existe.
+    func testScrcpySoNoAndroid() throws {
+        let (estado, sessao, tema) = ambiente()
+        estado.scrcpyAvailable = true
+        let ax = try arvore(HStack { ScrcpyButton(); RunAutomationButton() }, estado, sessao, tema)
+        XCTAssertFalse(ax.buttons.map(\.label).contains("Espelho 60 FPS"), ax.dump)
+    }
 
-        for largura in [CGFloat(1100), CGFloat(1280), CGFloat(1320), CGFloat(1399)] {
-            let renderer = ImageRenderer(content: toolbar.frame(width: largura, height: 52))
-            XCTAssertNotNil(renderer.nsImage, "Falha ao renderizar toolbar compacta na largura \(largura)")
-        }
+    func testRodarSoComPassoEAparelho() {
+        let (estado, _, _) = ambiente()
+        XCTAssertFalse(RunAutomationButton.podeRodar(estado), "sem passo não roda")
+        estado.steps = [AutomationStep(
+            stepNum: 1, actionType: "click", varName: "BOTAO", elementName: "Botao", className: "Button",
+            strategy: .id, locatorValue: "botao", coords: nil, inputText: nil, package: "p", platform: .ios
+        )]
+        XCTAssertTrue(RunAutomationButton.podeRodar(estado))
+        estado.runState = .running
+        XCTAssertFalse(RunAutomationButton.podeRodar(estado), "não roda duas vezes ao mesmo tempo")
+        estado.runState = .idle
+        estado.selectedDevice = nil
+        XCTAssertFalse(RunAutomationButton.podeRodar(estado), "sem aparelho não roda")
     }
 }

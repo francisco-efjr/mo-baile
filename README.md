@@ -110,7 +110,8 @@ em proxy aberto para quem estiver na mesma rede.
 | [RELATORIO_QA.md](docs/RELATORIO_QA.md) | Resultado dos quatro fluxos e os defeitos encontrados |
 | [qa/README.md](qa/README.md) | Harness de ponta a ponta dos quatro fluxos |
 | [ESTADO_ATUAL.md](docs/ESTADO_ATUAL.md) | O que funciona, o que depende de aparelho e o que é fachada |
-| [design/](docs/design/) | Especificação visual e handoff |
+| [design/design-system/](docs/design/design-system/) | Design system 3.0 (Liquid Glass): tokens, componentes, protótipo e notas por tela. Decisões em [ADR 0002](docs/adr/0002-redesenho-liquid-glass.md) |
+| [design/](docs/design/) | Especificação visual e handoff anteriores |
 | [research/](docs/research/) | Estudo do HTTP Toolkit e notas do interceptador |
 
 ## Contribuindo

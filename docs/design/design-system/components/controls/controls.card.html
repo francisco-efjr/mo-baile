@@ -1,0 +1,20 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Controles" subtitle="Botões, segmentado, pop-up, busca, switch, checkbox" -->
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Controles</title><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;background:#fff}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.lab{font-size:10px;color:var(--label-tertiary);font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin:0 0 6px}</style></head>
+<body><div id="r" data-mb-portal></div><script type="text/babel">
+const NS = window.MoBaileDesignSystem_ce6669;
+function Pane({dark, children, style}){return <div className="mb-root" data-theme={dark?"dark":undefined} style={{background:"var(--bg-content)",color:"var(--label-primary)",padding:16,display:"flex",flexDirection:"column",gap:14,...style}}>{children}</div>;}
+
+const {Button,SegmentedControl,PopUpButton,SearchField,TextField,Switch,Checkbox}=NS;
+function Demo({dark}){const [s,setS]=React.useState("Auto");const [p,setP]=React.useState("iOS");const [q,setQ]=React.useState("");const [c,setC]=React.useState(true);const [w,setW]=React.useState(true);
+return <Pane dark={dark}>
+<div className="row"><Button variant="default" icon="play">Rodar</Button><Button icon="hand">Gravar do Aparelho</Button><Button variant="recording" icon="square">Parar de Gravar</Button><Button variant="plain-destructive">Limpar Tráfego</Button><Button disabled>Exportar HAR…</Button></div>
+<div className="row"><SegmentedControl items={["iOS","Android"]} value={p} onChange={setP}/><SegmentedControl items={["Auto","ID","XPath","Coords"]} value={s} onChange={setS}/><PopUpButton prefix="Seletor:" options={[{value:"a",label:"Auto"},{value:"i",label:"ID"}]} value="a"/></div>
+<div className="row"><SearchField value={q} onChange={setQ} placeholder="Buscar texto, ID ou XPath" shortcut="⌘F" width={220}/><TextField value="127.0.0.1" mono width={110}/><Switch checked={w} onChange={setW} size="small"/><Checkbox checked={c} onChange={setC} label="Redigir credenciais"/></div>
+</Pane>;}
+function App(){return <div style={{display:"grid",gridTemplateColumns:"1fr"}}><Demo/><Demo dark/></div>;}
+ReactDOM.createRoot(document.getElementById("r")).render(<App/>);</script></body></html>

@@ -48,38 +48,15 @@ final class LayoutSnapshotTests: XCTestCase {
         let (estado, sessao, tema) = ambiente()
         try desenhar(
             ContentView().environment(estado).environment(sessao).environment(tema),
-            largura: 1100, altura: 720, nome: "janela-1100-minimo"
+            largura: 980, altura: 600, nome: "janela-980-minimo"
         )
     }
 
-    /// A largura minima da janela e onde a barra aperta. Se transbordar aqui,
-    /// transborda para quem trabalha com a janela encostada em outra.
-    func testDesenhaBarraNaLarguraMinima() throws {
-        let (estado, sessao, tema) = ambiente()
-        try desenhar(
-            UnifiedToolbar().environment(estado).environment(sessao).environment(tema),
-            largura: 1320, altura: 60, nome: "barra-1320-minimo"
-        )
-    }
 
-    /// Regressao: a barra sumiu da janela ao ganhar o modo compacto.
-    ///
-    /// Envolver a barra num `GeometryReader` a deixou sem altura intrinseca.
-    /// Sozinha ela continuava desenhando certo, entao o snapshot da barra
-    /// isolada nao pegava: so dentro do `VStack` da janela e que ela colapsava.
-    /// Este desenho a coloca empilhada, como na janela real.
-    func testDesenhaBarraEmpilhadaComoNaJanela() throws {
-        let (estado, sessao, tema) = ambiente()
-        let empilhada = VStack(spacing: 0) {
-            UnifiedToolbar()
-            Rectangle().fill(Color.gray.opacity(0.25))
-        }
-        .environment(estado).environment(sessao).environment(tema)
-        try desenhar(empilhada, largura: 1440, altura: 200, nome: "barra-empilhada")
-    }
 
     /// A coluna do espelho, para conferir a moldura responsiva e o botão que
-    /// substituiu o dock de quatro botões inertes.
+    /// substituiu o dock de quatro botões inertes. A janela inteira, com
+    /// toolbar e inspector, está em `WindowSnapshotTests`.
     func testDesenhaColunaDoEspelho() throws {
         let (estado, sessao, tema) = ambiente()
         try desenhar(
@@ -108,25 +85,5 @@ final class LayoutSnapshotTests: XCTestCase {
         )
     }
 
-    /// A coluna do workspace no app fica em 440pt quando as três estão
-    /// abertas. É a largura em que a barra precisa caber.
-    func testDesenhaBarraDoWorkspaceEstreita() throws {
-        let (estado, sessao, tema) = ambiente()
-        try desenhar(
-            VStack(spacing: 0) {
-                WorkspaceTabBar()
-                Rectangle().fill(Color.gray.opacity(0.2))
-            }
-            .environment(estado).environment(sessao).environment(tema),
-            largura: 440, altura: 160, nome: "barra-workspace-440"
-        )
-    }
 
-    func testDesenhaBarraSuperior() throws {
-        let (estado, sessao, tema) = ambiente()
-        try desenhar(
-            UnifiedToolbar().environment(estado).environment(sessao).environment(tema),
-            largura: 1440, altura: 60, nome: "barra-1440"
-        )
-    }
 }

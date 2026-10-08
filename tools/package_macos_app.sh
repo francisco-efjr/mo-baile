@@ -66,6 +66,24 @@ for file in icon.icns icon.png mascot.png splash_bg.png splash_app.mp4; do
 done
 [ -f "$ASSETS/icon.icns" ] && cp "$ASSETS/icon.icns" "$CONTENTS/Resources/AppIcon.icns"
 
+echo "==> Compilando a cor de destaque (Assets.car)"
+# O flamingo do design system (#C2456E) vira a cor de destaque do app: seleção
+# da barra lateral, das tabelas e da árvore, botão padrão. Sem o catálogo, o
+# macOS usa o destaque do sistema. O actool vem com o Xcode, não com as
+# Command Line Tools.
+ACCENT_PLIST=""
+if xcrun --find actool >/dev/null 2>&1; then
+    parcial="$(mktemp -d)/parcial.plist"
+    xcrun actool "$REPO_ROOT/apps/MoBaile/AppResources/Assets.xcassets" \
+        --compile "$CONTENTS/Resources" --platform macosx --minimum-deployment-target 14.0 \
+        --output-partial-info-plist "$parcial" --errors >/dev/null
+    rm -rf "$(dirname "$parcial")"
+    ACCENT_PLIST="<key>NSAccentColorName</key>
+    <string>AccentColor</string>"
+else
+    echo "aviso: actool nao encontrado (precisa do Xcode); a selecao usa o destaque do sistema."
+fi
+
 echo "==> Embutindo o motor Python"
 # O front resolve este caminho em EngineLocator (Contents/Resources/engine/src).
 mkdir -p "$CONTENTS/Resources/engine"
@@ -102,6 +120,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    $ACCENT_PLIST
     <key>NSLocalNetworkUsageDescription</key>
     <string>O Mo baile abre um proxy local para inspecionar o trafego do aparelho conectado.</string>
 </dict>

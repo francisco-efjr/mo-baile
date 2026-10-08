@@ -21,12 +21,13 @@ class AppState {
     var passiveMode: Bool = false
     
     // --- Locator & Code ---
-    var locatorStrategy: LocatorStrategy = .auto
+    /// Começa no "Seletor padrão" de Ajustes › Geral.
+    var locatorStrategy: LocatorStrategy = LocatorStrategy.storedDefault
     var locatorKey: String = "onboarding_credito"
     var workspaceTab: WorkspaceTab = .pageObjects
 
     /// Mostra os dois editores lado a lado, ou só o de ações.
-    var splitEditors: Bool = true
+    var splitEditors: Bool = false
     /// Modal com a tabela ordenada dos passos gravados.
     var showingStructure: Bool = false
     /// Modal com a execucao visual do fluxo gravado.
@@ -135,16 +136,19 @@ class AppState {
     
     // MARK: - Actions
     
+    /// Modo Zen: esconde barra lateral e inspector e deixa espelho e
+    /// workspace, que é onde o trabalho acontece.
     func toggleZenMode() {
         zenMode.toggle()
-        if zenMode {
-            mirrorVisible = false
-        } else {
-            mirrorVisible = true
-        }
+        sidebarVisibility = zenMode ? .detailOnly : .all
+        inspectorVisible = !zenMode
+        mirrorVisible = true
+        workspaceVisible = true
     }
-    
+
     func restoreAllPanels() {
+        sidebarVisibility = .all
+        inspectorVisible = true
         mirrorVisible = true
         workspaceVisible = true
         zenMode = false
@@ -164,5 +168,41 @@ class AppState {
         steps.removeAll()
         actionsCode = ""
         locatorsCode = ""
+        selectedStepID = nil
+    }
+
+    // MARK: - Janela (redesenho 3.0)
+
+    /// Barra lateral: áreas do workspace e passos do fluxo.
+    var sidebarVisibility: NavigationSplitViewVisibility = .all
+    /// Inspector com a hierarquia e os atributos.
+    var inspectorVisible: Bool = true
+    /// Passo escolhido na seção Fluxo da barra lateral. Destaca o código dele.
+    var selectedStepID: UUID? = nil
+    /// Confirmação de limpeza aberta (tráfego, eventos ou passos).
+    var pendingClear: ClearKind? = nil
+    /// Pedido de foco no campo de busca da hierarquia (⌘F em Page Objects).
+    var hierarchySearchFocusRequest: Int = 0
+    /// Busca da toolbar aberta (⌘F em Rede e Analytics).
+    var toolbarSearchPresented: Bool = false
+    /// Ajustes › Geral › "Iniciar o espelho automaticamente".
+    var autoStartStream: Bool = UserDefaults.standard.object(forKey: AppState.autoStartStreamKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoStartStream, forKey: AppState.autoStartStreamKey) }
+    }
+
+    static let autoStartStreamKey = "mobaile.espelhoAutomatico"
+
+    var selectedStep: AutomationStep? {
+        guard let selectedStepID else { return nil }
+        return steps.first { $0.id == selectedStepID }
+    }
+
+    /// Nome do aparelho escolhido, e não o serial: "Pixel 7" diz mais do que
+    /// "emulator-5554" para quem tem dois aparelhos na mesa.
+    var selectedDeviceName: String? {
+        guard let selectedDevice else { return nil }
+        let match = availableDevices.first { $0.id == selectedDevice }
+        if let name = match?.name, !name.isEmpty { return name }
+        return selectedDevice
     }
 }
