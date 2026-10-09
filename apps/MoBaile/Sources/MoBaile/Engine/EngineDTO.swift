@@ -227,16 +227,7 @@ enum EngineDTO {
 
         /// Parametro de analytics chega com tipo livre; a tabela exibe texto.
         private static func describe(_ value: JSONValue) -> String {
-            switch value {
-            case .string(let text): return text
-            case .int(let number): return String(number)
-            case .double(let number): return String(number)
-            case .bool(let flag): return flag ? "true" : "false"
-            case .null: return ""
-            case .array, .object:
-                guard let data = try? JSONEncoder().encode(value) else { return "" }
-                return String(decoding: data, as: UTF8.self)
-            }
+            value.displayText
         }
 
         func toModel() -> AnalyticsEvent {

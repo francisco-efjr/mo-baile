@@ -37,13 +37,19 @@ CAPABILITIES: tuple[str, ...] = ("cancel", "progress", "lanes")
 #   fluxo, gravacao de tela).
 # - query: consultas ao ambiente, que levam segundos mas nunca minutos.
 # - environment: preparo de ambiente, que leva minutos.
+# - report: a aba Relatorio (ler spec e log, auditar, gerar arquivos, OCR dos
+#   prints). Nao toca aparelho: nao pode atrasar o espelho nem ser atrasada
+#   por um `wda.start`, e um OCR de minutos so segura outro pedido de relatorio.
 LANE_INLINE = "inline"
 LANE_FAST = "fast"
 LANE_CAPTURE = "capture"
 LANE_SERVICES = "services"
 LANE_QUERY = "query"
 LANE_ENVIRONMENT = "environment"
-WORKER_LANES: tuple[str, ...] = (LANE_FAST, LANE_CAPTURE, LANE_SERVICES, LANE_QUERY, LANE_ENVIRONMENT)
+LANE_REPORT = "report"
+WORKER_LANES: tuple[str, ...] = (
+    LANE_FAST, LANE_CAPTURE, LANE_SERVICES, LANE_QUERY, LANE_ENVIRONMENT, LANE_REPORT,
+)
 LANES: tuple[str, ...] = (LANE_INLINE, *WORKER_LANES)
 
 DEFAULT_TIMEOUT_S = 15
@@ -137,6 +143,13 @@ METHODS: dict[str, dict[str, Any]] = {
     "passive.start": _spec(LANE_CAPTURE, 60),
     "passive.stop": _spec(LANE_CAPTURE, 75),
     "passive.status": _spec(),
+    # Relatorio de tagueamento. `audit` e `export` levam segundos (o board
+    # embute os prints); `import` compila o leitor de OCR na primeira vez, o que
+    # sozinho passa de um minuto.
+    "report.spec": _spec(LANE_REPORT),
+    "report.audit": _spec(LANE_REPORT, 60, progress=True),
+    "report.export": _spec(LANE_REPORT, 120, progress=True),
+    "report.import": _spec(LANE_REPORT, 600, progress=True),
 }
 
 # Tudo que o motor empurra sem `id`. O teste de deriva confere esta lista contra

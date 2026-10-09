@@ -277,6 +277,44 @@ final class WindowSnapshotTests: XCTestCase {
         try fotografar(janela(e, s, t).preferredColorScheme(.dark), tamanho: CGSize(width: 1280, height: 800), nome: "10-janela-terracota", escuro: true)
     }
 
+    // MARK: - Relatório
+
+    /// Relatório com o cenário das fixtures do motor, sem aparelho conectado.
+    private func ambienteDoRelatorio(comRelatorio: Bool = true) throws -> (AppState, EngineSession, ThemeManager) {
+        let (e, s, t) = ambiente(conectado: false, area: .report)
+        let dados = try XCTUnwrap(try resultadosDasFixtures()["report.audit"])
+        let relatorio = try JSONDecoder().decode(EngineDTO.ReportAuditPayload.self, from: dados).toModel()
+        e.reportSpec = relatorio.spec
+        e.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/Documents/log_obtido.json"))
+        if comRelatorio {
+            e.report = relatorio
+            e.selectedReportResultID = relatorio.results.first {
+                $0.status == .error && $0.flow == "investimentos" && $0.variation == "click:parcelas"
+            }?.id
+        }
+        return (e, s, t)
+    }
+
+    func testJanelaRelatorio() throws {
+        let (e, s, t) = try ambienteDoRelatorio()
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "12-relatorio-claro", tema: t)
+    }
+
+    func testJanelaRelatorioEscuro() throws {
+        let (e, s, t) = try ambienteDoRelatorio()
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "13-relatorio-escuro", escuro: true, tema: t)
+    }
+
+    func testJanelaRelatorioSpecAberta() throws {
+        let (e, s, t) = try ambienteDoRelatorio(comRelatorio: false)
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "14-relatorio-spec-claro", tema: t)
+    }
+
+    func testJanelaRelatorioVazio() throws {
+        let (e, s, t) = ambiente(conectado: false, area: .report)
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 980, height: 640), nome: "15-relatorio-vazio-claro", tema: t)
+    }
+
     func testJanelaPaletaSalvia() throws {
         let (e, s, t) = ambiente()
         e.selectedStepID = e.steps[1].id

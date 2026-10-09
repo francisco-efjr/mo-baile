@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 /// Exportações e cópias usadas pela barra acessória e pelos menus.
 ///
@@ -88,6 +89,59 @@ enum Exporters {
         save(jsonData, title: "Exportar Analytics (JSON)", fileName: "log_obtido.json", state: state)
     }
 
+    // MARK: - Relatório
+
+    /// Spec-modelo do tagueamento (`.json`).
+    static func chooseReportSpec() -> URL? {
+        choose(title: "Abrir Spec de Tagueamento", prompt: "Abrir", types: [.json])
+    }
+
+    /// Log exportado: `log_obtido.json` ou Logcat em texto.
+    static func chooseReportLog() -> URL? {
+        var tipos: [UTType] = [.json, .plainText]
+        if let log = UTType.log { tipos.append(log) }
+        return choose(title: "Escolher Log de Analytics", prompt: "Usar", types: tipos)
+    }
+
+    /// Pasta com um print por card do Figma.
+    static func chooseReportPrintsFolder() -> URL? {
+        choose(title: "Importar Prints do Figma", prompt: "Importar", directories: true,
+               message: "Escolha a pasta com um print por card de tagueamento. O texto é lido com o OCR do macOS.")
+    }
+
+    static func chooseReportExportFolder() -> URL? {
+        choose(title: "Exportar Relatório", prompt: "Exportar", directories: true, canCreateDirectories: true)
+    }
+
+    static func revealInFinder(_ path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    /// Abre no app padrão do sistema (navegador para HTML, editor para JSON).
+    static func openFile(_ path: String) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    private static func choose(
+        title: String,
+        prompt: String,
+        types: [UTType] = [],
+        directories: Bool = false,
+        canCreateDirectories: Bool = false,
+        message: String? = nil
+    ) -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = title
+        panel.prompt = prompt
+        panel.message = message ?? ""
+        panel.canChooseFiles = !directories
+        panel.canChooseDirectories = directories
+        panel.canCreateDirectories = canCreateDirectories
+        panel.allowsMultipleSelection = false
+        if !types.isEmpty { panel.allowedContentTypes = types }
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
     // MARK: - Execução
 
     /// Grava o log da execução num arquivo temporário e abre no editor padrão.
@@ -117,4 +171,9 @@ enum Exporters {
             state.statusMessage = "Não foi possível salvar \(url.lastPathComponent): \(error.localizedDescription)"
         }
     }
+}
+
+private extension UTType {
+    /// `.log` não tem tipo próprio no sistema; quando não há, fica de fora.
+    static var log: UTType? { UTType(filenameExtension: "log") }
 }

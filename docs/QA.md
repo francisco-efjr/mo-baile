@@ -2,16 +2,16 @@
 
 ## Estado atual
 
-Atualizado em 05/10/2026. Detalhes das correções, evidências e limites em
-[QA_2026-10-05.md](QA_2026-10-05.md).
+Atualizado em 08/10/2026, com a aba Relatório (3.2.0). Detalhes das correções
+de 05/10, evidências e limites em [QA_2026-10-05.md](QA_2026-10-05.md).
 
 | Suite | Onde | Testes | Precisa de |
 |---|---|---|---|
-| Motor e contrato RPC | `engine/tests` | 326 + 110 subtests aprovados | Python e sockets locais para integração |
-| Front nativo | `apps/MoBaile/Tests` | 120 aprovados; 10 skips | macOS com Swift; dispositivo para 2 casos |
+| Motor e contrato RPC | `engine/tests` | 423 + 133 subtests aprovados (88 do relatório) | Python e sockets locais para integração; OCR real só no macOS com `swiftc` |
+| Front nativo | `apps/MoBaile/Tests` | 197 executados, 0 falhas; 22 skips (snapshots sob demanda e casos com aparelho) | macOS com Swift |
 | UI Tkinter | `apps/tk-legacy/tests` | 18 aprovados | sessão gráfica |
 | Harness de QA | `qa/tests` | 11 aprovados | Python |
-| Fluxos de ponta a ponta | `qa/qa_fluxo*.py` | 119 verificações aprovadas | Python, openssl e sockets locais |
+| Fluxos de ponta a ponta | `qa/qa_fluxo*.py` | 145 verificações em 5 fluxos | Python, openssl e sockets locais |
 
 ```bash
 make check      # lint + bandit + suites Python
@@ -83,6 +83,9 @@ Isto precisa de aparelho e de olho humano:
 5. Fluxo gravado executando de ponta a ponta no aparelho.
 6. Aparência clara, escura e a troca automática ao anoitecer.
 7. Navegação completa por teclado e leitura por VoiceOver.
+8. OCR dos prints reais do Figma: o leitor de cards é coberto com linhas de
+   OCR sintéticas e o Vision com uma imagem gerada; a qualidade da leitura de
+   um print de verdade só se vê no rascunho e na lista de revisão.
 
 ## Roteiro de verificação manual
 
@@ -110,6 +113,13 @@ de ferramenta.
 
 **Encerramento.** Fechar o aplicativo com o proxy ligado e confirmar, de novo,
 que o aparelho ficou com a rede funcionando.
+
+**Relatório.** Sem aparelho, abrir Relatório, abrir uma spec real e auditar um
+`log_obtido.json` exportado: a conformidade e as divergências precisam bater com
+o `tag_audit` do bold-kepler para os mesmos arquivos. Depois, com a escuta de
+Analytics ligada, auditar "Eventos Capturados" sem exportar nada. Exportar e
+abrir o HTML e o board no Excalidraw. Importar uma pasta de prints e conferir a
+lista de revisão contra os cards do Figma.
 
 ## Convenções da suite
 

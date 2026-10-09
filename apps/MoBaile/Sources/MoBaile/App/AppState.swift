@@ -74,6 +74,82 @@ class AppState {
         }
     }
     
+    // --- Relatório (auditoria de tagueamento) ---
+    /// Spec-modelo aberta. A auditoria sempre relê o arquivo no motor: o que
+    /// vale é o que está no disco, inclusive ajuste feito à mão depois de abrir.
+    var reportSpec: ReportSpec? = nil
+    var reportLogSource: ReportLogSource = .session
+    /// Plataforma auditada; `nil` usa a da spec.
+    var reportPlatform: Platform? = nil
+    var report: AuditReport? = nil
+    var selectedReportResultID: ReportResult.ID? = nil
+    var selectedReportExtraID: ReportExtra.ID? = nil
+    var reportFilter: ReportFilter = .all
+    var reportFilterText: String = ""
+    var reportOperation: ReportOperation? = nil
+    /// Andamento que o motor emite (`$/progress`) na operação em curso.
+    var reportProgressMessage: String? = nil
+    var reportError: String? = nil
+    var reportLastExport: ReportExport? = nil
+    /// Importação recém-feita, aberta na sheet de revisão.
+    var reportImport: ReportImport? = nil
+
+    /// Plataforma que a próxima auditoria vai usar.
+    var reportEffectivePlatform: Platform? { reportPlatform ?? reportSpec?.plataforma }
+
+    var canRunReport: Bool {
+        guard reportSpec != nil, reportOperation == nil else { return false }
+        if case .session = reportLogSource { return !analyticsEvents.isEmpty }
+        return true
+    }
+
+    /// Linhas da tabela: filtro por status e busca da toolbar.
+    var filteredReportResults: [ReportResult] {
+        guard let report else { return [] }
+        let query = reportFilterText.lowercased()
+        return report.results.filter { result in
+            guard reportFilter.includes(result) else { return false }
+            guard !query.isEmpty else { return true }
+            return result.event.lowercased().contains(query)
+                || result.variation.lowercased().contains(query)
+                || result.cardTitle.lowercased().contains(query)
+                || result.section.lowercased().contains(query)
+                || result.divergences.lowercased().contains(query)
+                || (result.flowLabel ?? "").lowercased().contains(query)
+        }
+    }
+
+    /// Eventos fora da spec e alertas, com a mesma busca.
+    var filteredReportExtras: [ReportExtra] {
+        guard let report else { return [] }
+        let query = reportFilterText.lowercased()
+        guard !query.isEmpty else { return report.extras }
+        return report.extras.filter {
+            $0.event.lowercased().contains(query)
+                || $0.screenText.lowercased().contains(query)
+                || $0.detailText.lowercased().contains(query)
+        }
+    }
+
+    var selectedReportResult: ReportResult? {
+        guard let selectedReportResultID else { return nil }
+        return report?.results.first { $0.id == selectedReportResultID }
+    }
+
+    var selectedReportExtra: ReportExtra? {
+        guard let selectedReportExtraID else { return nil }
+        return report?.extras.first { $0.id == selectedReportExtraID }
+    }
+
+    /// Contagem da barra lateral: o que pede ação.
+    var reportBadgeCount: Int { report?.summary.needsAction ?? 0 }
+
+    /// A área atual filtra pela busca da toolbar (Rede, Analytics, Relatório).
+    /// Nas outras, a lupa leva à busca da hierarquia, no inspector.
+    var usesToolbarSearch: Bool {
+        workspaceTab == .report || (isDeviceConnected && workspaceTab != .pageObjects)
+    }
+
     // --- Metrics ---
     var fps: Int = 0
     var settleMs: Int = 0

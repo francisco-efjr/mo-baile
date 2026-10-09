@@ -45,15 +45,20 @@ enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
 }
 
 enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
-    case pageObjects, network, analytics
+    case pageObjects, network, analytics, report
     var id: String { rawValue }
     var displayName: String {
         switch self {
         case .pageObjects: return "Page Objects"
         case .network: return "Rede HTTP"
         case .analytics: return "Analytics"
+        case .report: return "Relatório"
         }
     }
+
+    /// O Relatório trabalha com arquivos (spec e log) e funciona sem aparelho;
+    /// as outras áreas precisam de um conectado.
+    var needsDevice: Bool { self != .report }
 }
 
 enum RunState: Equatable, Sendable {

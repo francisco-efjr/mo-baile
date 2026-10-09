@@ -85,6 +85,7 @@ struct AppSidebar: View {
         case .pageObjects: return appState.steps.count
         case .network: return appState.httpRequests.count
         case .analytics: return appState.analyticsEvents.count
+        case .report: return appState.reportBadgeCount
         }
     }
 
@@ -193,15 +194,17 @@ extension WorkspaceTab {
         case .pageObjects: return "chevron.left.forwardslash.chevron.right"
         case .network: return "network"
         case .analytics: return "chart.xyaxis.line"
+        case .report: return "checklist"
         }
     }
 
-    /// As áreas têm cor por categoria (flamingo, azul, verde).
+    /// As áreas têm cor por categoria (flamingo, azul, verde). O Relatório é a
+    /// auditoria do Analytics e fica na mesma categoria.
     func categoryColor(_ theme: any ThemeTokens) -> Color {
         switch self {
         case .pageObjects: return theme.cat1
         case .network: return theme.cat3
-        case .analytics: return theme.cat2
+        case .analytics, .report: return theme.cat2
         }
     }
 }

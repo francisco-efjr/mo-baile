@@ -12,22 +12,31 @@ Swift verificavel dos dois lados.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import io
 import json
 import pathlib
 import sys
+import tempfile
 import threading
+from typing import Any
 from unittest.mock import patch
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "engine" / "src"))
+# Cenario sintetico da aba Relatorio: o mesmo dos testes do motor, para a
+# fixture e a suite Python falarem do mesmo relatorio.
+sys.path.insert(0, str(REPO_ROOT / "engine" / "tests" / "unit"))
 
 from PIL import Image  # noqa: E402
+from relatorio_dados import SPEC, gravar  # noqa: E402
+from relatorio_ocr import CARD_CHECKOUT, CARD_INTERACTION  # noqa: E402
 
 from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
 from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
+from mobaile.services.report import ReportService  # noqa: E402
 
 HIERARCHY_XML = (
     '<hierarchy rotation="0">'
@@ -125,6 +134,61 @@ def cancelamento() -> dict:
     return resposta
 
 
+# Onde os arquivos do relatorio "moram" na fixture. O motor grava de verdade
+# numa pasta temporaria; o caminho dela muda a cada execucao e de maquina para
+# maquina, entao sai da fixture trocado por este.
+PASTA_RELATORIO = "/Users/qa/Documents/Mo baile/Demanda"
+PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+
+class _OcrFalso:
+    """OCR com as linhas sinteticas dos testes: o Vision so existe no macOS."""
+
+    def read(self, paths):
+        cards = [CARD_INTERACTION, CARD_CHECKOUT]
+        return {str(p): cards[i % 2] for i, p in enumerate(paths)}
+
+
+def _trocar_caminhos(valor: Any, de: tuple[str, ...], para: str) -> Any:
+    if isinstance(valor, str):
+        for origem in de:
+            valor = valor.replace(origem, para)
+        return valor
+    if isinstance(valor, list):
+        return [_trocar_caminhos(v, de, para) for v in valor]
+    if isinstance(valor, dict):
+        return {k: _trocar_caminhos(v, de, para) for k, v in valor.items()}
+    return valor
+
+
+def relatorio(server: EngineServer, call) -> dict:
+    """`report.*` pelo servidor de verdade, sobre arquivos de verdade."""
+    with tempfile.TemporaryDirectory() as tmp:
+        pasta = pathlib.Path(tmp).resolve()
+        server.report = ReportService(ocr=_OcrFalso(), documents_dir=pasta / "Mo baile")
+        prints = pasta / "prints"
+        prints.mkdir()
+        # Bytes fixos, e nao `Image.save`: o encoder do Pillow muda entre
+        # versoes, e o tamanho do board exportado entra na fixture.
+        (prints / "home.png").write_bytes(base64.b64decode(PNG_1X1))
+        (prints / "simulacao.png").write_bytes(b"nao e imagem")
+        cards = [dict(SPEC["cards"][0], print="home.png"), *SPEC["cards"][1:]]
+        spec_path, log_path = gravar(pasta, spec={**SPEC, "prints_dir": "prints", "cards": cards})
+
+        saida = {
+            "report.spec": call("report.spec", {"path": str(spec_path)}),
+            "report.audit": call("report.audit", {
+                "spec_path": str(spec_path), "source": "file", "log_path": str(log_path),
+            }),
+            "report.export": call("report.export", {"directory": str(pasta / "saida")}),
+            "report.import": call("report.import", {
+                "prints_dir": str(prints), "projeto": "Demanda", "platform": "android",
+            }),
+            "erro_report_sessao_vazia": call("report.audit", {"spec_path": str(spec_path), "source": "session"}),
+        }
+        return _trocar_caminhos(saida, (str(pasta), tmp), PASTA_RELATORIO)
+
+
 def build() -> dict:
     out = io.StringIO()
     server = EngineServer(out=out)
@@ -211,6 +275,8 @@ def build() -> dict:
         raw_log="Logging event: screen_view", platform="android",
     )
     fixtures["notif_analytics.event"] = protocol.notification("analytics.event", analytics.to_dict())
+
+    fixtures.update(relatorio(server, call))
 
     server.shutdown()
     fixtures["erro_request_cancelled"] = cancelamento()

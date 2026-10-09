@@ -287,14 +287,14 @@ struct RunAutomationButton: View {
 
 // MARK: - Busca e inspector
 
-/// Em Page Objects a busca é a da hierarquia, que fica no inspector. Em Rede e
-/// Analytics a toolbar ganha o campo de filtro (`.searchable`) no lugar deste
-/// botão.
+/// Em Page Objects a busca é a da hierarquia, que fica no inspector. Em Rede,
+/// Analytics e Relatório a toolbar ganha o campo de filtro (`.searchable`) no
+/// lugar deste botão.
 struct HierarchySearchButton: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        if !(appState.isDeviceConnected && appState.workspaceTab != .pageObjects) {
+        if !appState.usesToolbarSearch {
             Button {
                 appState.inspectorVisible = true
                 appState.hierarchySearchFocusRequest += 1

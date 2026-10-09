@@ -69,6 +69,17 @@ final class ToolbarLayoutTests: XCTestCase {
         XCTAssertEqual(janela.title, "Sem dispositivo")
     }
 
+    /// O Relatório trabalha com arquivos: sem aparelho, a janela mostra a aba,
+    /// e não o diagnóstico de "Sem dispositivo".
+    func testRelatorioFuncionaSemAparelho() throws {
+        let (estado, sessao, tema) = ambiente(aparelho: nil)
+        estado.workspaceTab = .report
+        let (janela, _) = try itensDaToolbar(estado, sessao, tema)
+        defer { janela.close() }
+        XCTAssertEqual(janela.title, "Relatório")
+        XCTAssertEqual(janela.subtitle, "Nenhuma spec")
+    }
+
     func testTituloAcompanhaAArea() throws {
         let (estado, sessao, tema) = ambiente()
         estado.workspaceTab = .network

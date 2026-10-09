@@ -26,6 +26,13 @@ credenciais redigidas.
 **Captura de tagueamento.** Eventos de Firebase Analytics em tempo real, via
 logcat no Android e Unified Logging no iOS.
 
+**Relatório de tagueamento.** Audita os eventos capturados (ou um log
+exportado) contra a spec dos cards do Figma, variação por variação e parâmetro
+por parâmetro, e exporta board Excalidraw, HTML, Markdown e TSV. Gera o
+rascunho da spec a partir dos prints com o OCR do macOS. Funciona sem
+aparelho. Núcleo: o `tag_audit`
+([ADR 0003](docs/adr/0003-relatorio-tagueamento.md)).
+
 ## Estrutura
 
 ```

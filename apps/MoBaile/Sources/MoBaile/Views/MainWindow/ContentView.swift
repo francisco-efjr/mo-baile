@@ -32,7 +32,7 @@ struct ContentView: View {
                 .modifier(ToolbarTitle(title: windowTitle, subtitle: windowSubtitle))
                 .toolbar { MainToolbar(title: windowTitle, subtitle: windowSubtitle) }
                 .inspector(isPresented: $state.inspectorVisible) {
-                    InspectorPane()
+                    InspectorContent()
                         .inspectorColumnWidth(
                             min: DesignMetrics.Widths.inspectorMin,
                             ideal: DesignMetrics.Widths.inspectorIdeal,
@@ -81,10 +81,12 @@ struct ContentView: View {
 
     /// O título mostra a seção, nunca o nome do app.
     private var windowTitle: String {
-        appState.isDeviceConnected ? appState.workspaceTab.displayName : "Sem dispositivo"
+        if !appState.workspaceTab.needsDevice { return appState.workspaceTab.displayName }
+        return appState.isDeviceConnected ? appState.workspaceTab.displayName : "Sem dispositivo"
     }
 
     private var windowSubtitle: String {
+        if appState.workspaceTab == .report { return reportSubtitle }
         guard appState.isDeviceConnected else { return "Nenhum dispositivo" }
         switch appState.workspaceTab {
         case .pageObjects:
@@ -100,7 +102,17 @@ struct ContentView: View {
         case .analytics:
             let n = appState.analyticsEvents.count
             return n == 1 ? "1 evento" : "\(n) eventos"
+        case .report:
+            return reportSubtitle
         }
+    }
+
+    private var reportSubtitle: String {
+        if let report = appState.report {
+            let taxa = report.summary.complianceRate.formatted(.number.precision(.fractionLength(1)))
+            return "\(report.spec.projeto) · \(report.summary.total) validações · \(taxa)% conforme"
+        }
+        return appState.reportSpec?.projeto ?? "Nenhuma spec"
     }
 
     // MARK: - Confirmações
@@ -158,7 +170,11 @@ struct DetailColumn: View {
         let theme = themeManager.current
         VStack(spacing: 0) {
             Group {
-                if appState.isDeviceConnected {
+                if !appState.workspaceTab.needsDevice {
+                    // Relatório ocupa a coluna inteira: o espelho não ajuda a
+                    // ler uma auditoria, e a aba funciona sem aparelho.
+                    ReportView()
+                } else if appState.isDeviceConnected {
                     connected
                 } else {
                     NoDeviceView()
@@ -195,8 +211,8 @@ struct DetailColumn: View {
     }
 }
 
-/// Busca da toolbar: filtra a tabela em Rede e Analytics. Em Page Objects a
-/// lupa da toolbar leva à busca da hierarquia, no inspector.
+/// Busca da toolbar: filtra a tabela em Rede, Analytics e Relatório. Em Page
+/// Objects a lupa da toolbar leva à busca da hierarquia, no inspector.
 private struct SectionSearch: ViewModifier {
     @Environment(AppState.self) private var appState
 
@@ -215,6 +231,13 @@ private struct SectionSearch: ViewModifier {
                 isPresented: $state.toolbarSearchPresented,
                 placement: .toolbar,
                 prompt: "Filtrar eventos e tags"
+            )
+        } else if appState.workspaceTab == .report {
+            content.searchable(
+                text: $state.reportFilterText,
+                isPresented: $state.toolbarSearchPresented,
+                placement: .toolbar,
+                prompt: "Filtrar evento, variação ou divergência"
             )
         } else {
             content
@@ -240,6 +263,20 @@ private struct ToolbarTitle: ViewModifier {
             content
                 .navigationTitle(title)
                 .navigationSubtitle(subtitle)
+        }
+    }
+}
+
+/// O inspector mostra o detalhe da seleção da área: a hierarquia e os
+/// atributos do aparelho, ou, no Relatório, o card do Figma da validação.
+private struct InspectorContent: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        if appState.workspaceTab == .report {
+            ReportCardInspector()
+        } else {
+            InspectorPane()
         }
     }
 }

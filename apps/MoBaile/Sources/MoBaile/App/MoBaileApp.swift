@@ -71,6 +71,22 @@ struct MoBaileCommands: Commands {
             .disabled(appState.actionsCode.isEmpty && appState.locatorsCode.isEmpty)
         }
         CommandGroup(replacing: .importExport) {
+            Button("Abrir Spec de Tagueamento…") {
+                appState.workspaceTab = .report
+                appState.selectedStepID = nil
+                ReportActions.openSpec(session)
+            }
+            .keyboardShortcut("o", modifiers: .command)
+            .disabled(appState.reportOperation != nil)
+            Button("Importar Prints do Figma…") {
+                appState.workspaceTab = .report
+                appState.selectedStepID = nil
+                ReportActions.importPrints(appState, session)
+            }
+            .disabled(appState.reportOperation != nil)
+            Button("Exportar Relatório…") { ReportActions.exportTo(session) }
+                .disabled(appState.report == nil || appState.reportOperation != nil)
+            Divider()
             Button("Exportar HAR…") { Exporters.exportHAR(appState) }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(appState.httpRequests.isEmpty)
@@ -202,10 +218,10 @@ struct MoBaileCommands: Commands {
         }
     }
 
-    /// ⌘F: em Rede e Analytics, a busca da toolbar; nas outras, a da
-    /// hierarquia, no inspector.
+    /// ⌘F: em Rede, Analytics e Relatório, a busca da toolbar; nas outras, a
+    /// da hierarquia, no inspector.
     private func buscar() {
-        if appState.isDeviceConnected && appState.workspaceTab != .pageObjects {
+        if appState.usesToolbarSearch {
             appState.toolbarSearchPresented = true
         } else {
             appState.inspectorVisible = true

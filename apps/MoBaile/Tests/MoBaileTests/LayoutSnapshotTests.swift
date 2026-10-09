@@ -36,6 +36,31 @@ final class LayoutSnapshotTests: XCTestCase {
         try png.write(to: URL(fileURLWithPath: destino).appendingPathComponent("\(nome).png"))
     }
 
+    /// Barra, resumo e inspector do Relatório (a tabela é do AppKit e não sai
+    /// no `ImageRenderer`; a janela inteira fica em `WindowSnapshotTests`).
+    func testDesenhaPartesDoRelatorio() throws {
+        let (estado, sessao, tema) = ambiente()
+        let dados = try XCTUnwrap(try resultadosDasFixtures()["report.audit"])
+        let relatorio = try JSONDecoder().decode(EngineDTO.ReportAuditPayload.self, from: dados).toModel()
+        estado.workspaceTab = .report
+        estado.reportSpec = relatorio.spec
+        estado.report = relatorio
+        estado.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/Documents/log_obtido_android_investimentos.json"))
+        estado.selectedReportResultID = relatorio.results.first { $0.cardIndex == 0 }?.id
+        try desenhar(
+            VStack(spacing: 0) {
+                ReportToolbar()
+                ReportSummaryBar(report: relatorio)
+            }
+            .environment(estado).environment(sessao).environment(tema),
+            largura: 1040, altura: 150, nome: "relatorio-barra"
+        )
+        try desenhar(
+            ReportCardInspector().environment(estado).environment(sessao).environment(tema),
+            largura: 280, altura: 420, nome: "relatorio-inspector"
+        )
+    }
+
     func testDesenhaJanelaInteira() throws {
         let (estado, sessao, tema) = ambiente()
         try desenhar(
