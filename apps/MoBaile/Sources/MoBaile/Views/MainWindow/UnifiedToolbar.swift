@@ -254,6 +254,7 @@ struct ScrcpyButton: View {
 struct RunAutomationButton: View {
     @Environment(AppState.self) private var appState
     @Environment(EngineSession.self) private var session
+    @Environment(\.controlActiveState) private var estadoDaJanela
 
     var body: some View {
         Button {
@@ -261,7 +262,7 @@ struct RunAutomationButton: View {
         } label: {
             Label("Rodar Automação", systemImage: "play.fill")
         }
-        .prominentGlassButton()
+        .prominentGlassButton(Self.podeRodar(appState) && estadoDaJanela != .inactive)
         .disabled(!Self.podeRodar(appState))
         .help(dica)
     }
@@ -322,9 +323,13 @@ struct InspectorToggleButton: View {
 
 extension View {
     /// Botão primário tingido: vidro tingido no macOS 26, preenchido antes.
+    /// Desabilitado ou com a janela inativa, volta ao estilo padrão: a cápsula
+    /// perde o tom, o ícone continua branco e o botão some no tema claro (D2).
     @ViewBuilder
-    func prominentGlassButton() -> some View {
-        if #available(macOS 26.0, *) {
+    func prominentGlassButton(_ ativo: Bool = true) -> some View {
+        if !ativo {
+            self
+        } else if #available(macOS 26.0, *) {
             self.buttonStyle(.glassProminent)
         } else {
             self.buttonStyle(.borderedProminent)

@@ -10,6 +10,22 @@ prioridade.
 **P0** quebra uso ou confiança e vem primeiro. **P1** é o que separa uma
 ferramenta de um app de Mac. **P2** amplia o alcance.
 
+## Entregue na 3.3.1
+
+| Item | O que mudou |
+|---|---|
+| D1 + Q4 | Largura mínima com barra lateral e inspector: 1.357 pt (Page Objects), 1.337 (Rede, Analytics), 1.176 (Relatório). O `HSplitView` interno somava 529 pt e virou `HStack` com divisória própria. Teste com teto de 1.440 pt. |
+| D2 | Rodar no estilo padrão quando desabilitado ou com a janela inativa. |
+
+**O que sobra do D1:** a `NavigationSplitView` conta em dobro a coluna de fora
+quando há um `.inspector` aninhado. Com o inspector no detalhe, a barra lateral
+conta duas vezes (+248 pt); aplicado na `NavigationSplitView`, é o inspector que
+conta duas vezes (+280 pt). O conteúdo das colunas e as larguras declaradas não
+mudam esse número; foi medido com colunas vazias. Para chegar a cerca de
+1.100 pt, o inspector precisa deixar de ser um split aninhado: um painel próprio
+no detalhe, com divisória arrastável e o botão de mostrar e ocultar na toolbar
+principal.
+
 ## Já entregue nesta rodada (3.3.0)
 
 | Item | O que mudou |

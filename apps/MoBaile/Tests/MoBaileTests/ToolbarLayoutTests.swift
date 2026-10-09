@@ -165,4 +165,52 @@ final class ToolbarLayoutTests: XCTestCase {
         estado.selectedDevice = nil
         XCTAssertFalse(RunAutomationButton.podeRodar(estado), "sem aparelho não roda")
     }
+
+    // MARK: - Largura mínima (D1, Q4)
+
+    /// Mede a largura mínima que a janela aceita com barra lateral e inspector
+    /// abertos. O mínimo declarado (980) não dizia nada: a soma das colunas
+    /// chegava a 1.885 pt e, numa janela menor, o conteúdo era desenhado nessa
+    /// largura e cortado nas bordas (sem barra lateral nem inspector à vista).
+    ///
+    /// O HSplitView interno respondia por 529 pt e saiu. Sobram 248 pt que a
+    /// NavigationSplitView soma em dobro quando há um `.inspector` aninhado
+    /// (a barra lateral conta duas vezes; com o inspector por fora, é ele que
+    /// conta duas vezes). O teto é a tela do MacBook Air de 13" (1.440 pt).
+    private func larguraMinima(_ estado: AppState, _ sessao: EngineSession, _ tema: ThemeManager) throws -> CGFloat {
+        let controller = NSHostingController(
+            rootView: ContentView().environment(estado).environment(sessao).environment(tema)
+        )
+        controller.sceneBridgingOptions = [.toolbars, .title]
+        controller.sizingOptions = [.minSize]
+        let janela = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered, defer: false
+        )
+        janela.isReleasedWhenClosed = false
+        janela.toolbarStyle = .unified
+        janela.contentViewController = controller
+        janela.orderFront(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+        defer { janela.close() }
+        guard janela.toolbar != nil else {
+            throw XCTSkip("O SwiftUI não instalou a toolbar neste ambiente (sem sessão gráfica?)")
+        }
+        return janela.contentMinSize.width
+    }
+
+    func testJanelaCabeNumMacBookEmTodasAsAreas() throws {
+        var medidas: [String] = []
+        for aba in WorkspaceTab.allCases {
+            let (estado, sessao, tema) = ambiente()
+            estado.workspaceTab = aba
+            estado.sidebarVisibility = .all
+            estado.inspectorVisible = true
+            let largura = try larguraMinima(estado, sessao, tema)
+            medidas.append("\(aba)=\(Int(largura))")
+            XCTAssertLessThanOrEqual(largura, 1440, "\(aba): mínimo \(largura) pt com barra lateral e inspector")
+        }
+        print("LARGURA MINIMA: \(medidas.joined(separator: " "))")
+    }
 }

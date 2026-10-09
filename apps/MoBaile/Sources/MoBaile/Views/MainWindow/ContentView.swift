@@ -192,22 +192,78 @@ struct DetailColumn: View {
         let compacto = appState.workspaceTab != .pageObjects
         let mostraWorkspace = appState.workspaceVisible || !appState.mirrorVisible
 
-        HSplitView {
+        // HStack com divisória própria, e não HSplitView: dentro da
+        // NavigationSplitView o NSSplitView aninhado somava 529 pt à largura
+        // mínima da janela (D1). A largura do espelho é a que a pessoa arrastou,
+        // guardada por cena e limitada ao mínimo e ao máximo do modo atual.
+        HStack(spacing: 0) {
             if appState.mirrorVisible {
+                let limites = compacto
+                    ? DesignMetrics.Widths.mirrorCompactMin...DesignMetrics.Widths.mirrorCompactMax
+                    : DesignMetrics.Widths.mirrorMin...DesignMetrics.Widths.mirrorMax
+                let largura = CGFloat(compacto ? larguraEspelhoCompacto : larguraEspelho)
+                    .clamped(to: limites)
                 MirrorPane(compact: compacto && mostraWorkspace)
+                    // Com folga fica na largura arrastada; sem folga cede até o
+                    // mínimo antes de a janela crescer.
                     .frame(
-                        minWidth: compacto ? DesignMetrics.Widths.mirrorCompactMin : DesignMetrics.Widths.mirrorMin,
-                        idealWidth: compacto ? DesignMetrics.Widths.mirrorCompactIdeal : DesignMetrics.Widths.mirrorIdeal,
-                        maxWidth: mostraWorkspace
-                            ? (compacto ? DesignMetrics.Widths.mirrorCompactMax : DesignMetrics.Widths.mirrorMax)
-                            : .infinity
+                        minWidth: limites.lowerBound,
+                        idealWidth: largura,
+                        maxWidth: mostraWorkspace ? largura : .infinity
                     )
+                if mostraWorkspace {
+                    PaneDivider(largura: largura, limites: limites) { nova in
+                        if compacto { larguraEspelhoCompacto = nova } else { larguraEspelho = nova }
+                    }
+                }
             }
             if mostraWorkspace {
                 WorkspacePane()
                     .frame(minWidth: DesignMetrics.Widths.workspaceMin, maxWidth: .infinity)
             }
         }
+    }
+
+    @SceneStorage("larguraEspelho") private var larguraEspelho = Double(DesignMetrics.Widths.mirrorIdeal)
+    @SceneStorage("larguraEspelhoCompacto") private var larguraEspelhoCompacto = Double(DesignMetrics.Widths.mirrorCompactIdeal)
+}
+
+/// Divisória vertical arrastável entre o espelho e o workspace: linha de 1 pt
+/// com área de toque de 7 pt e o cursor de redimensionar, como a do NSSplitView.
+private struct PaneDivider: View {
+    @Environment(ThemeManager.self) private var themeManager
+    let largura: CGFloat
+    let limites: ClosedRange<CGFloat>
+    let mudou: (Double) -> Void
+
+    @State private var inicio: CGFloat?
+
+    var body: some View {
+        Rectangle()
+            .fill(themeManager.current.separator)
+            .frame(width: 1)
+            .padding(.horizontal, 3)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -3)
+            .onHover { dentro in
+                if dentro { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { arraste in
+                        let base = inicio ?? largura
+                        if inicio == nil { inicio = largura }
+                        mudou(Double((base + arraste.translation.width).clamped(to: limites)))
+                    }
+                    .onEnded { _ in inicio = nil }
+            )
+            .accessibilityHidden(true)
+    }
+}
+
+private extension Comparable {
+    func clamped(to limites: ClosedRange<Self>) -> Self {
+        min(max(self, limites.lowerBound), limites.upperBound)
     }
 }
 

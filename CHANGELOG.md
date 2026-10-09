@@ -5,6 +5,31 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.3.1] - 2026-10-09
+
+Os P0 de interface da [revisão de produto](docs/MELHORIAS_2026-10-09.md):
+D1, D2 e Q4.
+
+### Corrigido
+
+- **A janela cabe num MacBook (D1):** com barra lateral e inspector abertos, a
+  largura mínima caiu de 1.885 para 1.357 pt em Page Objects, de 1.865 para
+  1.337 em Rede e Analytics, e ficou em 1.176 no Relatório. Antes, numa
+  janela menor que isso, o conteúdo era desenhado na largura mínima e cortado
+  nas bordas, e a barra lateral e o inspector sumiam. O `HSplitView` entre
+  espelho e workspace virou um `HStack` com divisória arrastável própria, e a
+  largura do espelho fica guardada por janela. O espelho cede até o mínimo antes
+  de a janela crescer.
+- **Rodar visível (D2):** desabilitado ou com a janela inativa, o botão usa o
+  estilo padrão. A cápsula tingida sem tom deixava o play branco sobre fundo
+  claro.
+
+### Testes
+
+- `ToolbarLayoutTests.testJanelaCabeNumMacBookEmTodasAsAreas` (Q4) mede a
+  largura mínima nas quatro áreas com barra lateral e inspector. O teto é
+  1.440 pt, a tela do MacBook Air de 13".
+
 ## [3.3.0] - 2026-10-09
 
 Rodada de melhorias de 09/10: três pedidas, os defeitos que o catálogo de telas
