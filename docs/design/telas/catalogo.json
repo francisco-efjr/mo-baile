@@ -1,0 +1,205 @@
+{
+  "telas" : [
+    {
+      "claro" : "01-splash-claro.png",
+      "conferir" : "Mascote, título, barra de progresso no destaque, texto de boot",
+      "escuro" : "01-splash-escuro.png",
+      "id" : "01-splash",
+      "titulo" : "Splash de abertura"
+    },
+    {
+      "claro" : "02-sem-dispositivo-procurando-claro.png",
+      "conferir" : "Estado vazio enquanto o motor ainda não respondeu ao diagnóstico",
+      "escuro" : "02-sem-dispositivo-procurando-escuro.png",
+      "id" : "02-sem-dispositivo-procurando",
+      "titulo" : "Sem dispositivo, procurando"
+    },
+    {
+      "claro" : "02b-sem-dispositivo-diagnostico-claro.png",
+      "conferir" : "Cartões iOS e Android com checagens reais, ações sugeridas, rodapé do último scan",
+      "escuro" : "02b-sem-dispositivo-diagnostico-escuro.png",
+      "id" : "02b-sem-dispositivo-diagnostico",
+      "titulo" : "Sem dispositivo, diagnóstico medido"
+    },
+    {
+      "claro" : "03-page-objects-inicial-claro.png",
+      "conferir" : "Espelho, editores vazios, inspector com a hierarquia, toolbar completa",
+      "escuro" : "03-page-objects-inicial-escuro.png",
+      "id" : "03-page-objects-inicial",
+      "titulo" : "Page Objects, aparelho conectado sem passos"
+    },
+    {
+      "claro" : "03b-page-objects-passo-selecionado-claro.png",
+      "conferir" : "Passos na barra lateral, código do passo destacado, subtítulo \"Passo N de M\"",
+      "escuro" : "03b-page-objects-passo-selecionado-escuro.png",
+      "id" : "03b-page-objects-passo-selecionado",
+      "titulo" : "Page Objects com passos, um selecionado"
+    },
+    {
+      "claro" : "03c-page-objects-lado-a-lado-claro.png",
+      "conferir" : "Ações e locators divididos, numeração, realce Python",
+      "escuro" : "03c-page-objects-lado-a-lado-escuro.png",
+      "id" : "03c-page-objects-lado-a-lado",
+      "titulo" : "Page Objects, editores lado a lado"
+    },
+    {
+      "claro" : "03d-modo-zen-claro.png",
+      "conferir" : "Sem barra lateral e sem inspector: só espelho e workspace",
+      "escuro" : "03d-modo-zen-escuro.png",
+      "id" : "03d-modo-zen",
+      "titulo" : "Modo Zen"
+    },
+    {
+      "claro" : "04-rede-vazia-claro.png",
+      "conferir" : "Barra acessória, estado vazio com a ação de iniciar",
+      "escuro" : "04-rede-vazia-escuro.png",
+      "id" : "04-rede-vazia",
+      "titulo" : "Rede HTTP sem tráfego"
+    },
+    {
+      "claro" : "04b-rede-detalhe-post-claro.png",
+      "conferir" : "Cores de método e status, Request e Response lado a lado, JSON formatado",
+      "escuro" : "04b-rede-detalhe-post-escuro.png",
+      "id" : "04b-rede-detalhe-post",
+      "titulo" : "Rede HTTP, requisição POST 201"
+    },
+    {
+      "claro" : "04c-rede-tunel-https-claro.png",
+      "conferir" : "Estado de túnel HTTPS no lugar do corpo",
+      "escuro" : "04c-rede-tunel-https-escuro.png",
+      "id" : "04c-rede-tunel-https",
+      "titulo" : "Rede HTTP, túnel CONNECT"
+    },
+    {
+      "claro" : "04d-rede-erro-422-claro.png",
+      "conferir" : "Cor 4xx igual na tabela e no detalhe, corpo do erro",
+      "escuro" : "04d-rede-erro-422-escuro.png",
+      "id" : "04d-rede-erro-422",
+      "titulo" : "Rede HTTP, erro 422"
+    },
+    {
+      "claro" : "05-analytics-vazio-claro.png",
+      "conferir" : "Origem do tagueamento no iOS, estado vazio com Iniciar Escuta",
+      "escuro" : "05-analytics-vazio-escuro.png",
+      "id" : "05-analytics-vazio",
+      "titulo" : "Analytics sem eventos"
+    },
+    {
+      "claro" : "05b-analytics-evento-claro.png",
+      "conferir" : "Tabela, Parâmetros e Log Bruto",
+      "escuro" : "05b-analytics-evento-escuro.png",
+      "id" : "05b-analytics-evento",
+      "titulo" : "Analytics, evento selecionado"
+    },
+    {
+      "claro" : "06-relatorio-vazio-claro.png",
+      "conferir" : "Funciona sem aparelho; duas ações (importar prints, abrir spec)",
+      "escuro" : "06-relatorio-vazio-escuro.png",
+      "id" : "06-relatorio-vazio",
+      "titulo" : "Relatório sem spec"
+    },
+    {
+      "claro" : "06b-relatorio-spec-aberta-claro.png",
+      "conferir" : "Cartão com o resumo da spec e o botão Auditar",
+      "escuro" : "06b-relatorio-spec-aberta-escuro.png",
+      "id" : "06b-relatorio-spec-aberta",
+      "titulo" : "Relatório, spec aberta"
+    },
+    {
+      "claro" : "06c-relatorio-divergencia-claro.png",
+      "conferir" : "Conformidade, filtros, tabela, validação parâmetro a parâmetro, bloco, card no inspector",
+      "escuro" : "06c-relatorio-divergencia-escuro.png",
+      "id" : "06c-relatorio-divergencia",
+      "titulo" : "Relatório, variação divergente"
+    },
+    {
+      "claro" : "06d-relatorio-fora-da-spec-claro.png",
+      "conferir" : "Tabela de eventos sem card e alertas, detalhe explicando o que conferir",
+      "escuro" : "06d-relatorio-fora-da-spec-escuro.png",
+      "id" : "06d-relatorio-fora-da-spec",
+      "titulo" : "Relatório, fora da spec e alertas"
+    },
+    {
+      "claro" : "06e-relatorio-revisao-importacao-claro.png",
+      "conferir" : "Dúvidas do OCR por card, Usar Esta Spec como botão padrão",
+      "escuro" : "06e-relatorio-revisao-importacao-escuro.png",
+      "id" : "06e-relatorio-revisao-importacao",
+      "titulo" : "Relatório, revisão da importação (sheet)"
+    },
+    {
+      "claro" : "07-janela-minima-claro.png",
+      "conferir" : "Toolbar manda o excedente para o menu », colunas no mínimo, nada cortado",
+      "escuro" : "07-janela-minima-escuro.png",
+      "id" : "07-janela-minima",
+      "titulo" : "Janela no tamanho mínimo (980×640)"
+    },
+    {
+      "claro" : "08-estrutura-do-fluxo-claro.png",
+      "conferir" : "Tabela ordenável dos passos, Copiar resumo, Fechar",
+      "escuro" : "08-estrutura-do-fluxo-escuro.png",
+      "id" : "08-estrutura-do-fluxo",
+      "titulo" : "Estrutura do fluxo (sheet)"
+    },
+    {
+      "claro" : "08b-execucao-rodando-claro.png",
+      "conferir" : "Selo, progresso, passo ativo, terminal, Interromper destrutivo e nunca padrão",
+      "escuro" : "08b-execucao-rodando-escuro.png",
+      "id" : "08b-execucao-rodando",
+      "titulo" : "Executar fluxo, em andamento (sheet)"
+    },
+    {
+      "claro" : "08c-execucao-sucesso-claro.png",
+      "conferir" : "Todos os passos OK, Concluir habilitado",
+      "escuro" : "08c-execucao-sucesso-escuro.png",
+      "id" : "08c-execucao-sucesso",
+      "titulo" : "Executar fluxo, concluído (sheet)"
+    },
+    {
+      "claro" : "08d-execucao-falha-claro.png",
+      "conferir" : "Passo que falhou marcado, linha FAIL no terminal",
+      "escuro" : "08d-execucao-falha-escuro.png",
+      "id" : "08d-execucao-falha",
+      "titulo" : "Executar fluxo, falha no passo 5 (sheet)"
+    },
+    {
+      "claro" : "09-correlacao-claro.png",
+      "conferir" : "Último passo, requisições e eventos na janela do toque, gerar asserção",
+      "escuro" : "09-correlacao-escuro.png",
+      "id" : "09-correlacao",
+      "titulo" : "Correlação (popover)"
+    },
+    {
+      "claro" : "10-ajustes-geral-claro.png",
+      "conferir" : "Formulário nativo, aparência, seletor padrão, espelho automático",
+      "escuro" : "10-ajustes-geral-escuro.png",
+      "id" : "10-ajustes-geral",
+      "titulo" : "Ajustes › Geral"
+    },
+    {
+      "claro" : "10b-ajustes-conexoes-claro.png",
+      "conferir" : "Endereços do motor só para leitura",
+      "escuro" : "10b-ajustes-conexoes-escuro.png",
+      "id" : "10b-ajustes-conexoes",
+      "titulo" : "Ajustes › Conexões"
+    },
+    {
+      "claro" : "10c-ajustes-paletas-claro.png",
+      "conferir" : "Galeria das nove paletas com prévia e checagens de contraste",
+      "escuro" : "10c-ajustes-paletas-escuro.png",
+      "id" : "10c-ajustes-paletas",
+      "titulo" : "Ajustes › Paletas"
+    },
+    {
+      "conferir" : "Paleta impõe a aparência; barra lateral na cor da paleta",
+      "id" : "11-paleta-terracota",
+      "titulo" : "Janela com a paleta Terracota (escura)",
+      "unica" : "11-paleta-terracota.png"
+    },
+    {
+      "conferir" : "Mesma estrutura com outra identidade",
+      "id" : "11b-paleta-salvia",
+      "titulo" : "Janela com a paleta Sálvia & Palha (clara)",
+      "unica" : "11b-paleta-salvia.png"
+    }
+  ]
+}
