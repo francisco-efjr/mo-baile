@@ -111,6 +111,7 @@ em proxy aberto para quem estiver na mesma rede.
 | [qa/README.md](qa/README.md) | Harness de ponta a ponta dos quatro fluxos |
 | [ESTADO_ATUAL.md](docs/ESTADO_ATUAL.md) | O que funciona, o que depende de aparelho e o que é fachada |
 | [design/design-system/](docs/design/design-system/) | Design system 3.0 (Liquid Glass): tokens, componentes, protótipo e notas por tela. Decisões em [ADR 0002](docs/adr/0002-redesenho-liquid-glass.md) |
+| [design/paletas/](docs/design/paletas/) | Paletas alternativas (galeria do design, `paletas-data.js` e `palettes.css`, que os testes usam como referência) |
 | [design/](docs/design/) | Especificação visual e handoff anteriores |
 | [research/](docs/research/) | Estudo do HTTP Toolkit e notas do interceptador |
 

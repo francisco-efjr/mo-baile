@@ -182,6 +182,8 @@ final class WindowSnapshotTests: XCTestCase {
         janela.toolbarStyle = .unified
         janela.contentViewController = controller
         janela.setContentSize(tamanho)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
         janela.makeKeyAndOrderFront(nil)
         RunLoop.main.run(until: Date().addingTimeInterval(1.6))
 
@@ -258,5 +260,27 @@ final class WindowSnapshotTests: XCTestCase {
             SettingsView().environment(e).environment(s).environment(t),
             tamanho: CGSize(width: 520, height: 260), nome: "08-ajustes-claro", tema: t
         )
+    }
+
+    func testGaleriaDePaletas() throws {
+        let (e, s, t) = ambiente()
+        t.setPalette("salvia")
+        try fotografar(
+            PaletteGallery().environment(e).environment(s).environment(t),
+            tamanho: CGSize(width: 680, height: 1400), nome: "09-galeria-paletas"
+        )
+    }
+
+    func testJanelaPaletaTerracota() throws {
+        let (e, s, t) = ambiente(area: .network)
+        t.setPalette("wearstler")
+        try fotografar(janela(e, s, t).preferredColorScheme(.dark), tamanho: CGSize(width: 1280, height: 800), nome: "10-janela-terracota", escuro: true)
+    }
+
+    func testJanelaPaletaSalvia() throws {
+        let (e, s, t) = ambiente()
+        e.selectedStepID = e.steps[1].id
+        t.setPalette("salvia")
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "11-janela-salvia")
     }
 }

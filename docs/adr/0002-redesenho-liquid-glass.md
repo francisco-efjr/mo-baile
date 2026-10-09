@@ -69,3 +69,14 @@ simuladas na interface:
   de acessibilidade do AppKit, que é como as linhas de `Table` e `List`
   aparecem para o VoiceOver.
 - Mudança drástica de interface sobe a versão MAIOR: 2.1.2 → 3.0.0.
+
+## Adendo (3.1.0): paletas alternativas
+
+As nove paletas de `docs/design/paletas/` viraram `PaletteSpec` +
+`PaletteTheme` (`Theme/Palettes.swift`). Só as cores de base são declaradas;
+o resto é derivado com as fórmulas de `paletas-data.js` (opacidades da tinta,
+mistura em sRGB para hover e pressionado, alto contraste). `PaletteTests`
+compara cada variável de `palettes.css` com o token Swift. Uma paleta é clara
+ou escura e impõe a aparência; a Praia segue a Aparência. A seleção nativa de
+lista e tabela continua na cor de destaque do app/sistema (`AccentColor` é
+fixo no `Assets.car`).

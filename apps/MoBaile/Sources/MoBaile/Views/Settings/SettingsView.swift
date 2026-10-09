@@ -6,11 +6,15 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings()
+                .frame(width: 520)
                 .tabItem { Label("Geral", systemImage: "gearshape") }
+            PaletteGallery()
+                .frame(width: 680, height: 640)
+                .tabItem { Label("Paletas", systemImage: "paintpalette") }
             ConnectionSettings()
+                .frame(width: 520)
                 .tabItem { Label("Conexões", systemImage: "cable.connector") }
         }
-        .frame(width: 520)
     }
 }
 
@@ -32,6 +36,22 @@ private struct GeneralSettings: View {
             }
             .pickerStyle(.segmented)
             .fixedSize()
+            .disabled(themeManager.palette != nil)
+
+            if let paleta = themeManager.palette {
+                LabeledContent("") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("A paleta \(paleta.name) é \(paleta.isDark ? "escura" : "clara") e define a aparência do app.")
+                            .font(DSFont.subheadline)
+                            .foregroundStyle(themeManager.current.labelSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Voltar para a Praia") {
+                            themeManager.setPalette(PaletteSpec.praiaID)
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
 
             Picker("Seletor padrão:", selection: $seletorPadrao) {
                 ForEach(LocatorStrategy.allCases) { Text($0.displayName).tag($0) }

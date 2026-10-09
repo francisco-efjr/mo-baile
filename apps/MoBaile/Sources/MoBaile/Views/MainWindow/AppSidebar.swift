@@ -50,6 +50,10 @@ struct AppSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        // A Praia usa o material do sistema (vibrancy), que já é o fundo
+        // dela. Uma paleta alternativa tem cor própria de barra lateral.
+        .scrollContentBackground(themeManager.palette == nil ? .automatic : .hidden)
+        .background(themeManager.palette == nil ? Color.clear : theme.bgSidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SidebarBottomBar()
         }
