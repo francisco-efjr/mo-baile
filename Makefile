@@ -9,7 +9,7 @@ VENV_PY := $(VENV)/bin/python
 SWIFT_APP := apps/MoBaile
 
 .DEFAULT_GOAL := help
-.PHONY: help setup hooks version test test-engine test-ui test-qa test-swift qa coverage lint format security audit fixtures check run run-engine install-app build-native clean
+.PHONY: help setup hooks version test test-engine test-ui test-qa test-swift qa coverage lint format security audit fixtures check run run-engine install-app build-native verify-native update-native clean
 
 help: ## Lista os alvos disponiveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -76,6 +76,11 @@ install-app: ## Instala o "Mo baile.app" com a interface Python (a que funciona)
 
 build-native: ## Empacota o front SwiftUI como app SEPARADO, apos swift test passar
 	bash tools/package_macos_app.sh
+
+verify-native: ## Confere se o app nativo instalado esta com o codigo do repositorio
+	bash tools/verify_native_app.sh
+
+update-native: build-native verify-native ## Obrigatorio ao fim de tarefa que mexe no app (AGENTS.md)
 
 clean: ## Remove artefatos de build e cache
 	find . -name "__pycache__" -type d -prune -exec rm -rf {} + 2>/dev/null || true

@@ -41,11 +41,14 @@ from mobaile import __version__
 from mobaile.adapters import ios_device_log
 from mobaile.adapters.adb import ADBBridge
 from mobaile.adapters.analytics_logcat import FirebaseAnalyticsListener
+from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
+from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
 from mobaile.adapters.ios_wda import IOSBridge
 from mobaile.adapters.proxy import MobileNetworkProxy
 from mobaile.adapters.scrcpy import ScrcpyManager
 from mobaile.adapters.screen_recorder import ScreenRecorder
+from mobaile.adapters.vision_ocr import VisionOCR
 from mobaile.config import settings
 from mobaile.domain.errors import (
     DeviceNotFoundError,
@@ -68,6 +71,7 @@ from mobaile.services.codegen import CodeGenerator
 from mobaile.services.devices import DeviceWatcher
 from mobaile.services.diagnostics import DiagnosticsService
 from mobaile.services.hierarchy import UIHierarchyParser
+from mobaile.services.report import ReportService
 from mobaile.services.streaming import RealTimeStreamEngine
 
 logger = logging.getLogger(__name__)
@@ -196,6 +200,13 @@ class EngineServer:
         self.ios = IOSBridge()
         self.scrcpy = ScrcpyManager()
         self.proxy = MobileNetworkProxy()
+        # Mesmo historico e mesma notificacao do proxy: para o front, e so
+        # outra origem de requisicoes.
+        self.ios_netlog = IOSDebugNetworkCapture(emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id)
+        # O par no Android: o log do OkHttp de um app em debug, pelo logcat.
+        self.android_netlog = AndroidDebugNetworkCapture(
+            adb_path=lambda: self.adb.adb_path, emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id,
+        )
         self.recorder = ScreenRecorder(self.adb, self.ios)
         self.analytics = FirebaseAnalyticsListener(adb_bridge=self.adb)
         # Uma vez so: registrar a cada analytics.start duplicava cada evento
@@ -204,6 +215,7 @@ class EngineServer:
         self.codegen = CodeGenerator()
         self.appium = AppiumBridge()
         self.diagnostics = DiagnosticsService(adb=self.adb, ios=self.ios, appium=self.appium)
+        self.report = ReportService(ocr=VisionOCR())
 
         # Estado de sessao. Escrito pelas filas, pelo vigia de dispositivos e
         # pelas threads da escuta passiva, sempre sob `_state_lock`. A epoca
@@ -260,6 +272,8 @@ class EngineServer:
             "proxy.stop": self.proxy_stop,
             "proxy.events": self.proxy_events,
             "proxy.clear": self.proxy_clear,
+            "netlog.start": self.netlog_start,
+            "netlog.stop": self.netlog_stop,
             "analytics.start": self.analytics_start,
             "analytics.stop": self.analytics_stop,
             "analytics.events": self.analytics_events,
@@ -275,6 +289,10 @@ class EngineServer:
             "passive.start": self.passive_start,
             "passive.stop": self.passive_stop,
             "passive.status": self.passive_status,
+            "report.spec": self.report_spec,
+            "report.audit": self.report_audit,
+            "report.export": self.report_export,
+            "report.import": self.report_import,
         }
 
     # -------------------------------------------------------------- transporte
@@ -864,8 +882,14 @@ class EngineServer:
 
     # ------------------------------------------------------------------ proxy
 
+    def _ensure_proxy_notify(self) -> None:
+        # Uma vez so: registrar a cada start duplicava cada evento no front.
+        if not getattr(self, "_proxy_notify_on", False):
+            self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
+            self._proxy_notify_on = True
+
     def proxy_start(self, params: dict[str, Any]) -> dict[str, Any]:
-        self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
+        self._ensure_proxy_notify()
         started = self.proxy.start()
         configured = False
         sessao = self._sessao()
@@ -879,6 +903,47 @@ class EngineServer:
             self.adb.teardown_reverse_proxy(sessao.device_id, self.proxy.port)
         self.proxy.stop()
         return {"running": self.proxy.is_running()}
+
+    def netlog_start(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Trafego HTTPS de app em debug, sem proxy, pela plataforma da sessao.
+
+        Android: o log do `HttpLoggingInterceptor` do OkHttp, lido do logcat do
+        aparelho da sessao (ou de `device_id`). iOS: o log `CFNETWORK_DIAGNOSTICS`
+        do iPhone por cabo; `udid` opcional, sem ele vale o primeiro confiado.
+        """
+        self._ensure_proxy_notify()
+        sessao = self._sessao()
+        if sessao.platform is Platform.ANDROID:
+            serial = params.get("device_id") or sessao.device_id
+            if not serial:
+                raise DeviceNotFoundError("Selecione um aparelho Android para ler o tráfego do app em debug.")
+            self.android_netlog.start(validate_device_id(serial))
+            return {"running": self.android_netlog.is_running(), "device_id": self.android_netlog.device_id,
+                    "raw_log": None, "source": "okhttp_logcat"}
+        udid = params.get("udid") if isinstance(params, dict) else None
+        if udid:
+            udid = validate_device_id(udid)
+        else:
+            if not ios_device_log.is_available():
+                raise DeviceNotFoundError(
+                    "Para ler o trafego do iPhone por cabo, instale o pymobiledevice3.",
+                    detail=ios_device_log.INSTALL_HINT,
+                )
+            devices = ios_device_log.list_devices()
+            if not devices:
+                raise DeviceNotFoundError("Nenhum iPhone conectado por cabo.")
+            usable = [d for d in devices if not d.get("problem")]
+            if not usable:
+                raise DeviceNotReadyError(devices[0]["problem"])
+            udid = usable[0]["udid"]
+        self.ios_netlog.start(udid)
+        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": str(RAW_LOG_PATH),
+                "source": "cfnetwork"}
+
+    def netlog_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
+        self.ios_netlog.stop()
+        self.android_netlog.stop()
+        return {"running": self.ios_netlog.is_running() or self.android_netlog.is_running()}
 
     def proxy_events(self, params: dict[str, Any]) -> dict[str, Any]:
         limit = int(params.get("limit") or 200)
@@ -1354,6 +1419,60 @@ class EngineServer:
         self.codegen.reset()
         return {"steps": 0}
 
+    # ------------------------------------------------------------- relatorio
+
+    def report_spec(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Le e valida a spec-modelo; devolve o resumo para a aba Relatorio."""
+        return self.report.spec(params.get("path"))
+
+    def report_audit(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Audita a spec contra um arquivo de log ou contra o que a escuta capturou.
+
+        `source: "session"` usa o historico da escuta de Analytics deste motor:
+        o mesmo conteudo que "Exportar JSON" gravaria, sem passar por arquivo.
+        """
+        source = params.get("source") or "session"
+        platform = params.get("platform")
+        if platform is not None and not isinstance(platform, str):
+            raise InvalidInputError("platform precisa ser android ou ios.")
+        log_path = None
+        if source == "session":
+            items = self.analytics.history_snapshot()
+            if not items:
+                raise InvalidInputError(
+                    "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics "
+                    "ou escolha um arquivo de log."
+                )
+        elif source == "file":
+            items, log_path = self.report.read_log(params.get("log_path"))
+            if not items:
+                raise InvalidInputError(f"O log {log_path.name} não tem eventos do Firebase Analytics.")
+        else:
+            raise InvalidInputError(f"Origem do log desconhecida: {source!r}. Use session ou file.")
+        return self.report.audit(
+            params.get("spec_path"), items, source=source, log_path=log_path, platform=platform,
+            progress=self._progress,
+        )
+
+    def report_export(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Grava board, HTML, Markdown e TSV do ultimo relatorio."""
+        return self.report.export(
+            params.get("directory"), progress=self._progress, check_cancelled=self._check_cancelled,
+        )
+
+    def report_import(self, params: dict[str, Any]) -> dict[str, Any]:
+        """OCR dos prints dos cards do Figma: grava o rascunho da spec e a revisao."""
+        projeto = params.get("projeto")
+        if projeto is not None and not isinstance(projeto, str):
+            raise InvalidInputError("projeto precisa ser texto.")
+        platform = params.get("platform") or "android"
+        if not isinstance(platform, str):
+            raise InvalidInputError("platform precisa ser android ou ios.")
+        return self.report.import_prints(
+            params.get("prints_dir"), projeto=projeto, platform=platform, spec_path=params.get("spec_path"),
+            progress=self._progress, check_cancelled=self._check_cancelled,
+        )
+
     # ------------------------------------------------------------------- loop
 
     def _parse(self, raw: str) -> tuple[_Request | None, dict[str, Any] | None]:
@@ -1536,6 +1655,8 @@ class EngineServer:
         if self._passive is not None:
             self.passive_stop({})
         self.proxy.stop()
+        self.ios_netlog.stop()
+        self.android_netlog.stop()
         self.analytics.stop()
         self.scrcpy.stop_mirror()
         # Encerra apenas o servidor Appium que este processo iniciou. Um Appium

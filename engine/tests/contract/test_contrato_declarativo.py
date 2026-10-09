@@ -78,11 +78,14 @@ class TestTabelaDeMetodos(Base):
             contract.LANE_QUERY: {"devices.list", "wda.status", "simulators.list", "emulators.list",
                                   "diagnostics.check", "analytics.ios_devices"},
             contract.LANE_SERVICES: {"proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+                                     "netlog.start", "netlog.stop",
                                      "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
                                      "flow.run", "flow.stop", "flow.status", "recording.start", "recording.stop"},
             contract.LANE_CAPTURE: {"hierarchy.dump", "screen.capture", "screen.size", "passive.start",
                                     "passive.stop"},
             contract.LANE_INLINE: {"engine.hello", "engine.shutdown"},
+            # Relatorio nao toca aparelho: nem espera o espelho nem o segura.
+            contract.LANE_REPORT: {"report.spec", "report.audit", "report.export", "report.import"},
         }
         for fila, metodos in filas.items():
             for nome in metodos:
@@ -110,7 +113,8 @@ class TestTabelaDeMetodos(Base):
         com_progresso = {nome for nome, spec in contract.METHODS.items() if spec["progress"]}
         self.assertEqual(
             com_progresso,
-            {"wda.start", "simulators.boot", "emulators.boot", "hierarchy.dump", "diagnostics.check"},
+            {"wda.start", "simulators.boot", "emulators.boot", "hierarchy.dump", "diagnostics.check",
+             "report.audit", "report.export", "report.import"},
         )
 
     def test_engine_info_lista_os_mesmos_metodos(self):

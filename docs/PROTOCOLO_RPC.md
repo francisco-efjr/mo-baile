@@ -105,6 +105,7 @@ serial por domínio**. Uma chamada lenta numa fila não atrasa as outras filas.
 | `services` | serviços de fundo que o motor liga e desliga | `proxy.*`, `analytics.*` (menos `analytics.ios_devices`), `flow.*`, `recording.start`, `recording.stop` |
 | `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `analytics.ios_devices` |
 | `environment` | preparo de ambiente, que pode levar minutos | `wda.start`, `simulators.boot`, `simulators.shutdown`, `emulators.boot` |
+| `report` | aba Relatório: ler spec e log, auditar, gravar arquivos e OCR dos prints. Não toca aparelho | `report.spec`, `report.audit`, `report.export`, `report.import` |
 
 `passive.start` e `passive.stop` dividem a fila para o `stop` nunca passar na
 frente de um `start` em andamento. Como o prazo conta a fila, um pedido que
@@ -236,6 +237,8 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `proxy.stop` | — | desfaz também a configuração de proxy do aparelho |
 | `proxy.events` | `limit` | histórico recente |
 | `proxy.clear` | — | limpa o histórico |
+| `netlog.start` | iOS: `udid` (opcional; sem ele, o primeiro iPhone confiado). Android: `device_id` (opcional; sem ele, o aparelho da sessão) | tráfego HTTPS do app em debug, sem proxy nem certificado, emitido como `proxy.event`. Escolhe pela plataforma da sessão. **iOS:** lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` (o app roda com `CFNETWORK_DIAGNOSTICS=3` no scheme; corpo normalmente indisponível). **Android:** lê do `adb logcat` o log do `HttpLoggingInterceptor` do OkHttp (o build de debug precisa do interceptor; BASIC traz a linha, HEADERS os headers, BODY os corpos), funciona com o debugger do Android Studio conectado; sem aparelho na sessão, `device_not_found`. Devolve `running`, `device_id`, `raw_log` (iOS: blocos brutos, headers sensíveis mascarados; Android: `null`) e `source` (`cfnetwork` ou `okhttp_logcat`) |
+| `netlog.stop` | — | para a leitura nas duas plataformas; devolve `running` |
 | `analytics.start` | `package` (opcional), `ios_source` (iOS: `auto`, `simulator` ou UDID do iPhone) | começa a escutar o tagueamento; no iOS sem simulador, `auto` usa o iPhone conectado por cabo. Devolve `running`, `source`, `device_id` |
 | `analytics.stop` | — | para de escutar |
 | `analytics.events` | `limit` | histórico recente |
@@ -246,7 +249,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object, bloco da ação |
+| `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object (`NOME = (AppiumBy.X, "valor")`), bloco da ação (`def` + `wait_to_be_visible(..., 15)` + `click(..., 2)` ou `send_keys`). A coordenada não entra no código: fica no passo, em `coords` |
 | `codegen.steps` | — | passos gravados |
 | `codegen.reset` | — | limpa a gravação |
 | `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos |
@@ -266,6 +269,23 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `passive.start` | — | liga a gravação do que é feito direto no aparelho. Os passos chegam por `passive.step` |
 | `passive.stop` | — | desliga. Idempotente |
 | `passive.status` | — | `{listening}` |
+
+### Relatório de tagueamento
+
+Auditoria do tagueamento contra a spec do Figma, com o núcleo do `tag_audit`
+(ver [ADR 0003](adr/0003-relatorio-tagueamento.md)). Caminhos são absolutos ou
+com `~`; o motor normaliza, confere tipo e tamanho (spec até 5 MB, log até
+64 MB) e recusa com `invalid_input` antes de abrir o arquivo.
+
+| Método | Parâmetros | Devolve |
+|---|---|---|
+| `report.spec` | `path` (spec-modelo `.json`) | resumo da spec: `path`, `projeto`, `versao_especificacao`, `plataforma`, `prints_dir`, `prints_dir_exists`, `fluxos` (lista ordenada de `{key, label}`), `cards`, `variants`, `sections` |
+| `report.audit` | `spec_path`, `source` (`session`: eventos que a escuta de Analytics capturou; `file`: um log), `log_path` (com `file`), `platform` (opcional; sem ele, a da spec) | `spec` (resumo), `platform`, `source`, `log_path`, `log_stats` (`total_lidos`, `da_plataforma`, `duplicados`, `uteis`), `summary` (`total`, `ok`, `divergent`, `missing`, `compliance_rate`, `extras`, `alerts`), `results` (uma por variação: `id`, `card_index`, `section`, `card_title`, `print_path`, `flow`, `flow_label`, `event`, `variation`, `status` = `ok`, `error` ou `missing`, `checks` com `field`, `expected`, `obtained` e `ok`, `matched` com `id`, `time`, `event_name` e `params`, `occurrences`, `older_divergent`, `older_divergences`, `ga_screen`, `note`, `divergences`, `block`), `extras` e `alerts` (`event`, `screen`, `flow_name`, `component`, `detail`, `count`), `observations`, `markdown` e `tsv`. Guarda o relatório para `report.export` |
+| `report.export` | `directory` (opcional; sem ele, `~/Documents/Mo baile/Relatórios/<projeto>-<plataforma>-<data>`) | grava `board_auditoria.excalidraw`, `relatorio_auditoria.html`, `relatorio_auditoria.md` e `relatorio_auditoria.tsv` do último `report.audit`. Devolve `directory` e `files` (`kind`, `name`, `path`, `bytes`) |
+| `report.import` | `prints_dir`, `projeto` (opcional), `platform`, `spec_path` (opcional; sem ele, `~/Documents/Mo baile/Specs/<projeto>.json`) | OCR local (Vision) dos prints dos cards e rascunho da spec, sem sobrescrever arquivo existente. Devolve `spec_path`, `review_path` (`.revisao.md`), `spec` (resumo, ou `null` se o rascunho ainda não valida), `spec_error`, `review` (`print`, `event`, `doubts`) e `doubts_total` |
+
+`report.audit` com `source: "session"` e nenhum evento capturado responde
+`invalid_input`: um relatório com tudo "não disparado" pareceria verdadeiro.
 
 ## Convenções que importam
 

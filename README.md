@@ -21,10 +21,19 @@ certa.
 Appium, em três estratégias de localizador.
 
 **Inspeção de rede.** Proxy local que registra o tráfego HTTP do aparelho, com
-credenciais redigidas.
+credenciais redigidas. Com o app em debug, dá para ler o HTTPS sem proxy: pelo
+cabo no iPhone (`CFNETWORK_DIAGNOSTICS`) e pelo logcat no Android (log do
+OkHttp). A busca procura em URL, headers e corpos.
 
 **Captura de tagueamento.** Eventos de Firebase Analytics em tempo real, via
 logcat no Android e Unified Logging no iOS.
+
+**Relatório de tagueamento.** Audita os eventos capturados (ou um log
+exportado) contra a spec dos cards do Figma, variação por variação e parâmetro
+por parâmetro, e exporta board Excalidraw, HTML, Markdown e TSV. Gera o
+rascunho da spec a partir dos prints com o OCR do macOS. Funciona sem
+aparelho. Núcleo: o `tag_audit`
+([ADR 0003](docs/adr/0003-relatorio-tagueamento.md)).
 
 ## Estrutura
 
@@ -60,7 +69,12 @@ antes de empacotá-lo:
 ```bash
 cd apps/MoBaile && swift build && swift test
 make build-native   # instala como "Mo baile (nativo).app", app separado
+make verify-native  # confere se o app instalado esta com o codigo do repositorio
 ```
+
+Toda tarefa que mexe em `engine/src/`, `apps/MoBaile/` ou `assets/` termina com
+`make update-native` (empacota e verifica). A regra vale para qualquer agente e
+esta em [AGENTS.md](AGENTS.md).
 
 O app separado é proposital. Instalar a build nativa por cima do app em uso já
 derrubou o ambiente uma vez, e agora exige confirmação explícita.
@@ -90,6 +104,8 @@ em proxy aberto para quem estiver na mesma rede.
 | `make run-engine` | Motor em modo JSON-RPC, útil para depurar o contrato |
 | `make install-app` | Instala `/Applications/Mo baile.app` com a interface Python |
 | `make build-native` | Empacota o front SwiftUI como app separado, após os testes passarem |
+| `make verify-native` | Confere versão, motor embutido e handshake do app nativo instalado |
+| `make update-native` | `build-native` + `verify-native`; obrigatório ao fim de tarefa que mexe no app |
 
 ## Documentação
 
@@ -103,7 +119,9 @@ em proxy aberto para quem estiver na mesma rede.
 | [RELATORIO_QA.md](docs/RELATORIO_QA.md) | Resultado dos quatro fluxos e os defeitos encontrados |
 | [qa/README.md](qa/README.md) | Harness de ponta a ponta dos quatro fluxos |
 | [ESTADO_ATUAL.md](docs/ESTADO_ATUAL.md) | O que funciona, o que depende de aparelho e o que é fachada |
-| [design/](docs/design/) | Especificação visual e handoff |
+| [design/design-system/](docs/design/design-system/) | Design system 3.0 (Liquid Glass): tokens, componentes, protótipo e notas por tela. Decisões em [ADR 0002](docs/adr/0002-redesenho-liquid-glass.md) |
+| [design/paletas/](docs/design/paletas/) | Paletas alternativas (galeria do design, `paletas-data.js` e `palettes.css`, que os testes usam como referência) |
+| [design/](docs/design/) | Especificação visual e handoff anteriores |
 | [research/](docs/research/) | Estudo do HTTP Toolkit e notas do interceptador |
 
 ## Contribuindo

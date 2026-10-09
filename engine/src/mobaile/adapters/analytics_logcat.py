@@ -541,6 +541,11 @@ class FirebaseAnalyticsListener:
                 lines.append(f"{ev.time_str}\t{ev.platform.upper()}\t{ev.tag}\t{ev.event_name}\t{main_params}\t{json_str}")
         return "\n".join(lines)
 
+    def history_snapshot(self) -> list[dict]:
+        """Copia do historico, tirada sob o lock: a escuta pode estar acrescentando."""
+        with self._lock:
+            return [ev.to_dict() for ev in self.events_history]
+
     def export_as_json(self) -> str:
         """Exporta os eventos estruturados em formato JSON (padrão log_obtido.json da skill /tagueamento)."""
         with self._lock:

@@ -15,6 +15,11 @@ from mobaile.domain.models import AutomationStep, LocatorStrategy, UIElement
 
 __all__ = ["AutomationStep", "CodeGenerator", "LocatorStrategy", "UIElement"]
 
+# Padrao do Page Object da casa: toda acao espera o elemento aparecer antes, e
+# o clique ja sai com tentativas.
+WAIT_TIMEOUT = 15
+CLICK_ATTEMPTS = 2
+
 
 class CodeGenerator:
     def __init__(
@@ -238,30 +243,23 @@ class CodeGenerator:
 
         is_input = "CAMPO" in var_name or "SEARCH" in element.class_name.upper()
 
-        if active_strat == LocatorStrategy.POSITION:
-            pos_x, pos_y = click_coord if click_coord else element.center
-            if is_input:
-                action_block = (
-                    f"    def preencher_{slug}(self, texto):\n"
-                    f"        self.click_at_position(self.locators['{self.page_objects_key}'].{var_name}, {pos_x}, {pos_y})\n"
-                    f"        self.send_keys(self.locators['{self.page_objects_key}'].{var_name}, texto)\n"
-                )
-            else:
-                action_block = (
-                    f"    def click_{slug}(self):\n"
-                    f"        self.click_at_position(self.locators['{self.page_objects_key}'].{var_name}, {pos_x}, {pos_y})\n"
-                )
+        # O codigo exibido e o que a pessoa cola no proprio Page Object, entao
+        # segue o padrao da casa e nao carrega coordenada: o clique por posicao
+        # fica guardado no passo (`coords`), que e o que a execucao repete.
+        ref = f"self.locators['{self.page_objects_key}'].{var_name}"
+        espera = f"        self.wait_to_be_visible({ref}, {WAIT_TIMEOUT})\n"
+        if is_input:
+            action_block = (
+                f"    def preencher_{slug}(self, texto):\n"
+                f"{espera}"
+                f"        self.send_keys({ref}, texto)\n"
+            )
         else:
-            if is_input:
-                action_block = (
-                    f"    def preencher_{slug}(self, texto):\n"
-                    f"        self.send_keys(self.locators['{self.page_objects_key}'].{var_name}, texto)\n"
-                )
-            else:
-                action_block = (
-                    f"    def click_{slug}(self):\n"
-                    f"        self.click(self.locators['{self.page_objects_key}'].{var_name})\n"
-                )
+            action_block = (
+                f"    def click_{slug}(self):\n"
+                f"{espera}"
+                f"        self.click({ref}, {CLICK_ATTEMPTS})\n"
+            )
 
         self.declared_actions[var_name] = action_block
 

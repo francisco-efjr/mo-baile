@@ -90,22 +90,43 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(state.filteredHTTPRequests.first?.id, 1)
     }
     
+    /// O evento mais novo aparece no topo das listas de Rede e Analytics, para
+    /// continuar visível sem rolar. A ordem guardada segue a de chegada.
+    @MainActor
+    func testListasExibemOMaisNovoNoTopo() {
+        let state = AppState()
+        let antigo = NetworkEvent(id: 1, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "api.example.com", path: "/a", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "", isTunnel: false)
+        let novo = NetworkEvent(id: 2, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "api.example.com", path: "/b", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "", isTunnel: false)
+        state.httpRequests = [antigo, novo]
+
+        XCTAssertEqual(state.filteredHTTPRequests.map(\.id), [2, 1])
+        state.httpFilterText = "api"
+        XCTAssertEqual(state.filteredHTTPRequests.map(\.id), [2, 1])
+        XCTAssertEqual(state.httpRequests.map(\.id), [1, 2], "a ordem guardada é a de chegada")
+    }
+
     @MainActor
     func testAppStateToggleZenMode() {
         let state = AppState()
         
-        state.mirrorVisible = true
+        state.mirrorVisible = false
         state.zenMode = false
-        
+
+        // Modo Zen esconde barra lateral e inspector e deixa o espaço para
+        // espelho e workspace, que voltam a aparecer se estavam ocultos.
         state.toggleZenMode()
-        
+
         XCTAssertTrue(state.zenMode)
-        XCTAssertFalse(state.mirrorVisible)
-        
-        state.toggleZenMode()
-        
-        XCTAssertFalse(state.zenMode)
+        XCTAssertEqual(state.sidebarVisibility, .detailOnly)
+        XCTAssertFalse(state.inspectorVisible)
         XCTAssertTrue(state.mirrorVisible)
+        XCTAssertTrue(state.workspaceVisible)
+
+        state.toggleZenMode()
+
+        XCTAssertFalse(state.zenMode)
+        XCTAssertEqual(state.sidebarVisibility, .all)
+        XCTAssertTrue(state.inspectorVisible)
     }
 
     func testHARExporterGeneratesValidJSON() throws {

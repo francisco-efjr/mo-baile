@@ -31,8 +31,11 @@ class TestCodeGenerator(unittest.TestCase):
         self.assertIn("AppiumBy.XPATH", obj_line)
         self.assertIn("//XCUIElementTypeButton[@name=\"Li e aceito os Termos e Condições.\"]", obj_line)
         self.assertIn("def click_li_e_aceito_os_termos_e(self):", act_block)
-        self.assertIn("self.click_at_position(self.locators['onboarding_credito_objs'].CHECK_BOX_BOTAO_", act_block)
-        self.assertIn("390, 594)", act_block)
+        # A coordenada nao vai para o codigo colado no Page Object: fica no
+        # passo, que e o que a execucao repete.
+        self.assertNotIn("click_at_position", act_block)
+        self.assertNotIn("390", act_block)
+        self.assertEqual(self.generator.get_steps()[-1].coords, (390, 594))
 
     def test_generate_id_strategy(self):
         _var_name, obj_line, act_block = self.generator.generate_entry(
@@ -42,6 +45,39 @@ class TestCodeGenerator(unittest.TestCase):
 
         self.assertIn("AppiumBy.ACCESSIBILITY_ID", obj_line)
         self.assertIn("self.click(self.locators['onboarding_credito_objs'].CHECK_BOX_BOTAO_", act_block)
+
+    def test_bloco_segue_o_padrao_do_page_object(self):
+        """O que aparece no editor e colado como esta no Page Object da casa:
+        o locator e so `NOME = (estrategia, valor)`, e a acao comeca esperando
+        o elemento (timeout 15) antes de clicar com duas tentativas."""
+        var_name, obj_line, act_block = self.generator.generate_entry(
+            self.element_ios, strategy=LocatorStrategy.ID
+        )
+        ref = f"self.locators['onboarding_credito_objs'].{var_name}"
+
+        self.assertEqual(
+            obj_line.strip(),
+            f'{var_name} = (AppiumBy.ACCESSIBILITY_ID, "Li e aceito os Termos e Condições.")',
+        )
+        linhas = act_block.splitlines()
+        self.assertEqual(linhas[0], "    def click_li_e_aceito_os_termos_e(self):")
+        self.assertEqual(linhas[1], f"        self.wait_to_be_visible({ref}, 15)")
+        self.assertEqual(linhas[2], f"        self.click({ref}, 2)")
+        self.assertEqual(len(linhas), 3)
+
+    def test_campo_espera_antes_de_digitar(self):
+        campo = UIElement(
+            tag="XCUIElementTypeTextField", class_name="XCUIElementTypeTextField",
+            resource_id="cpf", text="", content_desc="", clickable=True,
+            bounds=(0, 0, 100, 40), area=4000, package="", platform="ios",
+        )
+        var_name, _obj, act_block = self.generator.generate_entry(campo, strategy=LocatorStrategy.POSITION)
+        ref = f"self.locators['onboarding_credito_objs'].{var_name}"
+
+        self.assertEqual(act_block.splitlines()[1:], [
+            f"        self.wait_to_be_visible({ref}, 15)",
+            f"        self.send_keys({ref}, texto)",
+        ])
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Barra inferior de diagnostico.
+/// Barra de status de 22 pt, embaixo da coluna central.
 ///
 /// Os rotulos traziam a porta do proxy e a do WDA escritas no codigo. Se a
 /// configuracao do motor apontasse para outra porta, a barra mentiria com toda
-/// a confianca. Agora os numeros vem do proprio motor.
+/// a confianca. Os numeros vem do proprio motor, e o estado de cada servico
+/// aparece por icone e texto, nao so por cor.
 struct StatusBar: View {
     @Environment(AppState.self) var appState
     @Environment(EngineSession.self) private var session
@@ -22,63 +23,92 @@ struct StatusBar: View {
         guard let proxy = session.engineInfo?.proxy else { return "Proxy MITM" }
         return "Proxy MITM \(proxy.port)"
     }
-    
-    var body: some View {
-        HStack {
-            // Left: daemon indicators
-            HStack(spacing: 12) {
-                DaemonIndicator(title: wdaLabel, status: appState.daemonStatus.wda)
-                DaemonIndicator(title: "ADB server", status: appState.daemonStatus.adb)
-                DaemonIndicator(title: proxyLabel, status: appState.daemonStatus.proxy)
-                DaemonIndicator(title: "FA listener", status: appState.daemonStatus.fa)
-            }
-            
-            Spacer()
-            
-            // Right: metrics
-            HStack(spacing: 12) {
-                if !appState.statusMessage.isEmpty {
-                    Text(appState.statusMessage)
-                }
-                Text("x \(Int(appState.cursorPosition.x)) · y \(Int(appState.cursorPosition.y))")
-                Text("\(appState.fps) fps")
-                Text("settle \(appState.settleMs) ms")
-                Text("latência \(appState.latencyMs) ms")
-            }
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundColor(theme.textSecondary)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 26)
-        .background(theme.bgTerminal)
-    }
-}
 
-struct DaemonIndicator: View {
-    @Environment(ThemeManager.self) var themeManager
-    var theme: any ThemeTokens { themeManager.current }
-    
-    let title: String
-    let status: DaemonState
-    
-    func dotColor() -> Color {
-        switch status {
-        case .ok: return theme.success
-        case .busy: return theme.accent
-        case .warn: return theme.warning
-        case .error: return theme.danger
-        case .off: return theme.textLabel
+    var body: some View {
+        HStack(spacing: 12) {
+            // Os serviços cedem espaço em vez de impor largura: com tudo em
+            // `fixedSize`, a barra sozinha exigia 690 pt, e esse mínimo
+            // impedia a janela de encolher numa tela de MacBook.
+            ViewThatFits(in: .horizontal) {
+                servicos(compacto: false)
+                servicos(compacto: true)
+            }
+            .layoutPriority(1)
+
+            Text(appState.statusMessage)
+                .font(DSFont.subheadline)
+                .foregroundStyle(theme.labelPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.updatesFrequently)
+                .help(appState.statusMessage)
+
+            if appState.isDeviceConnected {
+                ViewThatFits(in: .horizontal) {
+                    metricasView(metricas)
+                    metricasView(metricasCurtas)
+                    Color.clear.frame(width: 0)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: DesignMetrics.Heights.statusBar)
+        .background(theme.bgContentAlt)
+        .overlay(alignment: .top) { Rectangle().fill(theme.separator).frame(height: 1) }
+    }
+
+    /// Os quatro serviços; no modo compacto, só o ícone (o nome vai no tooltip
+    /// e no leitor de tela).
+    private func servicos(compacto: Bool) -> some View {
+        HStack(spacing: compacto ? 8 : 12) {
+            servico(appState.daemonStatus.wda, wdaLabel, compacto)
+            servico(appState.daemonStatus.adb, "ADB server", compacto)
+            servico(appState.daemonStatus.proxy, proxyLabel, compacto)
+            servico(appState.daemonStatus.fa, "FA listener", compacto)
         }
     }
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(dotColor())
-                .frame(width: 6, height: 6)
-            Text(title)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(theme.textSecondary)
+
+    @ViewBuilder
+    private func servico(_ estado: DaemonState, _ rotulo: String, _ compacto: Bool) -> some View {
+        if compacto {
+            Image(systemName: StatusIndicator.symbol(estado))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(cor(estado))
+                .help("\(rotulo): \(StatusIndicator.word(estado))")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(rotulo)
+                .accessibilityValue(StatusIndicator.word(estado))
+        } else {
+            StatusIndicator(status: estado, label: rotulo)
         }
+    }
+
+    private func cor(_ estado: DaemonState) -> Color {
+        switch estado {
+        case .ok: return theme.success
+        case .busy: return theme.info
+        case .warn: return theme.warning
+        case .error: return theme.destructive
+        case .off: return theme.labelTertiary
+        }
+    }
+
+    private func metricasView(_ texto: String) -> some View {
+        Text(texto)
+            .font(DSFont.mono(10.5).monospacedDigit())
+            .foregroundStyle(theme.labelSecondary)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel("Métricas do espelho")
+            .accessibilityValue(metricas)
+    }
+
+    private var metricasCurtas: String {
+        "\(appState.fps) fps  \(appState.latencyMs) ms"
+    }
+
+    private var metricas: String {
+        "x \(Int(appState.cursorPosition.x)) · y \(Int(appState.cursorPosition.y))  \(appState.fps) fps  settle \(appState.settleMs) ms  latência \(appState.latencyMs) ms"
     }
 }

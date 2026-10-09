@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "2.1.1",
+      "version": "3.3.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -42,6 +42,8 @@
         "hierarchy.element_at",
         "input.tap",
         "input.text",
+        "netlog.start",
+        "netlog.stop",
         "passive.start",
         "passive.status",
         "passive.stop",
@@ -52,6 +54,10 @@
         "recording.start",
         "recording.status",
         "recording.stop",
+        "report.audit",
+        "report.export",
+        "report.import",
+        "report.spec",
         "scrcpy.start",
         "scrcpy.status",
         "scrcpy.stop",
@@ -74,7 +80,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "2.1.1",
+      "engine_version": "3.3.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -251,6 +257,16 @@
           "timeout_s": 15,
           "progress": false
         },
+        "netlog.start": {
+          "lane": "services",
+          "timeout_s": 45,
+          "progress": false
+        },
+        "netlog.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
         "analytics.start": {
           "lane": "services",
           "timeout_s": 20,
@@ -325,6 +341,26 @@
           "lane": "fast",
           "timeout_s": 15,
           "progress": false
+        },
+        "report.spec": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.audit": {
+          "lane": "report",
+          "timeout_s": 60,
+          "progress": true
+        },
+        "report.export": {
+          "lane": "report",
+          "timeout_s": 120,
+          "progress": true
+        },
+        "report.import": {
+          "lane": "report",
+          "timeout_s": 600,
+          "progress": true
         }
       },
       "notifications": [
@@ -425,7 +461,7 @@
     "result": {
       "var_name": "BOTAO_CONTINUAR",
       "object_code": "    BOTAO_CONTINUAR = (AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
-      "action_code": "    def click_continuar(self):\n        self.click_at_position(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 60, 45)\n",
+      "action_code": "    def click_continuar(self):\n        self.wait_to_be_visible(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 15)\n        self.click(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 2)\n",
       "element": {
         "tag": "node",
         "class_name": "android.widget.Button",
@@ -747,6 +783,570 @@
         "first_open": true
       },
       "raw_log": "Logging event: screen_view"
+    }
+  },
+  "report.spec": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+      "projeto": "Teste",
+      "versao_especificacao": null,
+      "plataforma": "android",
+      "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+      "prints_dir_exists": true,
+      "fluxos": [
+        {
+          "key": "pessoal",
+          "label": "CPA · credito-pessoal"
+        },
+        {
+          "key": "investimentos",
+          "label": "CPAGI · credito-investimentos"
+        }
+      ],
+      "cards": 3,
+      "variants": 7,
+      "sections": [
+        "Home",
+        "Simulação"
+      ]
+    }
+  },
+  "report.audit": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "pessoal",
+            "label": "CPA · credito-pessoal"
+          },
+          {
+            "key": "investimentos",
+            "label": "CPAGI · credito-investimentos"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "platform": "android",
+      "source": "file",
+      "log_path": "/Users/qa/Documents/Mo baile/Demanda/log.json",
+      "log_stats": {
+        "total_lidos": 12,
+        "da_plataforma": 11,
+        "duplicados": 1,
+        "uteis": 10
+      },
+      "summary": {
+        "total": 7,
+        "ok": 3,
+        "divergent": 2,
+        "missing": 2,
+        "compliance_rate": 42.9,
+        "extras": 3,
+        "alerts": 1
+      },
+      "results": [
+        {
+          "id": 0,
+          "card_index": 0,
+          "section": "Home",
+          "card_title": "screen_view",
+          "print_path": "/Users/qa/Documents/Mo baile/Demanda/prints/home.png",
+          "flow": null,
+          "flow_label": null,
+          "event": "screen_view",
+          "variation": "app:credito:home",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:credito:home",
+              "obtained": "app:credito:home",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "credito",
+              "obtained": "credito",
+              "ok": true
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:00:00.000",
+            "event_name": "screen_view",
+            "params": {
+              "flow_name": "credito",
+              "ga_event_origin": "app",
+              "ga_screen": "app:credito:home"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "",
+          "block": "// screen_view [OK]\n// log 10:00:00.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:credito:home\",  ✓\n  \"flow_name\": \"credito\"  ✓\n}"
+        },
+        {
+          "id": 1,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_credito_{fluxo}",
+          "print_path": null,
+          "flow": "pessoal",
+          "flow_label": "CPA · credito-pessoal",
+          "event": "interaction_credito_pessoal",
+          "variation": "click:parcelas",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:credito:pessoal:simulacao",
+              "obtained": "app:credito:pessoal:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "credito-pessoal",
+              "obtained": "credito-pessoal",
+              "ok": true
+            },
+            {
+              "field": "component",
+              "expected": "button",
+              "obtained": "button",
+              "ok": true
+            },
+            {
+              "field": "detail",
+              "expected": "click:parcelas",
+              "obtained": "click:parcelas",
+              "ok": true
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:01:00.000",
+            "event_name": "interaction_credito_pessoal",
+            "params": {
+              "screen_name": "app:credito:pessoal:simulacao",
+              "flow_name": "credito-pessoal",
+              "component": "button",
+              "detail": "click:parcelas",
+              "ga_screen": "app:credito:pessoal:simulacao"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "",
+          "block": "// CPA · interaction_credito_pessoal [OK]\n// log 10:01:00.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:credito:pessoal:simulacao\",  ✓\n  \"flow_name\": \"credito-pessoal\",  ✓\n  \"component\": \"button\",  ✓\n  \"detail\": \"click:parcelas\"  ✓\n}"
+        },
+        {
+          "id": 2,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_credito_{fluxo}",
+          "print_path": null,
+          "flow": "pessoal",
+          "flow_label": "CPA · credito-pessoal",
+          "event": "interaction_credito_pessoal",
+          "variation": "click:[numero]-parcela-sem-seguro",
+          "status": "missing",
+          "checks": [],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// CPA · interaction_credito_pessoal [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:credito:pessoal:simulacao\",\n  \"flow_name\": \"credito-pessoal\",\n  \"component\": \"button\",\n  \"detail\": \"click:[numero]-parcela-sem-seguro\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 3,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_credito_{fluxo}",
+          "print_path": null,
+          "flow": "investimentos",
+          "flow_label": "CPAGI · credito-investimentos",
+          "event": "interaction_credito_investimentos",
+          "variation": "click:parcelas",
+          "status": "error",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:credito:investimentos:simulacao",
+              "obtained": "app:credito:investimentos:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "credito-investimentos",
+              "obtained": "credito-investimentos",
+              "ok": true
+            },
+            {
+              "field": "component",
+              "expected": "button",
+              "obtained": "toggle",
+              "ok": false
+            },
+            {
+              "field": "detail",
+              "expected": "click:parcelas",
+              "obtained": "click:parcelas",
+              "ok": true
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:02:00.000",
+            "event_name": "interaction_credito_investimentos",
+            "params": {
+              "screen_name": "app:credito:investimentos:simulacao",
+              "flow_name": "credito-investimentos",
+              "component": "toggle",
+              "detail": "click:parcelas"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "component: obtido toggle, esperado button",
+          "block": "// CPAGI · interaction_credito_investimentos [ERRO]\n// log 10:02:00.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:credito:investimentos:simulacao\",  ✓\n  \"flow_name\": \"credito-investimentos\",  ✓\n  \"component\": \"toggle\",  ✗\n    // ↳ esperado: button\n  \"detail\": \"click:parcelas\"  ✓\n}"
+        },
+        {
+          "id": 4,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_credito_{fluxo}",
+          "print_path": null,
+          "flow": "investimentos",
+          "flow_label": "CPAGI · credito-investimentos",
+          "event": "interaction_credito_investimentos",
+          "variation": "click:[numero]-parcela-sem-seguro",
+          "status": "missing",
+          "checks": [],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// CPAGI · interaction_credito_investimentos [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:credito:investimentos:simulacao\",\n  \"flow_name\": \"credito-investimentos\",\n  \"component\": \"button\",\n  \"detail\": \"click:[numero]-parcela-sem-seguro\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 5,
+          "card_index": 2,
+          "section": "Simulação",
+          "card_title": "add_to_cart",
+          "print_path": null,
+          "flow": "pessoal",
+          "flow_label": "CPA · credito-pessoal",
+          "event": "add_to_cart",
+          "variation": "app:credito:pessoal:simulacao",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:credito:pessoal:simulacao",
+              "obtained": "app:credito:pessoal:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "credito-pessoal",
+              "obtained": "credito-pessoal",
+              "ok": true
+            },
+            {
+              "field": "insurance",
+              "expected": "[0|1]",
+              "obtained": "0",
+              "ok": true
+            },
+            {
+              "field": "value",
+              "expected": "[numero]",
+              "obtained": "200.5",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_id",
+              "expected": "14063",
+              "obtained": "14063",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_name",
+              "expected": "credito-pessoal",
+              "obtained": "credito-pessoal",
+              "ok": true
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:04:00.000",
+            "event_name": "add_to_cart",
+            "params": {
+              "screen_name": "app:credito:pessoal:simulacao",
+              "flow_name": "credito-pessoal",
+              "insurance": "0",
+              "value": "200.5",
+              "items": [
+                {
+                  "item_name": "credito-pessoal",
+                  "item_category": "simulacao",
+                  "item_id": "14063"
+                }
+              ]
+            }
+          },
+          "occurrences": 2,
+          "older_divergent": 1,
+          "older_divergences": [
+            "items[0].item_name=credito-errado"
+          ],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "⚠ 1 disparo(s) anterior(es): items[0].item_name=credito-errado",
+          "block": "// CPA · add_to_cart [OK]\n// log 10:04:00.000 · 2 disparo(s)\n{\n  \"screen_name\": \"app:credito:pessoal:simulacao\",  ✓\n  \"flow_name\": \"credito-pessoal\",  ✓\n  \"insurance\": \"0\",  ✓\n  \"value\": \"200.5\",  ✓\n  \"items[0].item_id\": \"14063\",  ✓\n  \"items[0].item_name\": \"credito-pessoal\"  ✓\n}\n// ⚠ 1 disparo(s) anterior(es) divergente(s):\n//   items[0].item_name=credito-errado"
+        },
+        {
+          "id": 6,
+          "card_index": 2,
+          "section": "Simulação",
+          "card_title": "add_to_cart",
+          "print_path": null,
+          "flow": "investimentos",
+          "flow_label": "CPAGI · credito-investimentos",
+          "event": "add_to_cart",
+          "variation": "app:credito:investimentos:simulacao",
+          "status": "error",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:credito:investimentos:simulacao",
+              "obtained": "app:credito:investimentos:parcelas",
+              "ok": false
+            },
+            {
+              "field": "flow_name",
+              "expected": "credito-investimentos",
+              "obtained": "credito-investimentos",
+              "ok": true
+            },
+            {
+              "field": "insurance",
+              "expected": "[0|1]",
+              "obtained": "1",
+              "ok": true
+            },
+            {
+              "field": "value",
+              "expected": "[numero]",
+              "obtained": "1",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_id",
+              "expected": "[preenchido]",
+              "obtained": "14019",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_name",
+              "expected": "credito-investimentos",
+              "obtained": "credito-investimentos",
+              "ok": true
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:01:45.000",
+            "event_name": "add_to_cart",
+            "params": {
+              "screen_name": "app:credito:investimentos:parcelas",
+              "flow_name": "credito-investimentos",
+              "insurance": "1",
+              "value": "1",
+              "items": [
+                {
+                  "item_name": "credito-investimentos",
+                  "item_id": "14019"
+                }
+              ],
+              "ga_screen": "app:credito:investimentos:simulacao"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": "app:credito:investimentos:simulacao",
+          "note": null,
+          "divergences": "screen_name: obtido app:credito:investimentos:parcelas, esperado app:credito:investimentos:simulacao",
+          "block": "// CPAGI · add_to_cart [ERRO]\n// log 10:01:45.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:credito:investimentos:parcelas\",  ✗\n    // ↳ esperado: app:credito:investimentos:simulacao\n  \"flow_name\": \"credito-investimentos\",  ✓\n  \"insurance\": \"1\",  ✓\n  \"value\": \"1\",  ✓\n  \"items[0].item_id\": \"14019\",  ✓\n  \"items[0].item_name\": \"credito-investimentos\"  ✓\n}\n// ga_screen: app:credito:investimentos:simulacao"
+        }
+      ],
+      "extras": [
+        {
+          "event": "interaction_credito_pessoal",
+          "screen": "app:credito:pessoal:detalhes-da-proposta",
+          "flow_name": "credito-pessoal",
+          "component": "button",
+          "detail": "click:parcelas",
+          "count": 1
+        },
+        {
+          "event": "screen_view",
+          "screen": "app:credito:outra-tela",
+          "flow_name": "credito",
+          "component": null,
+          "detail": null,
+          "count": 1
+        },
+        {
+          "event": "modal_view",
+          "screen": "app:credito:pessoal:simulacao",
+          "flow_name": "credito-pessoal",
+          "component": "modal",
+          "detail": "calendario",
+          "count": 1
+        }
+      ],
+      "alerts": [
+        {
+          "event": "app_exception",
+          "screen": "app:credito:pessoal:simulacao",
+          "flow_name": null,
+          "component": null,
+          "detail": null,
+          "count": 1
+        }
+      ],
+      "observations": "Eventos dos fluxos da spec que nenhum card cobre:\n  • interaction_credito_pessoal · app:credito:pessoal:detalhes-da-proposta · component=button · detail=click:parcelas — 1x\n  • screen_view · app:credito:outra-tela — 1x\n  • modal_view · app:credito:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:credito:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.",
+      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- 3 cards · 7 validações · OK: 3 · Erro: 4 (sendo 2 não disparadas) · Conformidade: 42.9%\n- Plataforma: ANDROID · 10 eventos únicos (1 duplicados removidos de 11 da plataforma; 12 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:credito:home | OK |  | 10:00:00.000 | 1 |\n| Simulação | interaction_credito_{fluxo} | CPA · credito-pessoal | interaction_credito_pessoal | click:parcelas | OK |  | 10:01:00.000 | 1 |\n| Simulação | interaction_credito_{fluxo} | CPA · credito-pessoal | interaction_credito_pessoal | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_credito_{fluxo} | CPAGI · credito-investimentos | interaction_credito_investimentos | click:parcelas | ERRO | component: obtido toggle, esperado button | 10:02:00.000 | 1 |\n| Simulação | interaction_credito_{fluxo} | CPAGI · credito-investimentos | interaction_credito_investimentos | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | CPA · credito-pessoal | add_to_cart | app:credito:pessoal:simulacao | OK | ⚠ 1 disparo(s) anterior(es): items[0].item_name=credito-errado | 10:04:00.000 | 2 |\n| Simulação | add_to_cart | CPAGI · credito-investimentos | add_to_cart | app:credito:investimentos:simulacao | ERRO | screen_name: obtido app:credito:investimentos:parcelas, esperado app:credito:investimentos:simulacao | 10:01:45.000 | 1 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  • interaction_credito_pessoal · app:credito:pessoal:detalhes-da-proposta · component=button · detail=click:parcelas — 1x\n  • screen_view · app:credito:outra-tela — 1x\n  • modal_view · app:credito:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:credito:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
+      "tsv": "Seção\tCard\tFluxo\tEvento\tVariação\tStatus\tDivergências\tHorário\tDisparos\nHome\tscreen_view\t-\tscreen_view\tapp:credito:home\tOK\t\t10:00:00.000\t1\nSimulação\tinteraction_credito_{fluxo}\tCPA · credito-pessoal\tinteraction_credito_pessoal\tclick:parcelas\tOK\t\t10:01:00.000\t1\nSimulação\tinteraction_credito_{fluxo}\tCPA · credito-pessoal\tinteraction_credito_pessoal\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_credito_{fluxo}\tCPAGI · credito-investimentos\tinteraction_credito_investimentos\tclick:parcelas\tERRO\tcomponent: obtido toggle, esperado button\t10:02:00.000\t1\nSimulação\tinteraction_credito_{fluxo}\tCPAGI · credito-investimentos\tinteraction_credito_investimentos\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tadd_to_cart\tCPA · credito-pessoal\tadd_to_cart\tapp:credito:pessoal:simulacao\tOK\t⚠ 1 disparo(s) anterior(es): items[0].item_name=credito-errado\t10:04:00.000\t2\nSimulação\tadd_to_cart\tCPAGI · credito-investimentos\tadd_to_cart\tapp:credito:investimentos:simulacao\tERRO\tscreen_name: obtido app:credito:investimentos:parcelas, esperado app:credito:investimentos:simulacao\t10:01:45.000\t1\n"
+    }
+  },
+  "report.export": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "directory": "/Users/qa/Documents/Mo baile/Demanda/saida",
+      "files": [
+        {
+          "kind": "board",
+          "name": "board_auditoria.excalidraw",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/board_auditoria.excalidraw",
+          "bytes": 32844
+        },
+        {
+          "kind": "html",
+          "name": "relatorio_auditoria.html",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.html",
+          "bytes": 6567
+        },
+        {
+          "kind": "markdown",
+          "name": "relatorio_auditoria.md",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.md",
+          "bytes": 2247
+        },
+        {
+          "kind": "tsv",
+          "name": "relatorio_auditoria.tsv",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.tsv",
+          "bytes": 1190
+        }
+      ]
+    }
+  },
+  "report.import": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec_path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.json",
+      "review_path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.revisao.md",
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.json",
+        "projeto": "Demanda",
+        "versao_especificacao": "Rascunho gerado por OCR — revisar",
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "pessoal",
+            "label": "pessoal"
+          },
+          {
+            "key": "investimentos",
+            "label": "investimentos"
+          }
+        ],
+        "cards": 2,
+        "variants": 6,
+        "sections": [
+          "1. simulacao"
+        ]
+      },
+      "spec_error": null,
+      "review": [
+        {
+          "print": "home.png",
+          "event": "interaction_credito_{fluxo}",
+          "doubts": [
+            "parâmetro 'screen name' lido como 'screen_name'",
+            "detail: item 'clickifechar' lido como 'click:fechar'",
+            "detail: exemplo 'click:10-parcela-com-seguro' generalizado para 'click:[numero]-parcela-com-seguro' (padrão da tabela)"
+          ]
+        },
+        {
+          "print": "simulacao.png",
+          "event": "add_to_cart",
+          "doubts": [
+            "items.item_category: 'Simulacao' lido como 'simulacao'",
+            "items: exemplo da spec é do fluxo 'pessoal'; item_id fixado só para 'pessoal'"
+          ]
+        }
+      ],
+      "doubts_total": 5
+    }
+  },
+  "erro_report_sessao_vazia": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log.",
+      "data": {
+        "code": "invalid_input",
+        "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log."
+      }
     }
   },
   "erro_request_cancelled": {

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/mo-baile-design-system-ce666936-820e-47ab-a900-2f25ea9c78ca/styles.css">
+  <script src="_ds/mo-baile-design-system-ce666936-820e-47ab-a900-2f25ea9c78ca/_ds_bundle.js"></script>
+  <script src="paletas-data.js"></script>
+  <style>body{margin:0;background:var(--bg-content-alt);color:var(--label-primary);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}a{color:var(--accent-text)}a:hover{color:var(--accent-pressed)}</style>
+</helmet>
+<div style="max-width:1240px;margin:0 auto;padding:40px 24px 64px;display:flex;flex-direction:column;gap:40px">
+  <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px">
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:680px">
+      <h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-.01em">Paletas alternativas</h1>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--label-secondary);text-wrap:pretty">Oito temas para o Mo baile, quatro claros e quatro escuros, inspirados em designers de interiores. Cada paleta substitui os mesmos tokens de <code style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px">tokens/colors.css</code>, inclui uma variação de alto contraste e passa nas checagens de contraste e de distância entre o destaque e as cores de estado.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a href="palettes.css" download="palettes.css" style="font-size:13px;text-decoration:none">Baixar palettes.css</a>
+    </div>
+  </header>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+    <section style="display:flex;flex-direction:column;gap:16px">
+      <h2 style="margin:0;font-size:17px;font-weight:600">{{ g.title }}</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,540px),1fr));gap:20px">
+        <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="4">
+          <article style="display:flex;flex-direction:column;background:var(--bg-content);border-radius:12px;box-shadow:inset 0 0 0 .5px var(--separator-strong);overflow:hidden">
+            <div data-theme="{{ p.mode }}" style="{{ p.style }}">
+              <div style="padding:20px;background:var(--bg-desktop)">
+                <div style="display:grid;grid-template-columns:140px minmax(0,1fr);height:236px;border-radius:12px;overflow:hidden;background:var(--bg-window);box-shadow:0 0 0 .5px var(--separator-strong),0 12px 32px rgba(0,0,0,.18);color:var(--label-primary);font-size:12px">
+                  <div style="background:var(--bg-sidebar-solid);padding:10px 8px;display:flex;flex-direction:column;gap:2px;border-right:.5px solid var(--separator)">
+                    <div style="display:flex;gap:6px;padding:0 4px 10px">
+                      <span style="width:10px;height:10px;border-radius:50%;background:#FF5F57"></span>
+                      <span style="width:10px;height:10px;border-radius:50%;background:#FEBC2E"></span>
+                      <span style="width:10px;height:10px;border-radius:50%;background:#28C840"></span>
+                    </div>
+                    <div style="font-size:10px;font-weight:600;color:var(--label-tertiary);padding:4px 6px">Sessão</div>
+                    <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;color:var(--label-primary)"><x-import component-from-global-scope="MoBaileDesignSystem_ce6669.Icon" name="pointer" size="{{ 14 }}" color="var(--cat-1)" hint-size="14px,14px"></x-import>Espelho</div>
+                    <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;color:var(--label-primary)"><x-import component-from-global-scope="MoBaileDesignSystem_ce6669.Icon" name="file-code" size="{{ 14 }}" color="var(--cat-2)" hint-size="14px,14px"></x-import>Page Objects</div>
+                    <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;background:var(--selection);color:var(--selection-text)"><x-import component-from-global-scope="MoBaileDesignSystem_ce6669.Icon" name="braces" size="{{ 14 }}" hint-size="14px,14px"></x-import>Rede HTTP</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;min-width:0">
+                    <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:.5px solid var(--separator)">
+                      <span style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Rede HTTP</span>
+                      <span style="flex:1"></span>
+                      <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.SegmentedControl" items="{{ platforms }}" value="iOS" size="small" hint-size="96px,22px"></x-import>
+                      <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.Button" variant="default" size="small" icon="play" hint-size="64px,22px">Rodar</x-import>
+                    </div>
+                    <div style="flex:1;background:var(--bg-content);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;display:flex;flex-direction:column">
+                      <div style="display:grid;grid-template-columns:52px minmax(0,1fr) 36px;gap:8px;padding:6px 10px;border-bottom:.5px solid var(--separator)"><span style="color:var(--http-get);font-weight:600">GET</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">/api/v2/user</span><span style="color:var(--success)">200</span></div>
+                      <div style="display:grid;grid-template-columns:52px minmax(0,1fr) 36px;gap:8px;padding:6px 10px;border-bottom:.5px solid var(--separator);background:var(--selection-content)"><span style="color:var(--http-post);font-weight:600">POST</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">/collect/events</span><span style="color:var(--warning)">302</span></div>
+                      <div style="display:grid;grid-template-columns:52px minmax(0,1fr) 36px;gap:8px;padding:6px 10px;border-bottom:.5px solid var(--separator)"><span style="color:var(--destructive);font-weight:600">DELETE</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">/cart/items/42</span><span style="color:var(--destructive)">404</span></div>
+                      <div style="display:flex;gap:6px;align-items:center;padding:8px 10px;color:var(--label-secondary)">
+                        <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.TypeChip" type="V" hint-size="16px,16px"></x-import>
+                        <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.TypeChip" type="B" hint-size="16px,16px"></x-import>
+                        <span>XCUIElementTypeButton</span>
+                      </div>
+                    </div>
+                    <div style="height:24px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px;border-top:.5px solid var(--separator);font-size:11px">
+                      <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.StatusIndicator" status="ok" label="WDA 8100" mono="{{ true }}" hint-size="80px,16px"></x-import>
+                      <span style="color:var(--accent-text)">Exportar HAR…</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                  <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><span style="font-size:15px;font-weight:600">{{ p.name }}</span><span style="font-size:12px;color:var(--label-secondary)">{{ p.designer }}</span></div>
+                  <span style="font-size:12px;color:var(--label-secondary);text-wrap:pretty">{{ p.ref }}</span>
+                </div>
+                <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.Button" variant="secondary" size="small" icon="copy" on-click="{{ p.copy }}" hint-size="96px,24px">{{ p.copyLabel }}</x-import>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:4px">
+                <sc-for list="{{ p.swatches }}" as="s" hint-placeholder-count="11">
+                  <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                    <div style="height:28px;border-radius:6px;background:{{ s.c }};box-shadow:inset 0 0 0 .5px rgba(0,0,0,.14)"></div>
+                    <span style="font-size:9px;color:var(--label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.n }}</span>
+                    <span style="font-size:9px;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--label-tertiary)">{{ s.c }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 16px">
+                <sc-for list="{{ p.checks }}" as="c" hint-placeholder-count="8">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--label-secondary)">
+                    <x-import component-from-global-scope="MoBaileDesignSystem_ce6669.Icon" name="{{ c.icon }}" size="{{ 12 }}" color="{{ c.color }}" hint-size="12px,12px"></x-import>
+                    <span style="flex:1">{{ c.k }}</span>
+                    <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-variant-numeric:tabular-nums">{{ c.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ready: !!window.MB_PALETTES, copied: null };
+  componentDidMount() {
+    if (!this.state.ready) this.t = setInterval(() => { if (window.MB_PALETTES) { clearInterval(this.t); this.setState({ ready: true }); } }, 50);
+  }
+  componentWillUnmount() { clearInterval(this.t); clearTimeout(this.ct); }
+  copy(p) {
+    const M = window.MB_PALETTES;
+    navigator.clipboard?.writeText(M.css(p)).catch(() => {});
+    this.setState({ copied: p.id });
+    clearTimeout(this.ct); this.ct = setTimeout(() => this.setState({ copied: null }), 1500);
+  }
+  renderVals() {
+    const M = window.MB_PALETTES;
+    if (!M) return { groups: [], platforms: ['iOS', 'Android'] };
+    const item = p => ({
+      ...p,
+      style: { ...M.vars(p), colorScheme: p.mode },
+      swatches: M.swatches(p),
+      checks: M.checks(p).map(c => ({ ...c, icon: c.ok ? 'check' : 'x', color: c.ok ? 'var(--success)' : 'var(--destructive)' })),
+      copy: () => this.copy(p),
+      copyLabel: this.state.copied === p.id ? 'Copiado' : 'Copiar CSS'
+    });
+    return {
+      platforms: ['iOS', 'Android'],
+      groups: [
+        { title: 'Claros', items: M.list.filter(p => p.mode === 'light' && !p.extra).map(item) },
+        { title: 'Escuros', items: M.list.filter(p => p.mode === 'dark' && !p.extra).map(item) },
+        { title: 'Extra', items: M.list.filter(p => p.extra).map(item) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

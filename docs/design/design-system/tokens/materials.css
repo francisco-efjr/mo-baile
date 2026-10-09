@@ -1,0 +1,51 @@
+/* Liquid Glass (Regular) — só para a camada de navegação e controles flutuantes.
+   Nunca vidro sobre vidro; sobre vidro, separar com --fill-*. */
+:root{
+  --glass-bg: rgba(255,255,255,.62);
+  --glass-bg-strong: rgba(255,255,255,.80);
+  --glass-blur: 18px; /* @kind spacing */
+  --glass-saturate: 1.6; /* @kind other */
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); /* @kind other */
+  --glass-highlight: inset 0 .5px 0 rgba(255,255,255,.95), inset 0 0 0 .5px rgba(255,255,255,.45); /* @kind shadow */
+  --glass-edge: 0 0 0 .5px rgba(20,21,67,.10); /* @kind shadow */
+  --glass-shadow: 0 1px 3px rgba(20,21,67,.08), 0 4px 14px rgba(20,21,67,.08); /* @kind shadow */
+  --glass-shadow-scrolled: 0 2px 6px rgba(20,21,67,.14), 0 8px 22px rgba(20,21,67,.14); /* @kind shadow */
+  --glass-shadow-large: 0 2px 8px rgba(20,21,67,.12), 0 14px 36px rgba(20,21,67,.16); /* @kind shadow */
+  --glass-tint: rgba(194,69,110,.88);
+  --menu-bg: rgba(246,246,250,.80);
+  --menubar-bg: rgba(240,248,252,.55);
+}
+[data-theme="dark"]{
+  --glass-bg: rgba(52,52,64,.58);
+  --glass-bg-strong: rgba(52,52,64,.80);
+  --glass-highlight: inset 0 .5px 0 rgba(255,255,255,.18), inset 0 0 0 .5px rgba(255,255,255,.08); /* @kind shadow */
+  --glass-edge: 0 0 0 .5px rgba(0,0,0,.45); /* @kind shadow */
+  --glass-shadow: 0 1px 3px rgba(0,0,0,.30), 0 4px 14px rgba(0,0,0,.24); /* @kind shadow */
+  --glass-shadow-scrolled: 0 2px 6px rgba(0,0,0,.42), 0 8px 22px rgba(0,0,0,.36); /* @kind shadow */
+  --glass-shadow-large: 0 2px 8px rgba(0,0,0,.40), 0 14px 36px rgba(0,0,0,.40); /* @kind shadow */
+  --menu-bg: rgba(44,44,54,.82);
+  --menubar-bg: rgba(20,26,36,.50);
+}
+/* Reduzir transparência: todo vidro vira superfície sólida e opaca. */
+[data-reduce-transparency="true"]{
+  --glass-bg: #F7F7FA;
+  --glass-bg-strong: #F7F7FA;
+  --glass-filter: none; /* @kind other */
+  --menu-bg: #F4F4F7;
+  --menubar-bg: #ECECF1;
+  --bg-sidebar: var(--bg-sidebar-solid);
+}
+[data-theme="dark"][data-reduce-transparency="true"]{
+  --glass-bg: #34343F;
+  --glass-bg-strong: #34343F;
+  --menu-bg: #2E2E38;
+  --menubar-bg: #22222A;
+  --bg-sidebar: var(--bg-sidebar-solid);
+}
+[data-contrast="high"]{
+  --glass-edge: 0 0 0 1px var(--control-border); /* @kind shadow */
+  --glass-bg: rgba(255,255,255,.92);
+}
+[data-theme="dark"][data-contrast="high"]{
+  --glass-bg: rgba(44,44,54,.94);
+}

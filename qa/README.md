@@ -1,6 +1,6 @@
 # Harness de QA
 
-Roda os quatro fluxos principais do Mo baile sem precisar de aparelho, de Xcode
+Roda os cinco fluxos principais do Mo baile sem precisar de aparelho, de Xcode
 nem de Android SDK.
 
 ```bash
@@ -39,6 +39,12 @@ SwiftUI fala. É isso que dá valor ao harness: não é mock do motor, é o moto
 O fluxo 4 sobe um servidor HTTPS real com certificado próprio e atravessa o
 proxy com CONNECT e handshake TLS de verdade.
 
+O fluxo 5 é a aba Relatório: abre uma spec sintética, audita um log misto
+Android + iOS, exporta board, HTML, Markdown e TSV e confere o conteúdo deles,
+inclusive que um nome de projeto com `<script>` sai escapado no HTML. O motor
+roda com `HOME` temporário, para nenhum caminho padrão escrever na pasta do
+usuário.
+
 ## Cobertura
 
 | Fluxo | Verificações |
@@ -47,6 +53,7 @@ proxy com CONNECT e handshake TLS de verdade.
 | 2 · só iOS | 31 |
 | 3 · só Android | 35 |
 | 4 · HTTPS | 34 |
+| 5 · relatório | 26 |
 
 ## Requisitos
 

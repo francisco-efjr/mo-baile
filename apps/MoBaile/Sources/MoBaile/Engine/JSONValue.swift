@@ -55,3 +55,19 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, Ex
     init(integerLiteral value: Int) { self = .int(value) }
     init(booleanLiteral value: Bool) { self = .bool(value) }
 }
+
+extension JSONValue {
+    /// Valor de tipo livre (parametro de analytics) como texto de tabela.
+    var displayText: String {
+        switch self {
+        case .string(let text): return text
+        case .int(let number): return String(number)
+        case .double(let number): return String(number)
+        case .bool(let flag): return flag ? "true" : "false"
+        case .null: return ""
+        case .array, .object:
+            guard let data = try? JSONEncoder().encode(self) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+    }
+}
