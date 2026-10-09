@@ -5,6 +5,50 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.2.0] - 2026-10-08
+
+Aba **Relatório**: a auditoria de tagueamento do `tag_audit` (projeto
+bold-kepler) agora roda dentro do Mo baile, no motor. Decisões em
+[ADR 0003](docs/adr/0003-relatorio-tagueamento.md); anatomia da tela em
+[docs/design/relatorio.md](docs/design/relatorio.md).
+
+### Adicionado
+
+- Relatório na barra lateral (⌘4), sem precisar de aparelho: abre a
+  spec-modelo dos cards do Figma, audita os eventos que a escuta de Analytics
+  capturou nesta sessão ou um log exportado (`log_obtido.json`, Logcat em
+  texto) e mostra a conformidade, uma linha por variação (card × fluxo ×
+  variação) e, para cada uma, o parâmetro obtido e o esperado, o bloco com ✓/✗
+  e o disparo avaliado. O inspector mostra o card do Figma da linha.
+- Recortes: Pedem Ação, Divergentes, Não Disparadas, OK e Fora da Spec
+  (eventos dos fluxos que nenhum card cobre, e alertas de `app_exception` e
+  `error_view`). A busca da toolbar (⌘F) filtra a tabela.
+- Exportar grava o board Excalidraw, o HTML, o Markdown e o TSV em
+  Documentos › Mo baile › Relatórios, ou na pasta escolhida. Copiar põe o TSV
+  (Google Planilhas) ou o Markdown (PR, Jira) na área de transferência.
+- Importar Prints do Figma: o OCR do macOS (Vision, local) lê os cards e grava
+  o rascunho da spec, sem sobrescrever spec existente, com a lista do que
+  conferir em cada card.
+- Arquivo › Abrir Spec de Tagueamento… (⌘O), Importar Prints do Figma… e
+  Exportar Relatório….
+- Contrato: `report.spec`, `report.audit`, `report.export` e `report.import`,
+  numa fila própria (`report`), com progresso. O relatório não espera nem
+  segura o aparelho.
+- Fluxo 5 do harness de QA (relatório de ponta a ponta, 26 verificações).
+
+### Mudado
+
+- Em relação ao `tag_audit`: regex inválida na spec é recusada ao abrir (antes
+  quebrava a auditoria no meio); o board sai determinístico (ids por contador,
+  não `uuid4`); spec, log e pastas passam por validação de caminho e de
+  tamanho antes de abrir. As regras de casamento são as mesmas: Markdown, TSV e
+  HTML saem idênticos aos do `tag_audit` para os mesmos arquivos.
+
+### Fora desta versão
+
+- O pipeline antigo `run` do `tag_audit`, a sincronização com o WebKit do
+  *Francis' DrawCred* e a saída com código 2 para CI (ver ADR 0003).
+
 ## [3.1.0] - 2026-10-08
 
 ### Adicionado
