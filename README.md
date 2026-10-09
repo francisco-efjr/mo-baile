@@ -21,7 +21,9 @@ certa.
 Appium, em três estratégias de localizador.
 
 **Inspeção de rede.** Proxy local que registra o tráfego HTTP do aparelho, com
-credenciais redigidas.
+credenciais redigidas. Com o app em debug, dá para ler o HTTPS sem proxy: pelo
+cabo no iPhone (`CFNETWORK_DIAGNOSTICS`) e pelo logcat no Android (log do
+OkHttp). A busca procura em URL, headers e corpos.
 
 **Captura de tagueamento.** Eventos de Firebase Analytics em tempo real, via
 logcat no Android e Unified Logging no iOS.

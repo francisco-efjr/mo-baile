@@ -585,9 +585,12 @@ enum EngineDTO {
         let running: Bool
         let deviceId: String?
         let rawLog: String?
+        /// `cfnetwork` (iPhone) ou `okhttp_logcat` (Android). Opcional: o motor
+        /// anterior à 3.3 não mandava.
+        let source: String?
 
         enum CodingKeys: String, CodingKey {
-            case running
+            case running, source
             case deviceId = "device_id"
             case rawLog = "raw_log"
         }

@@ -185,7 +185,15 @@ final class WindowSnapshotTests: XCTestCase {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         janela.makeKeyAndOrderFront(nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(1.6))
+        RunLoop.main.run(until: Date().addingTimeInterval(1.0))
+        // O SwiftUI ajusta a janela ao tamanho mínimo do conteúdo depois do
+        // primeiro layout; reaplicar o tamanho deixa as capturas comparáveis.
+        janela.setContentSize(tamanho)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        if ProcessInfo.processInfo.environment["MOBAILE_MEDIR"] != nil {
+            print("MEDIDA \(nome): pedido=\(tamanho) janela=\(janela.frame.size) minimo=\(janela.contentMinSize) "
+                  + "fitting=\(controller.view.fittingSize) tela=\(janela.screen?.frame.size ?? .zero) escala=\(janela.backingScaleFactor)")
+        }
 
         var imagem: CGImage?
         imagem = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(janela.windowNumber), [.boundsIgnoreFraming, .bestResolution])
@@ -320,5 +328,262 @@ final class WindowSnapshotTests: XCTestCase {
         e.selectedStepID = e.steps[1].id
         t.setPalette("salvia")
         try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "11-janela-salvia")
+    }
+}
+
+// MARK: - Catálogo de telas (docs/design/telas)
+
+/// Gera o catálogo completo de telas e estados do app, em claro e escuro, e o
+/// `catalogo.json` que `tools/catalogo_telas.py` usa para montar o PDF.
+///
+///     cd apps/MoBaile
+///     MOBAILE_SNAPSHOT_DIR="$(cd ../.. && pwd)/docs/design/telas" swift test --filter WindowSnapshotTests/testCatalogoDeTelas
+///     python3 ../../tools/catalogo_telas.py ../../docs/design/telas
+///
+/// As janelas aparecem na tela por um instante: com a tela bloqueada, a
+/// captura sai preta.
+extension WindowSnapshotTests {
+
+    private struct Cena {
+        let id: String
+        let titulo: String
+        let conferir: String
+        var tamanho = CGSize(width: 1280, height: 800)
+        /// `false`: a cena impõe a aparência (paleta alternativa) e sai uma vez só.
+        var doisTemas = true
+        let montar: (_ escuro: Bool) throws -> (AnyView, ThemeManager)
+    }
+
+    /// Espera um trabalho assíncrono girando o run loop, sem sair do teste síncrono.
+    private func esperar(_ trabalho: @escaping @MainActor () async -> Void) {
+        var pronto = false
+        Task { @MainActor in
+            await trabalho()
+            pronto = true
+        }
+        let limite = Date().addingTimeInterval(5)
+        while !pronto && Date() < limite {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+    }
+
+    private func relatorioDasFixtures() throws -> AuditReport {
+        let dados = try XCTUnwrap(try resultadosDasFixtures()["report.audit"])
+        return try JSONDecoder().decode(EngineDTO.ReportAuditPayload.self, from: dados).toModel()
+    }
+
+    private func linhasDeExecucao() -> [LogLine] {
+        let agora = Date()
+        return [
+            LogLine(timestamp: agora, prefix: "INFO", message: "Sessão Appium aberta · XCUITest · iPhone 16 (iOS 18.6)"),
+            LogLine(timestamp: agora.addingTimeInterval(1), prefix: "RUN", message: "passo 1 · click BOTAO_SIMULAR_CREDITO"),
+            LogLine(timestamp: agora.addingTimeInterval(2), prefix: "PASS", message: "passo 1 ok"),
+            LogLine(timestamp: agora.addingTimeInterval(3), prefix: "HTTP", message: "POST /v2/credito/simulacao → 201 (812 ms)"),
+            LogLine(timestamp: agora.addingTimeInterval(4), prefix: "FA", message: "simulacao_credito_iniciada"),
+            LogLine(timestamp: agora.addingTimeInterval(5), prefix: "RUN", message: "passo 2 · send_keys CAMPO_CPF"),
+        ]
+    }
+
+    private var cenas: [Cena] {
+        func janelaPronta(_ ajuste: @escaping (AppState, EngineSession) throws -> Void, area: WorkspaceTab = .pageObjects,
+                          conectado: Bool = true) -> (Bool) throws -> (AnyView, ThemeManager) {
+            { _ in
+                let (e, s, t) = self.ambiente(conectado: conectado, area: area)
+                try ajuste(e, s)
+                return (AnyView(self.janela(e, s, t)), t)
+            }
+        }
+        func avulsa<V: View>(_ conteudo: @escaping (AppState, EngineSession) throws -> V) -> (Bool) throws -> (AnyView, ThemeManager) {
+            { _ in
+                let (e, s, t) = self.ambiente()
+                let view = try conteudo(e, s)
+                return (AnyView(view.environment(e).environment(s).environment(t)), t)
+            }
+        }
+        return [
+            Cena(id: "01-splash", titulo: "Splash de abertura",
+                 conferir: "Mascote, título, barra de progresso no destaque, texto de boot",
+                 tamanho: CGSize(width: 640, height: 380),
+                 montar: { _ in
+                     (AnyView(SplashView(progress: SplashProgress(message: "Procurando aparelhos e simuladores…",
+                                                                  fraction: 0.7))), ThemeManager())
+                 }),
+            Cena(id: "02-sem-dispositivo-procurando", titulo: "Sem dispositivo, procurando",
+                 conferir: "Estado vazio enquanto o motor ainda não respondeu ao diagnóstico",
+                 montar: janelaPronta({ _, _ in }, conectado: false)),
+            Cena(id: "02b-sem-dispositivo-diagnostico", titulo: "Sem dispositivo, diagnóstico medido",
+                 conferir: "Cartões iOS e Android com checagens reais, ações sugeridas, rodapé do último scan",
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "03-page-objects-inicial", titulo: "Page Objects, aparelho conectado sem passos",
+                 conferir: "Espelho, editores vazios, inspector com a hierarquia, toolbar completa",
+                 montar: janelaPronta({ e, _ in
+                     e.steps = []
+                     e.actionsCode = ""
+                     e.locatorsCode = ""
+                 })),
+            Cena(id: "03b-page-objects-passo-selecionado", titulo: "Page Objects com passos, um selecionado",
+                 conferir: "Passos na barra lateral, código do passo destacado, subtítulo \"Passo N de M\"",
+                 montar: janelaPronta({ e, _ in e.selectedStepID = e.steps[3].id })),
+            Cena(id: "03c-page-objects-lado-a-lado", titulo: "Page Objects, editores lado a lado",
+                 conferir: "Ações e locators divididos, numeração, realce Python",
+                 montar: janelaPronta({ e, _ in e.splitEditors = true })),
+            Cena(id: "03d-modo-zen", titulo: "Modo Zen",
+                 conferir: "Sem barra lateral e sem inspector: só espelho e workspace",
+                 montar: janelaPronta({ e, _ in e.toggleZenMode() })),
+            Cena(id: "04-rede-vazia", titulo: "Rede HTTP sem tráfego",
+                 conferir: "Barra acessória, estado vazio com a ação de iniciar",
+                 montar: janelaPronta({ e, _ in
+                     e.httpRequests = []
+                     e.selectedRequest = nil
+                     e.proxyRunning = false
+                 }, area: .network)),
+            Cena(id: "04b-rede-detalhe-post", titulo: "Rede HTTP, requisição POST 201",
+                 conferir: "Cores de método e status, Request e Response lado a lado, JSON formatado",
+                 montar: janelaPronta({ _, _ in }, area: .network)),
+            Cena(id: "04c-rede-tunel-https", titulo: "Rede HTTP, túnel CONNECT",
+                 conferir: "Estado de túnel HTTPS no lugar do corpo",
+                 montar: janelaPronta({ e, _ in e.selectedRequest = e.httpRequests[4] }, area: .network)),
+            Cena(id: "04d-rede-erro-422", titulo: "Rede HTTP, erro 422",
+                 conferir: "Cor 4xx igual na tabela e no detalhe, corpo do erro",
+                 montar: janelaPronta({ e, _ in e.selectedRequest = e.httpRequests[2] }, area: .network)),
+            Cena(id: "05-analytics-vazio", titulo: "Analytics sem eventos",
+                 conferir: "Origem do tagueamento no iOS, estado vazio com Iniciar Escuta",
+                 montar: janelaPronta({ e, _ in
+                     e.analyticsEvents = []
+                     e.selectedAnalyticsEvent = nil
+                     e.analyticsListenerActive = false
+                 }, area: .analytics)),
+            Cena(id: "05b-analytics-evento", titulo: "Analytics, evento selecionado",
+                 conferir: "Tabela, Parâmetros e Log Bruto",
+                 montar: janelaPronta({ _, _ in }, area: .analytics)),
+            Cena(id: "06-relatorio-vazio", titulo: "Relatório sem spec",
+                 conferir: "Funciona sem aparelho; duas ações (importar prints, abrir spec)",
+                 montar: janelaPronta({ _, _ in }, area: .report, conectado: false)),
+            Cena(id: "06b-relatorio-spec-aberta", titulo: "Relatório, spec aberta",
+                 conferir: "Cartão com o resumo da spec e o botão Auditar",
+                 montar: janelaPronta({ e, _ in
+                     let r = try self.relatorioDasFixtures()
+                     e.reportSpec = r.spec
+                     e.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/Documents/log_obtido.json"))
+                 }, area: .report, conectado: false)),
+            Cena(id: "06c-relatorio-divergencia", titulo: "Relatório, variação divergente",
+                 conferir: "Conformidade, filtros, tabela, validação parâmetro a parâmetro, bloco, card no inspector",
+                 montar: janelaPronta({ e, _ in
+                     let r = try self.relatorioDasFixtures()
+                     e.reportSpec = r.spec
+                     e.report = r
+                     e.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/Documents/log_obtido.json"))
+                     e.selectedReportResultID = r.results.first { $0.status == .error && $0.variation == "click:parcelas" }?.id
+                 }, area: .report, conectado: false)),
+            Cena(id: "06d-relatorio-fora-da-spec", titulo: "Relatório, fora da spec e alertas",
+                 conferir: "Tabela de eventos sem card e alertas, detalhe explicando o que conferir",
+                 montar: janelaPronta({ e, _ in
+                     let r = try self.relatorioDasFixtures()
+                     e.reportSpec = r.spec
+                     e.report = r
+                     e.reportFilter = .outOfSpec
+                     e.selectedReportExtraID = r.extras.first?.id
+                 }, area: .report, conectado: false)),
+            Cena(id: "06e-relatorio-revisao-importacao", titulo: "Relatório, revisão da importação (sheet)",
+                 conferir: "Dúvidas do OCR por card, Usar Esta Spec como botão padrão",
+                 tamanho: CGSize(width: 560, height: 520),
+                 montar: avulsa { e, _ in
+                     let dados = try XCTUnwrap(try self.resultadosDasFixtures()["report.import"])
+                     e.reportImport = try JSONDecoder().decode(EngineDTO.ReportImportPayload.self, from: dados).toModel()
+                     return ReportImportSheet()
+                 }),
+            Cena(id: "07-janela-minima", titulo: "Janela no tamanho mínimo (980×640)",
+                 conferir: "Toolbar manda o excedente para o menu », colunas no mínimo, nada cortado",
+                 tamanho: CGSize(width: 980, height: 640),
+                 montar: janelaPronta({ _, _ in })),
+            Cena(id: "08-estrutura-do-fluxo", titulo: "Estrutura do fluxo (sheet)",
+                 conferir: "Tabela ordenável dos passos, Copiar resumo, Fechar",
+                 tamanho: CGSize(width: 720, height: 440),
+                 montar: avulsa { _, _ in StructureSheet() }),
+            Cena(id: "08b-execucao-rodando", titulo: "Executar fluxo, em andamento (sheet)",
+                 conferir: "Selo, progresso, passo ativo, terminal, Interromper destrutivo e nunca padrão",
+                 tamanho: CGSize(width: 860, height: 480),
+                 montar: avulsa { e, _ in
+                     e.runState = .running
+                     e.currentRunStep = 2
+                     e.runLog = self.linhasDeExecucao()
+                     return FlowRunnerSheet()
+                 }),
+            Cena(id: "08c-execucao-sucesso", titulo: "Executar fluxo, concluído (sheet)",
+                 conferir: "Todos os passos OK, Concluir habilitado",
+                 tamanho: CGSize(width: 860, height: 480),
+                 montar: avulsa { e, _ in
+                     e.runState = .passed
+                     e.currentRunStep = 7
+                     e.runLog = self.linhasDeExecucao() + [LogLine(timestamp: Date(), prefix: "PASS", message: "6 passos ok")]
+                     return FlowRunnerSheet()
+                 }),
+            Cena(id: "08d-execucao-falha", titulo: "Executar fluxo, falha no passo 5 (sheet)",
+                 conferir: "Passo que falhou marcado, linha FAIL no terminal",
+                 tamanho: CGSize(width: 860, height: 480),
+                 montar: avulsa { e, _ in
+                     e.runState = .failed
+                     e.currentRunStep = 5
+                     e.runLog = self.linhasDeExecucao() + [LogLine(timestamp: Date(), prefix: "FAIL",
+                         message: "NoSuchElementError: BOTAO_CONFIRMAR_CONTRATACAO não ficou visível em 15 s")]
+                     return FlowRunnerSheet()
+                 }),
+            Cena(id: "09-correlacao", titulo: "Correlação (popover)",
+                 conferir: "Último passo, requisições e eventos na janela do toque, gerar asserção",
+                 tamanho: CGSize(width: 380, height: 300),
+                 montar: avulsa { _, _ in CorrelationPopover(onClose: {}).padding(14) }),
+            Cena(id: "10-ajustes-geral", titulo: "Ajustes › Geral",
+                 conferir: "Formulário nativo, aparência, seletor padrão, espelho automático",
+                 tamanho: CGSize(width: 520, height: 300),
+                 montar: avulsa { _, _ in GeneralSettings().frame(width: 520) }),
+            Cena(id: "10b-ajustes-conexoes", titulo: "Ajustes › Conexões",
+                 conferir: "Endereços do motor só para leitura",
+                 tamanho: CGSize(width: 520, height: 300),
+                 montar: avulsa { _, _ in ConnectionSettings().frame(width: 520) }),
+            Cena(id: "10c-ajustes-paletas", titulo: "Ajustes › Paletas",
+                 conferir: "Galeria das nove paletas com prévia e checagens de contraste",
+                 tamanho: CGSize(width: 700, height: 900),
+                 montar: avulsa { _, _ in PaletteGallery() }),
+            Cena(id: "11-paleta-terracota", titulo: "Janela com a paleta Terracota (escura)",
+                 conferir: "Paleta impõe a aparência; barra lateral na cor da paleta",
+                 doisTemas: false,
+                 montar: { _ in
+                     let (e, s, t) = self.ambiente(area: .network)
+                     t.setPalette("wearstler")
+                     return (AnyView(self.janela(e, s, t).preferredColorScheme(.dark)), t)
+                 }),
+            Cena(id: "11b-paleta-salvia", titulo: "Janela com a paleta Sálvia & Palha (clara)",
+                 conferir: "Mesma estrutura com outra identidade",
+                 doisTemas: false,
+                 montar: { _ in
+                     let (e, s, t) = self.ambiente()
+                     e.selectedStepID = e.steps[1].id
+                     t.setPalette("salvia")
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+        ]
+    }
+
+    func testCatalogoDeTelas() throws {
+        let pasta = try destino()
+        var manifesto: [[String: Any]] = []
+        for cena in cenas {
+            var entrada: [String: Any] = ["id": cena.id, "titulo": cena.titulo, "conferir": cena.conferir]
+            for escuro in cena.doisTemas ? [false, true] : [false] {
+                let (view, tema) = try cena.montar(escuro)
+                let nome = cena.doisTemas ? "\(cena.id)-\(escuro ? "escuro" : "claro")" : cena.id
+                try fotografar(view, tamanho: cena.tamanho, nome: nome, escuro: escuro,
+                               tema: cena.doisTemas ? tema : nil)
+                entrada[cena.doisTemas ? (escuro ? "escuro" : "claro") : "unica"] = "\(nome).png"
+            }
+            manifesto.append(entrada)
+        }
+        let dados = try JSONSerialization.data(withJSONObject: ["telas": manifesto], options: [.prettyPrinted, .sortedKeys])
+        try dados.write(to: pasta.appendingPathComponent("catalogo.json"))
     }
 }

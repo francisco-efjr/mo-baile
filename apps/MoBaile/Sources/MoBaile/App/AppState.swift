@@ -50,8 +50,9 @@ class AppState {
     var selectedRequest: NetworkEvent? = nil
     var httpFilterText: String = ""
     var proxyRunning: Bool = false
-    /// iOS: lendo pelo cabo o log `CFNETWORK_DIAGNOSTICS` do app em debug.
-    var iosDebugNetActive: Bool = false
+    /// Tráfego do app em debug, sem proxy: no iOS, o log `CFNETWORK_DIAGNOSTICS`
+    /// pelo cabo; no Android, o log do OkHttp pelo logcat.
+    var debugNetActive: Bool = false
     
     // --- Analytics Events ---
     var analyticsEvents: [AnalyticsEvent] = []
@@ -106,28 +107,19 @@ class AppState {
     /// Linhas da tabela: filtro por status e busca da toolbar.
     var filteredReportResults: [ReportResult] {
         guard let report else { return [] }
-        let query = reportFilterText.lowercased()
+        let busca = SearchQuery(reportFilterText)
         return report.results.filter { result in
-            guard reportFilter.includes(result) else { return false }
-            guard !query.isEmpty else { return true }
-            return result.event.lowercased().contains(query)
-                || result.variation.lowercased().contains(query)
-                || result.cardTitle.lowercased().contains(query)
-                || result.section.lowercased().contains(query)
-                || result.divergences.lowercased().contains(query)
-                || (result.flowLabel ?? "").lowercased().contains(query)
+            reportFilter.includes(result) && (busca.isEmpty || busca.matches(result.searchableFields))
         }
     }
 
     /// Eventos fora da spec e alertas, com a mesma busca.
     var filteredReportExtras: [ReportExtra] {
         guard let report else { return [] }
-        let query = reportFilterText.lowercased()
-        guard !query.isEmpty else { return report.extras }
+        let busca = SearchQuery(reportFilterText)
+        guard !busca.isEmpty else { return report.extras }
         return report.extras.filter {
-            $0.event.lowercased().contains(query)
-                || $0.screenText.lowercased().contains(query)
-                || $0.detailText.lowercased().contains(query)
+            busca.matches([$0.event, $0.screenText, $0.detailText, $0.componentText, $0.flowName ?? ""])
         }
     }
 
@@ -200,23 +192,15 @@ class AppState {
     /// seguem em ordem de chegada, que é o que HAR, TSV e o cartão de
     /// correlação usam.
     var filteredHTTPRequests: [NetworkEvent] {
-        guard !httpFilterText.isEmpty else { return httpRequests.reversed() }
-        let query = httpFilterText.lowercased()
-        return httpRequests.reversed().filter {
-            $0.host.lowercased().contains(query) ||
-            $0.path.lowercased().contains(query) ||
-            $0.method.lowercased().contains(query) ||
-            ("\($0.statusCode ?? 0)").contains(query)
-        }
+        let busca = SearchQuery(httpFilterText)
+        guard !busca.isEmpty else { return httpRequests.reversed() }
+        return httpRequests.reversed().filter { busca.matches($0.searchableFields) }
     }
-    
+
     var filteredAnalyticsEvents: [AnalyticsEvent] {
-        guard !analyticsFilterText.isEmpty else { return analyticsEvents.reversed() }
-        let query = analyticsFilterText.lowercased()
-        return analyticsEvents.reversed().filter {
-            $0.eventName.lowercased().contains(query) ||
-            $0.tag.lowercased().contains(query)
-        }
+        let busca = SearchQuery(analyticsFilterText)
+        guard !busca.isEmpty else { return analyticsEvents.reversed() }
+        return analyticsEvents.reversed().filter { busca.matches($0.searchableFields) }
     }
     
     // MARK: - Actions

@@ -17,6 +17,11 @@ import Observation
 /// Regra de disciplina: as telas falam com esta classe, nunca com o
 /// `EngineClient`. Assim o dia em que o transporte mudar (socket unix para os
 /// quadros, por exemplo) nenhuma tela precisa saber.
+/// Fases da abertura do app (ver `EngineSession.launchPhase`).
+enum LaunchPhase: Equatable, Sendable {
+    case startingEngine, scanning, ready, failed
+}
+
 @MainActor
 @Observable
 final class EngineSession {
@@ -34,6 +39,17 @@ final class EngineSession {
 
     /// Resultado do handshake: versão do motor e tabela de métodos.
     private(set) var hello: EngineDTO.Hello?
+
+    /// Em que ponto da abertura o app está. O splash acompanha isto e só sai
+    /// quando o motor respondeu e a primeira varredura de aparelhos e do
+    /// ambiente terminou (ou quando a subida falhou, para o erro aparecer na
+    /// janela).
+    var launchPhase: LaunchPhase {
+        if lastScan != nil { return .ready }
+        if isConnected { return .scanning }
+        if lastError != nil { return .failed }
+        return .startingEngine
+    }
 
     /// Versão do contrato que esta interface fala (ver `docs/PROTOCOLO_RPC.md`).
     nonisolated static let protocolVersion = 2
@@ -1047,23 +1063,28 @@ final class EngineSession {
         }
     }
 
-    /// Tráfego do app em debug no iPhone por cabo, sem proxy: o motor lê o log
-    /// `CFNETWORK_DIAGNOSTICS` e entrega cada requisição como `proxy.event`.
-    func toggleIOSDebugNet() async {
+    /// Tráfego HTTPS do app em debug, sem proxy nem certificado. O motor lê o
+    /// log da plataforma da sessão e entrega cada requisição como `proxy.event`:
+    /// no iPhone, o `CFNETWORK_DIAGNOSTICS` pelo cabo; no Android, o log do
+    /// `HttpLoggingInterceptor` do OkHttp pelo logcat, que convive com o
+    /// debugger do Android Studio.
+    func toggleDebugNet() async {
         guard let client else { return }
         do {
-            if state.iosDebugNetActive {
+            if state.debugNetActive {
                 let result: EngineDTO.NetlogState = try await client.call("netlog.stop")
-                state.iosDebugNetActive = result.running
+                state.debugNetActive = result.running
             } else {
                 let result: EngineDTO.NetlogState = try await client.call("netlog.start")
-                state.iosDebugNetActive = result.running
+                state.debugNetActive = result.running
                 if result.running {
-                    state.statusMessage = "Lendo o tráfego do iPhone. O app precisa rodar com CFNETWORK_DIAGNOSTICS=3."
+                    state.statusMessage = result.source == "okhttp_logcat"
+                        ? "Lendo o tráfego do app pelo logcat. O build de debug precisa do HttpLoggingInterceptor do OkHttp."
+                        : "Lendo o tráfego do iPhone. O app precisa rodar com CFNETWORK_DIAGNOSTICS=3."
                 }
             }
         } catch {
-            state.iosDebugNetActive = false
+            state.debugNetActive = false
             report(error)
         }
     }

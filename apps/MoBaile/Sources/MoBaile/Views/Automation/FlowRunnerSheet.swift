@@ -249,7 +249,7 @@ struct FlowRunnerSheet: View {
             segundos = max(0, fim.timeIntervalSince(inicio))
         }
         let tempo = String(format: "%.1f", segundos).replacingOccurrences(of: ".", with: ",")
-        return "\(aprovados) aprovados · \(falhas) \(falhas == 1 ? "falha" : "falhas") · tempo \(tempo) s"
+        return "\(aprovados) \(aprovados == 1 ? "aprovado" : "aprovados") · \(falhas) \(falhas == 1 ? "falha" : "falhas") · tempo \(tempo) s"
     }
 
     private var wdaLabel: String {

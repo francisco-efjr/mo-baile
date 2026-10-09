@@ -223,21 +223,21 @@ private struct SectionSearch: ViewModifier {
                 text: $state.httpFilterText,
                 isPresented: $state.toolbarSearchPresented,
                 placement: .toolbar,
-                prompt: "Filtrar host, path ou status"
+                prompt: "Buscar em URL, headers e corpo"
             )
         } else if appState.isDeviceConnected && appState.workspaceTab == .analytics {
             content.searchable(
                 text: $state.analyticsFilterText,
                 isPresented: $state.toolbarSearchPresented,
                 placement: .toolbar,
-                prompt: "Filtrar eventos e tags"
+                prompt: "Buscar em eventos, parâmetros e log"
             )
         } else if appState.workspaceTab == .report {
             content.searchable(
                 text: $state.reportFilterText,
                 isPresented: $state.toolbarSearchPresented,
                 placement: .toolbar,
-                prompt: "Filtrar evento, variação ou divergência"
+                prompt: "Buscar em eventos, parâmetros e divergências"
             )
         } else {
             content

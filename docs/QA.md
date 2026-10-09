@@ -2,13 +2,13 @@
 
 ## Estado atual
 
-Atualizado em 08/10/2026, com a aba Relatório (3.2.0). Detalhes das correções
+Atualizado em 09/10/2026 (3.3.0: busca em tudo, App em Debug no Android, splash). Detalhes das correções
 de 05/10, evidências e limites em [QA_2026-10-05.md](QA_2026-10-05.md).
 
 | Suite | Onde | Testes | Precisa de |
 |---|---|---|---|
-| Motor e contrato RPC | `engine/tests` | 423 + 133 subtests aprovados (88 do relatório) | Python e sockets locais para integração; OCR real só no macOS com `swiftc` |
-| Front nativo | `apps/MoBaile/Tests` | 197 executados, 0 falhas; 22 skips (snapshots sob demanda e casos com aparelho) | macOS com Swift |
+| Motor e contrato RPC | `engine/tests` | 437 + 133 subtests aprovados (88 do relatório, 14 do App em Debug no Android) | Python e sockets locais para integração; OCR real só no macOS com `swiftc` |
+| Front nativo | `apps/MoBaile/Tests` | 225 executados, 0 falhas; 23 skips (snapshots e catálogo sob demanda, casos com aparelho) | macOS com Swift |
 | UI Tkinter | `apps/tk-legacy/tests` | 18 aprovados | sessão gráfica |
 | Harness de QA | `qa/tests` | 11 aprovados | Python |
 | Fluxos de ponta a ponta | `qa/qa_fluxo*.py` | 145 verificações em 5 fluxos | Python, openssl e sockets locais |

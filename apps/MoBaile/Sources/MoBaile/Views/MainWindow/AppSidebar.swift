@@ -211,8 +211,19 @@ extension WorkspaceTab {
 
 extension AutomationStep {
     /// Nome que o passo mostra: o elemento, ou o seletor quando não há nome.
+    /// O passo por coordenada não tem elemento: o motor chama de `position`,
+    /// que é valor interno. Na interface ele é "toque em x, y".
     var displayElement: String {
-        elementName.isEmpty ? locatorValue : elementName
+        if strategy == .coords || elementName == "position" {
+            if let coords { return "toque em \(Int(coords.x)), \(Int(coords.y))" }
+            return "toque por coordenada"
+        }
+        return elementName.isEmpty ? locatorValue : elementName
+    }
+
+    /// Frase curta do passo, para a Correlação e o leitor de tela.
+    var summarySentence: String {
+        "\(actionType) \(displayElement) · \(strategy.displayName)"
     }
 
     var symbolName: String {

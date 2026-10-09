@@ -101,6 +101,15 @@ struct ReportResult: Identifiable, Equatable, Sendable {
     var timeText: String { matched?.time ?? "" }
     var failedChecks: Int { checks.filter { !$0.ok }.count }
 
+    /// O que a busca da toolbar olha: a linha, cada parâmetro (obtido e
+    /// esperado) e os parâmetros do disparo avaliado.
+    var searchableFields: [String] {
+        var campos = [event, variation, cardTitle, section, divergences, flowLabel ?? "", status.displayName]
+        campos += checks.map { "\($0.field): \($0.obtained ?? "") \($0.expected)" }
+        campos += (matched?.params ?? [:]).map { "\($0.key): \($0.value)" }
+        return campos
+    }
+
     /// O que o leitor de tela lê no lugar das células da linha.
     var accessibilitySummary: String {
         var partes = ["\(status.displayName): \(event)"]

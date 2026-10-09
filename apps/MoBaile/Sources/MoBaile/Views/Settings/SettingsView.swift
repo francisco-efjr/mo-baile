@@ -18,7 +18,7 @@ struct SettingsView: View {
     }
 }
 
-private struct GeneralSettings: View {
+struct GeneralSettings: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage(LocatorStrategy.defaultKey) private var seletorPadrao: LocatorStrategy = .auto
@@ -78,7 +78,7 @@ private struct GeneralSettings: View {
 
 /// Endereços que o motor usa. Vêm da configuração do motor e aparecem só para
 /// leitura: o protocolo não tem como mudá-los com o motor no ar.
-private struct ConnectionSettings: View {
+struct ConnectionSettings: View {
     @Environment(EngineSession.self) private var session
     @Environment(ThemeManager.self) private var themeManager
 

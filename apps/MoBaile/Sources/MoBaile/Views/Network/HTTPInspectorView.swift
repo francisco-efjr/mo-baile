@@ -26,11 +26,11 @@ struct HTTPInspectorView: View {
                 .padding(.top, 8)
             }
 
-            if !appState.proxyRunning && !appState.iosDebugNetActive && appState.httpRequests.isEmpty {
+            if !appState.proxyRunning && !appState.debugNetActive && appState.httpRequests.isEmpty {
                 EmptyState(
                     icon: "network",
                     title: "O proxy está desligado",
-                    text: "Inicie o proxy para registrar o tráfego HTTP do aparelho. As credenciais são redigidas.",
+                    text: "Inicie o proxy para registrar o tráfego HTTP do aparelho, ou leia o app em debug sem proxy com \(DebugNetCopy(appState.platform).titulo). As credenciais são redigidas.",
                     actionLabel: "Configurar Proxy",
                     action: { Task { await session.toggleProxy() } }
                 )
@@ -90,20 +90,18 @@ private struct NetworkAccessoryBar: View {
                 )
             }
             Spacer(minLength: 8)
-            if appState.platform == .ios {
-                // Tráfego do app em debug lido pelo cabo, sem proxy nem
-                // certificado (CFNETWORK_DIAGNOSTICS=3 no scheme do Xcode).
-                Button {
-                    Task { await session.toggleIOSDebugNet() }
-                } label: {
-                    rotulo(appState.iosDebugNetActive ? "Parar iPhone Debug" : "iPhone em Debug",
-                           icone: appState.iosDebugNetActive ? "stop.circle" : "cable.connector", compacto: compacto)
-                }
-                .help("Lê pelo cabo as requisições do app em debug, sem proxy nem certificado. No scheme do Xcode, adicione a variável de ambiente CFNETWORK_DIAGNOSTICS=3.")
-                .accessibilityLabel(appState.iosDebugNetActive
-                                    ? "Parar leitura de tráfego do iPhone em debug"
-                                    : "Ler tráfego do iPhone em debug")
+            // Tráfego do app em debug sem proxy nem certificado: CFNetwork no
+            // iPhone, log do OkHttp no Android.
+            let copia = DebugNetCopy(appState.platform)
+            Button {
+                Task { await session.toggleDebugNet() }
+            } label: {
+                rotulo(appState.debugNetActive ? copia.parar : copia.titulo,
+                       icone: appState.debugNetActive ? "stop.circle" : copia.icone, compacto: compacto)
             }
+            .disabled(appState.platform == .android && !appState.isDeviceConnected && !appState.debugNetActive)
+            .help(copia.ajuda)
+            .accessibilityLabel(appState.debugNetActive ? copia.pararAcessivel : copia.iniciarAcessivel)
             Button {
                 Task { await session.toggleProxy() }
             } label: {
@@ -253,13 +251,114 @@ extension NetworkEvent {
         isTunnel || (method.uppercased() == "CONNECT" && responseBody.isEmpty)
     }
 
+    /// JSON indentado para leitura, com os valores exatamente como vieram.
+    ///
+    /// Antes o corpo passava por `JSONSerialization` ida e volta: `28.4` virava
+    /// `28.399999999999999`, a ordem das chaves mudava e o que aparecia não era
+    /// o que o servidor mandou. Agora o `JSONSerialization` só confere que é
+    /// JSON; a indentação é feita sobre o texto original, sem reinterpretar
+    /// número, string nem ordem.
     static func prettyBody(_ text: String) -> String {
-        guard let data = text.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data, options: []),
-              let prettyData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
-              let prettyString = String(data: prettyData, encoding: .utf8) else {
+        let corpo = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard corpo.first == "{" || corpo.first == "[",
+              let data = corpo.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data, options: [])) != nil else {
             return text
         }
-        return prettyString
+        return indentJSON(corpo)
+    }
+
+    /// Reindenta JSON já válido, dois espaços por nível, sem tocar em literal.
+    static func indentJSON(_ json: String) -> String {
+        var saida = ""
+        var nivel = 0
+        var emString = false
+        var escapando = false
+        let caracteres = Array(json)
+        var indice = 0
+
+        func quebra() {
+            saida += "\n" + String(repeating: "  ", count: nivel)
+        }
+        func proximoSignificativo(_ de: Int) -> Character? {
+            var i = de
+            while i < caracteres.count, caracteres[i].isWhitespace { i += 1 }
+            return i < caracteres.count ? caracteres[i] : nil
+        }
+
+        while indice < caracteres.count {
+            let c = caracteres[indice]
+            indice += 1
+            if emString {
+                saida.append(c)
+                if escapando {
+                    escapando = false
+                } else if c == "\\" {
+                    escapando = true
+                } else if c == "\"" {
+                    emString = false
+                }
+                continue
+            }
+            switch c {
+            case "\"":
+                emString = true
+                saida.append(c)
+            case "{", "[":
+                saida.append(c)
+                let fecha: Character = c == "{" ? "}" : "]"
+                if proximoSignificativo(indice) == fecha {
+                    // Vazio fica numa linha só: {} e [].
+                    while caracteres[indice].isWhitespace { indice += 1 }
+                    saida.append(fecha)
+                    indice += 1
+                } else {
+                    nivel += 1
+                    quebra()
+                }
+            case "}", "]":
+                nivel = max(0, nivel - 1)
+                quebra()
+                saida.append(c)
+            case ",":
+                saida.append(c)
+                quebra()
+            case ":":
+                saida += ": "
+            default:
+                if !c.isWhitespace { saida.append(c) }
+            }
+        }
+        return saida
+    }
+}
+
+/// Textos do "app em debug" por plataforma. O recurso é o mesmo (tráfego HTTPS
+/// sem proxy); muda de onde o motor lê e o que o app precisa ter.
+struct DebugNetCopy {
+    let titulo: String
+    let parar: String
+    let icone: String
+    let ajuda: String
+    let iniciarAcessivel: String
+    let pararAcessivel: String
+
+    init(_ plataforma: Platform) {
+        switch plataforma {
+        case .ios:
+            titulo = "iPhone em Debug"
+            parar = "Parar iPhone Debug"
+            icone = "cable.connector"
+            ajuda = "Lê pelo cabo as requisições do app em debug, sem proxy nem certificado. No scheme do Xcode, adicione a variável de ambiente CFNETWORK_DIAGNOSTICS=3."
+            iniciarAcessivel = "Ler tráfego do iPhone em debug"
+            pararAcessivel = "Parar leitura de tráfego do iPhone em debug"
+        case .android:
+            titulo = "App em Debug"
+            parar = "Parar App Debug"
+            icone = "ladybug"
+            ajuda = "Lê pelo logcat as requisições do app em debug, sem proxy nem certificado, e funciona com o debugger do Android Studio conectado. O build de debug precisa do HttpLoggingInterceptor do OkHttp (nível BODY para ver os corpos)."
+            iniciarAcessivel = "Ler tráfego do app Android em debug"
+            pararAcessivel = "Parar leitura de tráfego do app Android em debug"
+        }
     }
 }

@@ -66,7 +66,9 @@ struct CorrelationPopover: View {
                 .foregroundStyle(theme.labelSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let passo = appState.steps.last {
-                Text("AutomationStep(stepNum: \(passo.stepNum), actionType: \"\(passo.actionType)\", varName: \"\(passo.varName)\", strategy: \(passo.strategy.rawValue), platform: \(passo.platform.rawValue))")
+                // Era o `AutomationStep(stepNum: …)` cru: texto de depuração na
+                // frente da pessoa. Agora a frase do passo e o locator.
+                Text("Passo \(passo.stepNum) · \(passo.summarySentence)\n\(passo.varName)")
                     .font(DSFont.mono(10.5))
                     .foregroundStyle(theme.labelSecondary)
                     .lineSpacing(2)

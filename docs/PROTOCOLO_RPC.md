@@ -237,8 +237,8 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `proxy.stop` | — | desfaz também a configuração de proxy do aparelho |
 | `proxy.events` | `limit` | histórico recente |
 | `proxy.clear` | — | limpa o histórico |
-| `netlog.start` | `udid` (opcional; sem ele, o primeiro iPhone confiado) | lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` do app em debug e emite cada requisição como `proxy.event`, sem proxy nem certificado. O app precisa rodar com `CFNETWORK_DIAGNOSTICS=3` no scheme. Corpo normalmente indisponível. Devolve `running`, `device_id`, `raw_log` (blocos brutos, headers sensíveis mascarados) |
-| `netlog.stop` | — | para a leitura; devolve `running` |
+| `netlog.start` | iOS: `udid` (opcional; sem ele, o primeiro iPhone confiado). Android: `device_id` (opcional; sem ele, o aparelho da sessão) | tráfego HTTPS do app em debug, sem proxy nem certificado, emitido como `proxy.event`. Escolhe pela plataforma da sessão. **iOS:** lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` (o app roda com `CFNETWORK_DIAGNOSTICS=3` no scheme; corpo normalmente indisponível). **Android:** lê do `adb logcat` o log do `HttpLoggingInterceptor` do OkHttp (o build de debug precisa do interceptor; BASIC traz a linha, HEADERS os headers, BODY os corpos), funciona com o debugger do Android Studio conectado; sem aparelho na sessão, `device_not_found`. Devolve `running`, `device_id`, `raw_log` (iOS: blocos brutos, headers sensíveis mascarados; Android: `null`) e `source` (`cfnetwork` ou `okhttp_logcat`) |
+| `netlog.stop` | — | para a leitura nas duas plataformas; devolve `running` |
 | `analytics.start` | `package` (opcional), `ios_source` (iOS: `auto`, `simulator` ou UDID do iPhone) | começa a escutar o tagueamento; no iOS sem simulador, `auto` usa o iPhone conectado por cabo. Devolve `running`, `source`, `device_id` |
 | `analytics.stop` | — | para de escutar |
 | `analytics.events` | `limit` | histórico recente |

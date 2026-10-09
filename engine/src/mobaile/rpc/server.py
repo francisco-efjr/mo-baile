@@ -41,6 +41,7 @@ from mobaile import __version__
 from mobaile.adapters import ios_device_log
 from mobaile.adapters.adb import ADBBridge
 from mobaile.adapters.analytics_logcat import FirebaseAnalyticsListener
+from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
 from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
 from mobaile.adapters.ios_wda import IOSBridge
@@ -202,6 +203,10 @@ class EngineServer:
         # Mesmo historico e mesma notificacao do proxy: para o front, e so
         # outra origem de requisicoes.
         self.ios_netlog = IOSDebugNetworkCapture(emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id)
+        # O par no Android: o log do OkHttp de um app em debug, pelo logcat.
+        self.android_netlog = AndroidDebugNetworkCapture(
+            adb_path=lambda: self.adb.adb_path, emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id,
+        )
         self.recorder = ScreenRecorder(self.adb, self.ios)
         self.analytics = FirebaseAnalyticsListener(adb_bridge=self.adb)
         # Uma vez so: registrar a cada analytics.start duplicava cada evento
@@ -900,11 +905,21 @@ class EngineServer:
         return {"running": self.proxy.is_running()}
 
     def netlog_start(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Trafego de app em debug no iPhone por cabo, via `CFNETWORK_DIAGNOSTICS`.
+        """Trafego HTTPS de app em debug, sem proxy, pela plataforma da sessao.
 
-        `udid` opcional: sem ele, vale o primeiro iPhone conectado e confiado.
+        Android: o log do `HttpLoggingInterceptor` do OkHttp, lido do logcat do
+        aparelho da sessao (ou de `device_id`). iOS: o log `CFNETWORK_DIAGNOSTICS`
+        do iPhone por cabo; `udid` opcional, sem ele vale o primeiro confiado.
         """
         self._ensure_proxy_notify()
+        sessao = self._sessao()
+        if sessao.platform is Platform.ANDROID:
+            serial = params.get("device_id") or sessao.device_id
+            if not serial:
+                raise DeviceNotFoundError("Selecione um aparelho Android para ler o tráfego do app em debug.")
+            self.android_netlog.start(validate_device_id(serial))
+            return {"running": self.android_netlog.is_running(), "device_id": self.android_netlog.device_id,
+                    "raw_log": None, "source": "okhttp_logcat"}
         udid = params.get("udid") if isinstance(params, dict) else None
         if udid:
             udid = validate_device_id(udid)
@@ -922,11 +937,13 @@ class EngineServer:
                 raise DeviceNotReadyError(devices[0]["problem"])
             udid = usable[0]["udid"]
         self.ios_netlog.start(udid)
-        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": str(RAW_LOG_PATH)}
+        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": str(RAW_LOG_PATH),
+                "source": "cfnetwork"}
 
     def netlog_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
         self.ios_netlog.stop()
-        return {"running": self.ios_netlog.is_running()}
+        self.android_netlog.stop()
+        return {"running": self.ios_netlog.is_running() or self.android_netlog.is_running()}
 
     def proxy_events(self, params: dict[str, Any]) -> dict[str, Any]:
         limit = int(params.get("limit") or 200)
@@ -1639,6 +1656,7 @@ class EngineServer:
             self.passive_stop({})
         self.proxy.stop()
         self.ios_netlog.stop()
+        self.android_netlog.stop()
         self.analytics.stop()
         self.scrcpy.stop_mirror()
         # Encerra apenas o servidor Appium que este processo iniciou. Um Appium

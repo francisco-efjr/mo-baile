@@ -26,35 +26,86 @@ struct StatusBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            StatusIndicator(status: appState.daemonStatus.wda, label: wdaLabel)
-            StatusIndicator(status: appState.daemonStatus.adb, label: "ADB server")
-            StatusIndicator(status: appState.daemonStatus.proxy, label: proxyLabel)
-            StatusIndicator(status: appState.daemonStatus.fa, label: "FA listener")
-
-            Spacer(minLength: 8)
+            // Os serviços cedem espaço em vez de impor largura: com tudo em
+            // `fixedSize`, a barra sozinha exigia 690 pt, e esse mínimo
+            // impedia a janela de encolher numa tela de MacBook.
+            ViewThatFits(in: .horizontal) {
+                servicos(compacto: false)
+                servicos(compacto: true)
+            }
+            .layoutPriority(1)
 
             Text(appState.statusMessage)
                 .font(DSFont.subheadline)
                 .foregroundStyle(theme.labelPrimary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.updatesFrequently)
                 .help(appState.statusMessage)
 
             if appState.isDeviceConnected {
-                Text(metricas)
-                    .font(DSFont.mono(10.5).monospacedDigit())
-                    .foregroundStyle(theme.labelSecondary)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .accessibilityLabel("Métricas do espelho")
-                    .accessibilityValue(metricas)
+                ViewThatFits(in: .horizontal) {
+                    metricasView(metricas)
+                    metricasView(metricasCurtas)
+                    Color.clear.frame(width: 0)
+                }
             }
         }
         .padding(.horizontal, 12)
         .frame(height: DesignMetrics.Heights.statusBar)
         .background(theme.bgContentAlt)
         .overlay(alignment: .top) { Rectangle().fill(theme.separator).frame(height: 1) }
+    }
+
+    /// Os quatro serviços; no modo compacto, só o ícone (o nome vai no tooltip
+    /// e no leitor de tela).
+    private func servicos(compacto: Bool) -> some View {
+        HStack(spacing: compacto ? 8 : 12) {
+            servico(appState.daemonStatus.wda, wdaLabel, compacto)
+            servico(appState.daemonStatus.adb, "ADB server", compacto)
+            servico(appState.daemonStatus.proxy, proxyLabel, compacto)
+            servico(appState.daemonStatus.fa, "FA listener", compacto)
+        }
+    }
+
+    @ViewBuilder
+    private func servico(_ estado: DaemonState, _ rotulo: String, _ compacto: Bool) -> some View {
+        if compacto {
+            Image(systemName: StatusIndicator.symbol(estado))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(cor(estado))
+                .help("\(rotulo): \(StatusIndicator.word(estado))")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(rotulo)
+                .accessibilityValue(StatusIndicator.word(estado))
+        } else {
+            StatusIndicator(status: estado, label: rotulo)
+        }
+    }
+
+    private func cor(_ estado: DaemonState) -> Color {
+        switch estado {
+        case .ok: return theme.success
+        case .busy: return theme.info
+        case .warn: return theme.warning
+        case .error: return theme.destructive
+        case .off: return theme.labelTertiary
+        }
+    }
+
+    private func metricasView(_ texto: String) -> some View {
+        Text(texto)
+            .font(DSFont.mono(10.5).monospacedDigit())
+            .foregroundStyle(theme.labelSecondary)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel("Métricas do espelho")
+            .accessibilityValue(metricas)
+    }
+
+    private var metricasCurtas: String {
+        "\(appState.fps) fps  \(appState.latencyMs) ms"
     }
 
     private var metricas: String {
