@@ -108,10 +108,11 @@ struct MoBaileCommands: Commands {
 
         // MARK: Visualizar
         CommandGroup(after: .sidebar) {
-            Button(appState.inspectorVisible ? "Ocultar Inspector" : "Mostrar Inspector") {
-                appState.inspectorVisible.toggle()
+            Button(appState.inspectorShown ? "Ocultar Inspector" : "Mostrar Inspector") {
+                appState.toggleInspector()
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
+            .disabled(appState.inspectorSuppressed)
             Button(appState.mirrorVisible ? "Ocultar Espelho" : "Mostrar Espelho") {
                 withAnimation(Motion.smooth()) { appState.mirrorVisible.toggle() }
             }

@@ -10,6 +10,13 @@ prioridade.
 **P0** quebra uso ou confiança e vem primeiro. **P1** é o que separa uma
 ferramenta de um app de Mac. **P2** amplia o alcance.
 
+## Entregue na 3.4.0
+
+| Item | O que mudou |
+|---|---|
+| D3 | Inspector sai da janela sem aparelho e volta ao conectar, mantendo a escolha manual; no Relatório fica. |
+| D4 | Barra de status só com os serviços da plataforma ativa; o outro vai para o tooltip. |
+
 ## Entregue na 3.3.1
 
 | Item | O que mudou |

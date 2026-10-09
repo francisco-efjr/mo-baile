@@ -58,15 +58,43 @@ struct StatusBar: View {
         .overlay(alignment: .top) { Rectangle().fill(theme.separator).frame(height: 1) }
     }
 
-    /// Os quatro serviços; no modo compacto, só o ícone (o nome vai no tooltip
-    /// e no leitor de tela).
-    private func servicos(compacto: Bool) -> some View {
-        HStack(spacing: compacto ? 8 : 12) {
-            servico(appState.daemonStatus.wda, wdaLabel, compacto)
-            servico(appState.daemonStatus.adb, "ADB server", compacto)
-            servico(appState.daemonStatus.proxy, proxyLabel, compacto)
-            servico(appState.daemonStatus.fa, "FA listener", compacto)
+    /// Serviço que a barra mostra. O WDA só serve ao iOS e o ADB só ao
+    /// Android; o da outra plataforma vai para o tooltip da barra (D4).
+    enum Servico: CaseIterable {
+        case wda, adb, proxy, fa
+
+        static func visiveis(_ plataforma: Platform) -> [Servico] {
+            plataforma == .ios ? [.wda, .proxy, .fa] : [.adb, .proxy, .fa]
         }
+    }
+
+    private func estado(_ servico: Servico) -> DaemonState {
+        switch servico {
+        case .wda: return appState.daemonStatus.wda
+        case .adb: return appState.daemonStatus.adb
+        case .proxy: return appState.daemonStatus.proxy
+        case .fa: return appState.daemonStatus.fa
+        }
+    }
+
+    private func rotulo(_ servico: Servico) -> String {
+        switch servico {
+        case .wda: return wdaLabel
+        case .adb: return "ADB server"
+        case .proxy: return proxyLabel
+        case .fa: return "FA listener"
+        }
+    }
+
+    /// Os serviços da plataforma ativa; no modo compacto, só o ícone (o nome vai
+    /// no tooltip e no leitor de tela).
+    private func servicos(compacto: Bool) -> some View {
+        let visiveis = Servico.visiveis(appState.platform)
+        let ocultos = Servico.allCases.filter { !visiveis.contains($0) }
+        return HStack(spacing: compacto ? 8 : 12) {
+            ForEach(visiveis, id: \.self) { servico(estado($0), rotulo($0), compacto) }
+        }
+        .help(ocultos.map { "\(rotulo($0)): \(StatusIndicator.word(estado($0)))" }.joined(separator: "\n"))
     }
 
     @ViewBuilder

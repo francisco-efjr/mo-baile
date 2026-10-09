@@ -312,12 +312,15 @@ struct InspectorToggleButton: View {
 
     var body: some View {
         Button {
-            appState.inspectorVisible.toggle()
+            appState.toggleInspector()
         } label: {
-            Label(appState.inspectorVisible ? "Ocultar Inspector" : "Mostrar Inspector", systemImage: "sidebar.right")
+            Label(appState.inspectorShown ? "Ocultar Inspector" : "Mostrar Inspector", systemImage: "sidebar.right")
         }
-        .help(appState.inspectorVisible ? "Ocultar Inspector (⌥⌘I)" : "Mostrar Inspector (⌥⌘I)")
-        .accessibilityValue(appState.inspectorVisible ? "visível" : "oculto")
+        .disabled(appState.inspectorSuppressed)
+        .help(appState.inspectorSuppressed
+              ? "O inspector volta ao conectar um aparelho"
+              : (appState.inspectorShown ? "Ocultar Inspector (⌥⌘I)" : "Mostrar Inspector (⌥⌘I)"))
+        .accessibilityValue(appState.inspectorShown ? "visível" : "oculto")
     }
 }
 

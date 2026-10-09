@@ -129,6 +129,37 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(state.inspectorVisible)
     }
 
+    /// D3: sem aparelho o inspector sai da janela e volta ao conectar, sem
+    /// perder a escolha da pessoa. No Relatório ele fica, porque mostra o Figma.
+    func testInspectorSaiSemAparelhoEVoltaAoConectar() {
+        let state = AppState()
+        state.selectedDevice = nil
+        state.workspaceTab = .pageObjects
+        XCTAssertTrue(state.inspectorSuppressed)
+        XCTAssertFalse(state.inspectorShown)
+
+        state.toggleInspector()
+        XCTAssertTrue(state.inspectorVisible, "sem aparelho o atalho não mexe na escolha")
+
+        state.workspaceTab = .report
+        XCTAssertTrue(state.inspectorShown, "o Relatório funciona sem aparelho")
+
+        state.workspaceTab = .network
+        state.selectedDevice = "7303D258"
+        XCTAssertTrue(state.inspectorShown, "volta ao conectar")
+
+        state.toggleInspector()
+        state.selectedDevice = nil
+        state.selectedDevice = "7303D258"
+        XCTAssertFalse(state.inspectorShown, "quem fechou à mão continua com ele fechado")
+    }
+
+    /// D4: a barra de status só mostra os serviços da plataforma ativa.
+    func testBarraDeStatusMostraSoOsServicosDaPlataforma() {
+        XCTAssertEqual(StatusBar.Servico.visiveis(.ios), [.wda, .proxy, .fa])
+        XCTAssertEqual(StatusBar.Servico.visiveis(.android), [.adb, .proxy, .fa])
+    }
+
     func testHARExporterGeneratesValidJSON() throws {
         let event = NetworkEvent(
             id: 1,

@@ -5,6 +5,22 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.4.0] - 2026-10-09
+
+P1 de interface da [revisão de produto](docs/MELHORIAS_2026-10-09.md): D3 e D4.
+
+### Mudado
+
+- **Inspector contextual (D3):** sem aparelho, em Page Objects, Rede e
+  Analytics, o inspector sai da janela em vez de repetir o "Conecte um
+  aparelho" do estado vazio, e volta ao conectar. A escolha manual é mantida:
+  quem fechou o inspector continua com ele fechado. No Relatório ele fica,
+  porque mostra o card do Figma. O botão e o ⌥⌘I ficam desabilitados enquanto
+  o inspector está fora da janela.
+- **Barra de status por plataforma (D4):** no iOS a barra mostra WDA, proxy
+  e FA; no Android, ADB, proxy e FA. O serviço da outra plataforma vai para o
+  tooltip.
+
 ## [3.3.1] - 2026-10-09
 
 Os P0 de interface da [revisão de produto](docs/MELHORIAS_2026-10-09.md):

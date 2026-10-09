@@ -31,7 +31,10 @@ struct ContentView: View {
                 .modifier(SectionSearch())
                 .modifier(ToolbarTitle(title: windowTitle, subtitle: windowSubtitle))
                 .toolbar { MainToolbar(title: windowTitle, subtitle: windowSubtitle) }
-                .inspector(isPresented: $state.inspectorVisible) {
+                .inspector(isPresented: Binding(
+                    get: { appState.inspectorShown },
+                    set: { if !appState.inspectorSuppressed { appState.inspectorVisible = $0 } }
+                )) {
                     InspectorContent()
                         .inspectorColumnWidth(
                             min: DesignMetrics.Widths.inspectorMin,

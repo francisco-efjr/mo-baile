@@ -244,8 +244,19 @@ class AppState {
 
     /// Barra lateral: áreas do workspace e passos do fluxo.
     var sidebarVisibility: NavigationSplitViewVisibility = .all
-    /// Inspector com a hierarquia e os atributos.
+    /// Inspector com a hierarquia e os atributos. É a escolha da pessoa; o que
+    /// aparece na janela é `inspectorShown`.
     var inspectorVisible: Bool = true
+    /// Sem aparelho, numa área que precisa de um, o inspector só repetiria o
+    /// "Conecte um aparelho" do estado vazio. Ele sai da janela e volta ao
+    /// conectar, sem mexer na escolha da pessoa, como o Xcode faz (D3).
+    var inspectorSuppressed: Bool { !isDeviceConnected && workspaceTab.needsDevice }
+    var inspectorShown: Bool { inspectorVisible && !inspectorSuppressed }
+
+    func toggleInspector() {
+        guard !inspectorSuppressed else { return }
+        inspectorVisible.toggle()
+    }
     /// Passo escolhido na seção Fluxo da barra lateral. Destaca o código dele.
     var selectedStepID: UUID? = nil
     /// Confirmação de limpeza aberta (tráfego, eventos ou passos).
