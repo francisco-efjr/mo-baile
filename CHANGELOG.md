@@ -5,6 +5,30 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.1.0] - 2026-10-08
+
+### Adicionado
+
+- Ajustes › Paletas: galeria com nove paletas alternativas inspiradas em
+  designers de interiores (`docs/design/paletas/`). São quatro claras (Sálvia
+  & Palha, Azulejo/Sig Bergamin, Hampshire/Dorothy Draper, Veludo
+  Rosé/India Mahdavi), quatro escuras (Terracota/Kelly Wearstler,
+  Costes/Jacques Garcia, Geométrico/David Hicks, Mármore/Joseph Dirand) e uma
+  extra (Jardim Digital/Antoni Tudisco). Cada cartão mostra uma mini-janela de
+  prévia nas cores da paleta, as 11 amostras e as oito checagens de contraste
+  (WCAG e distância OKLab entre o destaque e as cores de estado). "Usar
+  Paleta" aplica o tema na hora, e a escolha é guardada.
+- Cada paleta tem variação de Aumentar contraste. O que ela não declara
+  (sintaxe, chips, GET/POST, terminal) vem da Praia da mesma aparência.
+
+### Mudado
+
+- Uma paleta clara ou escura define a aparência do app. Em Ajustes › Geral, a
+  Aparência fica desabilitada e oferece "Voltar para a Praia". A Praia
+  continua sendo o padrão e segue Sistema, Claro ou Escuro.
+- Com uma paleta alternativa, a barra lateral usa a cor de barra lateral da
+  paleta no lugar do material do sistema.
+
 ## [3.0.0] - 2026-10-08
 
 Redesenho do front nativo com o design system "Mo baile · macOS 27 / Liquid
