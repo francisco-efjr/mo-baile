@@ -5,6 +5,48 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.3.0] - 2026-10-09
+
+Rodada de melhorias de 09/10: três pedidas, os defeitos que o catálogo de telas
+novo mostrou e a revisão de produto em
+[docs/MELHORIAS_2026-10-09.md](docs/MELHORIAS_2026-10-09.md).
+
+### Adicionado
+
+- **App em Debug no Android:** tráfego HTTPS do app em debug sem proxy nem
+  certificado, lido do logcat (log do `HttpLoggingInterceptor` do OkHttp).
+  Funciona com o debugger do Android Studio conectado. É a mesma ação do
+  "iPhone em Debug" ([ADR 0004](docs/adr/0004-https-sem-proxy-android.md)).
+- Catálogo de telas da 3.x em `docs/design/telas/`: 29 telas e estados em
+  claro e escuro, PDF e folha de contato, gerados por
+  `WindowSnapshotTests.testCatalogoDeTelas` e `tools/catalogo_telas.py`. O
+  catálogo da 2.x foi para `docs/design/telas/arquivo-2.x/`.
+
+### Mudado
+
+- **Busca em tudo:** a busca da toolbar procura em qualquer dado capturado. Na
+  Rede: URL, query, headers (nome e valor), corpos e erro. No Analytics: nome,
+  parâmetros (chave e valor), origem e log bruto. No Relatório: evento,
+  variação, divergência e parâmetros do disparo. Cada palavra precisa
+  aparecer em algum campo, sem diferenciar maiúsculas nem acentos.
+- **Splash que espera o app:** fica até o motor responder e a primeira
+  varredura de aparelhos e do ambiente terminar, com a fase escrita na tela
+  ("Iniciando o motor…", "Procurando aparelhos e simuladores…"), mínimo de
+  2,5 s e teto de 12 s. Se o motor falhar, sai para o erro aparecer na janela.
+- A barra de status cede espaço em largura estreita (só ícones dos serviços,
+  métricas curtas) em vez de impor 690 pt à janela.
+- `netlog.start` escolhe a fonte pela plataforma da sessão e devolve `source`.
+
+### Corrigido
+
+- O corpo JSON da Rede mostrava `28.399999999999999` no lugar de `28.4` e
+  reordenava as chaves. Agora a indentação é feita sobre o texto original.
+- O popover de Correlação mostrava `AutomationStep(stepNum: …)`. Agora mostra a
+  frase do passo e o locator.
+- "1 aprovados" no rodapé da execução.
+- O passo por coordenada aparecia como "click position" (valor interno). Agora
+  é "toque em x, y".
+
 ## [3.2.0] - 2026-10-08
 
 Aba **Relatório**: a auditoria de tagueamento do `tag_audit` (projeto
