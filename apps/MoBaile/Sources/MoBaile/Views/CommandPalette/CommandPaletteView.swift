@@ -48,6 +48,8 @@ struct CommandPaletteView: View {
     @State private var internalQuery = ""
     @State private var selection: CommandID?
     @State private var keyMonitor: Any?
+    /// Janela onde a paleta abriu. Tecla de outra janela não é da paleta.
+    @State private var janela: NSWindow?
     @State private var aviso: String?
     @FocusState private var campoFocado: Bool
 
@@ -103,9 +105,16 @@ struct CommandPaletteView: View {
         .onAppear {
             campoFocado = true
             selection = flat.first(where: \.isEnabled)?.id ?? flat.first?.id
-            instalarTeclado()
+            janela = NSApp.keyWindow
+            instalarTeclado(em: janela)
         }
         .onDisappear(perform: removerTeclado)
+        // A janela perdeu o foco (Ajustes, painel de arquivo, outro app): a
+        // paleta fecha, como um popover.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { aviso in
+            guard let janela, (aviso.object as? NSWindow) === janela else { return }
+            fechar()
+        }
         .onChange(of: query) { _, _ in
             aviso = nil
             selection = flat.first(where: \.isEnabled)?.id ?? flat.first?.id
@@ -191,17 +200,29 @@ struct CommandPaletteView: View {
 
     /// Setas, Enter e Esc enquanto a paleta está aberta. O monitor local pega
     /// a tecla antes do editor do campo, que usaria ↑ e ↓ para mover o cursor.
-    private func instalarTeclado() {
+    /// Ele vê as teclas de todas as janelas do app; quem decide se a tecla é
+    /// da paleta é `CommandPaletteKeyboard` (R-01).
+    private func instalarTeclado(em alvo: NSWindow?) {
         removerTeclado()
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { evento in
-            switch evento.keyCode {
-            case 125: mover(1); return nil          // ↓
-            case 126: mover(-1); return nil         // ↑
-            case 36, 76:                            // Return, Enter do teclado numérico
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak alvo] evento in
+            let situacao = CommandPaletteKeyboard.Situation(
+                paletteOpen: appState.commandPalettePresented,
+                eventInPaletteWindow: alvo != nil && evento.window === alvo,
+                modalOpen: NSApp.modalWindow != nil,
+                sheetAttached: alvo?.attachedSheet != nil
+            )
+            switch CommandPaletteKeyboard.action(keyCode: evento.keyCode, modifiers: evento.modifierFlags, situation: situacao) {
+            case .move(let passo):
+                mover(passo)
+                return nil
+            case .execute:
                 if let atual = flat.first(where: { $0.id == selection }) { executar(atual) }
                 return nil
-            case 53: fechar(); return nil           // Esc
-            default: return evento
+            case .close:
+                fechar()
+                return nil
+            case .passThrough:
+                return evento
             }
         }
     }
@@ -222,7 +243,11 @@ struct CommandPaletteView: View {
         AccessibilityNotification.Announcement(CommandPaletteRow.spokenLabel(itens[proximo])).post()
     }
 
+    /// Fecha a paleta. O monitor sai aqui, antes de o estado mudar: a view
+    /// só some no fim da transição, e um Return nesse intervalo não pode
+    /// executar o comando de novo nem chegar a um alerta aberto pela ação.
     private func fechar() {
+        removerTeclado()
         appState.commandPalettePresented = false
     }
 

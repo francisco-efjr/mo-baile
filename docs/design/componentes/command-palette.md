@@ -15,6 +15,7 @@ Partes:
 - `CommandPaletteOverlay`: véu e posição sobre a janela; mostra o painel quando `AppState.commandPalettePresented` é verdadeiro.
 - `CommandPaletteView`: campo, lista por seção, aviso de indisponível e rodapé de teclas.
 - `CommandPaletteRow`: uma linha (símbolo, título, motivo e atalho).
+- `CommandPaletteKeyboard`: função pura que decide se uma tecla é da paleta e o que fazer com ela (`CommandPaletteKeyboardTests`).
 
 Previews no arquivo:
 
@@ -74,6 +75,15 @@ Sem parâmetros. Lê `AppState.commandPalettePresented`.
 | `disabledOpacity` (estático) | `Double` | `0.42` | Transparência do símbolo, título e atalho de ação indisponível (D6). |
 | `spokenLabel(_:)` (estático) | `(AppCommand) -> String` | - | Rótulo do VoiceOver: título, atalho por extenso e motivo. Coberto por `CommandPaletteTests`. |
 
+### CommandPaletteKeyboard
+
+| Membro | Type | Description |
+| --- | --- | --- |
+| `action(keyCode:modifiers:situation:)` | `(UInt16, NSEvent.ModifierFlags, Situation) -> Action` | O que o monitor faz com a tecla. Fora da paleta, devolve `.passThrough` e a tecla segue normalmente. |
+| `Situation` | `struct` | `paletteOpen`, `eventInPaletteWindow`, `modalOpen`, `sheetAttached`, lidos do AppKit no momento da tecla. |
+| `Action` | `enum` | `.move(Int)`, `.execute`, `.close`, `.passThrough`. |
+| `blockingModifiers` | `NSEvent.ModifierFlags` | ⌘, ⌥ e ⌃: com qualquer um, a tecla não é da paleta. |
+
 ### Ambiente
 
 | Chave | Obrigatória | Para quê |
@@ -92,7 +102,8 @@ Faltar um ambiente obrigatório derruba a view na hora (comportamento do `@Envir
 ## Accessibility
 
 - Papel: o painel é um grupo modal (`.isModal`) com rótulo "Paleta de comandos". Cada linha é apresentada como botão, com `.isSelected` na escolhida. Os títulos de seção são cabeçalhos.
-- Teclado: ⇧⌘P abre. ↑ e ↓ movem a seleção (com volta ao início), Enter (Return ou Enter do teclado numérico) executa, Esc fecha. Um monitor local de teclado pega essas teclas antes do campo, enquanto a paleta está aberta.
+- Teclado: ⇧⌘P abre. ↑ e ↓ movem a seleção (com volta ao início), Enter (Return ou Enter do teclado numérico) executa, Esc fecha. Um monitor local de teclado pega essas teclas antes do campo, e só quando são da paleta (`CommandPaletteKeyboard`): paleta aberta, tecla na janela onde ela abriu, sem sheet nem janela modal por cima e sem ⌘, ⌥ ou ⌃. Assim ⌘↑ e ⌥Return continuam com o campo, e as teclas de Ajustes ou de um painel de arquivo não mexem na paleta.
+- Janela: se a janela da paleta perde o foco (Ajustes, painel de arquivo, outro app), a paleta fecha. O monitor sai no próprio fechar, antes da transição, para um Return rápido não executar de novo.
 - Foco: ao abrir, o foco vai para o campo de busca. A seleção começa na primeira ação disponível. O foco de teclado nunca sai do campo; as linhas não são paradas de Tab.
 - VoiceOver: ao mover com as setas, um anúncio lê a linha escolhida ("Rodar Automação, atalho Command R. Indisponível: Grave ao menos um passo"). Enter numa ação indisponível não executa: mostra o motivo numa faixa e o anuncia.
 - Indisponível sem sumir: a linha fica a 42% com o motivo em `labelSecondary`, que é legível. Na seleção, ação indisponível não ganha o fundo de destaque, para não parecer que Enter vai executar.
@@ -116,4 +127,4 @@ Faltar um ambiente obrigatório derruba a view na hora (comportamento do `@Envir
 
 ### As setas não movem o cursor no campo
 
-É de propósito: enquanto a paleta está aberta, o monitor local consome ↑, ↓, Enter e Esc para a lista. O monitor sai no `onDisappear`.
+É de propósito: enquanto a paleta está aberta, o monitor local consome ↑, ↓, Enter e Esc (sem ⌘, ⌥ ou ⌃) para a lista. ⌘↑ e ⌘↓ continuam levando o cursor ao início e ao fim do campo. O monitor sai ao fechar a paleta e, por garantia, no `onDisappear`.
