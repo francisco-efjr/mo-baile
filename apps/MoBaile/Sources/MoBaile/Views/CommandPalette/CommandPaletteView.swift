@@ -6,6 +6,10 @@ import AppKit
 /// Painel flutuante sobre a janela, no vidro da camada de navegação. ⇧⌘P
 /// abre; ↑ e ↓ escolhem; Enter executa; Esc ou clique fora fecham. Ação
 /// indisponível aparece esmaecida, com o motivo, e Enter só lê o motivo.
+///
+/// Montagem: `ContentView` põe `CommandPaletteOverlay()` como overlay da
+/// janela, e a entrada e a saída usam `Motion.crossfade` (só opacidade, então
+/// já vale para Reduzir movimento). Doc: `docs/design/componentes/command-palette.md`.
 struct CommandPaletteOverlay: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -14,33 +18,51 @@ struct CommandPaletteOverlay: View {
         if appState.commandPalettePresented {
             ZStack(alignment: .top) {
                 // Clique fora fecha, como um popover.
-                Color.black.opacity(themeManager.current.isDark ? 0.18 : 0.06)
+                themeManager.current.floatingScrim
                     .contentShape(Rectangle())
                     .onTapGesture { appState.commandPalettePresented = false }
                     .accessibilityHidden(true)
                 CommandPaletteView()
-                    .padding(.top, 56)
-                    .padding(.horizontal, 16)
+                    .padding(.top, DesignMetrics.CommandPalette.topOffset)
+                    .padding(.horizontal, DesignMetrics.Spacing.s7)
             }
             .transition(.opacity)
         }
     }
 }
 
+/// O painel da paleta: campo, lista por seção, aviso de indisponível e rodapé.
+///
+/// Lê `AppState`, `EngineSession` e `ThemeManager` do ambiente (obrigatórios;
+/// faltar um deles derruba o preview na hora, o que é o aviso que se quer).
+/// O termo buscado pode ser controlado de fora por `query`; sem ele, a paleta
+/// guarda o próprio termo e abre vazia.
 struct CommandPaletteView: View {
     @Environment(AppState.self) private var appState
     @Environment(EngineSession.self) private var session
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.openSettings) private var openSettings
 
-    @State private var query = ""
+    /// Termo controlado de fora, quando houver. `nil`: estado interno.
+    private let externalQuery: Binding<String>?
+    @State private var internalQuery = ""
     @State private var selection: CommandID?
     @State private var keyMonitor: Any?
     @State private var aviso: String?
     @FocusState private var campoFocado: Bool
 
     private let recents = CommandRecents()
-    static let width: CGFloat = 560
+    /// Largura do painel. Alias do token, mantido para quem já lia daqui.
+    static let width: CGFloat = DesignMetrics.CommandPalette.width
+
+    /// - Parameter query: termo buscado, controlado por quem monta. Omitido, a
+    ///   paleta abre com o campo vazio e guarda o termo sozinha.
+    init(query: Binding<String>? = nil) {
+        self.externalQuery = query
+    }
+
+    private var queryBinding: Binding<String> { externalQuery ?? $internalQuery }
+    private var query: String { queryBinding.wrappedValue }
 
     private var theme: any ThemeTokens { themeManager.current }
 
@@ -55,26 +77,26 @@ struct CommandPaletteView: View {
     var body: some View {
         VStack(spacing: 0) {
             campo
-            Rectangle().fill(theme.separator).frame(height: 1)
+            Rectangle().fill(theme.separator).frame(height: DesignMetrics.hairline)
             lista
             if let aviso {
                 Text(aviso)
                     .font(DSFont.callout)
                     .foregroundStyle(theme.labelSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, DesignMetrics.Spacing.s6)
+                    .padding(.vertical, DesignMetrics.Spacing.s4)
                     .background(theme.warningTint)
             }
             rodape
         }
         .frame(width: Self.width)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(theme.separatorStrong, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous)
+                .strokeBorder(theme.separatorStrong, lineWidth: DesignMetrics.hairline / 2)
         )
-        .shadow(color: .black.opacity(0.22), radius: 24, y: 10)
+        .shadow(color: theme.floatingShadow, radius: DesignMetrics.Shadow.floatingRadius, y: DesignMetrics.Shadow.floatingY)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Paleta de comandos")
         .accessibilityAddTraits(.isModal)
@@ -93,20 +115,20 @@ struct CommandPaletteView: View {
     // MARK: - Partes
 
     private var campo: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DesignMetrics.CommandPalette.gap) {
             Image(systemName: "command")
-                .font(.system(size: 15, weight: .medium))
+                .font(DSFont.Symbol.field)
                 .foregroundStyle(theme.labelSecondary)
                 .accessibilityHidden(true)
-            TextField("Buscar ação: rodar, proxy, aparelho, ajustes…", text: $query)
+            TextField("Buscar ação: rodar, proxy, aparelho, ajustes…", text: queryBinding)
                 .textFieldStyle(.plain)
                 .font(DSFont.title3.weight(.regular))
                 .focused($campoFocado)
                 .accessibilityLabel("Buscar ação")
                 .accessibilityHint("Setas para escolher, Enter para executar, Esc para fechar")
         }
-        .padding(.horizontal, 14)
-        .frame(height: 48)
+        .padding(.horizontal, DesignMetrics.Spacing.s6)
+        .frame(height: DesignMetrics.CommandPalette.fieldHeight)
     }
 
     private var lista: some View {
@@ -117,15 +139,15 @@ struct CommandPaletteView: View {
                         Text("Nenhuma ação encontrada para “\(query)”.")
                             .font(DSFont.body)
                             .foregroundStyle(theme.labelSecondary)
-                            .padding(16)
+                            .padding(DesignMetrics.Spacing.s7)
                     }
                     ForEach(sections) { secao in
                         Text(secao.title)
                             .font(DSFont.subheadlineSemibold)
                             .foregroundStyle(theme.labelSecondary)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 10)
-                            .padding(.bottom, 4)
+                            .padding(.horizontal, DesignMetrics.Spacing.s6)
+                            .padding(.top, DesignMetrics.CommandPalette.gap)
+                            .padding(.bottom, DesignMetrics.Spacing.s2)
                             .accessibilityAddTraits(.isHeader)
                         ForEach(secao.commands) { comando in
                             CommandPaletteRow(command: comando, selected: comando.id == selection)
@@ -135,9 +157,9 @@ struct CommandPaletteView: View {
                         }
                     }
                 }
-                .padding(.bottom, 6)
+                .padding(.bottom, DesignMetrics.Spacing.s3)
             }
-            .frame(maxHeight: 380)
+            .frame(maxHeight: DesignMetrics.CommandPalette.listMaxHeight)
             .onChange(of: selection) { _, nova in
                 guard let nova else { return }
                 proxy.scrollTo(nova, anchor: nil)
@@ -146,20 +168,20 @@ struct CommandPaletteView: View {
     }
 
     private var rodape: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: DesignMetrics.Spacing.s6) {
             dica("↑↓", "escolher")
             dica("↩", "executar")
             dica("esc", "fechar")
             Spacer()
         }
-        .padding(.horizontal, 14)
-        .frame(height: 28)
+        .padding(.horizontal, DesignMetrics.Spacing.s6)
+        .frame(height: DesignMetrics.CommandPalette.footerHeight)
         .background(theme.fillQuaternary)
         .accessibilityHidden(true)
     }
 
     private func dica(_ tecla: String, _ texto: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignMetrics.Spacing.s2) {
             Text(tecla).font(DSFont.mono(11)).foregroundStyle(theme.labelPrimary)
             Text(texto).font(DSFont.subheadline).foregroundStyle(theme.labelSecondary)
         }
@@ -224,11 +246,29 @@ struct CommandPaletteView: View {
 }
 
 /// Uma linha da paleta: ícone, título, motivo quando indisponível e atalho.
+///
+/// Não é botão de verdade: o foco de teclado fica no campo da paleta, e a
+/// linha é escolhida por ↑ e ↓ ou pelo mouse. Para o VoiceOver, ela se
+/// apresenta como botão com o rótulo de `spokenLabel(_:)`.
 struct CommandPaletteRow: View {
     @Environment(ThemeManager.self) private var themeManager
+    /// A ação desenhada. `disabledReason` não nulo esmaece a linha e mostra o motivo.
     let command: AppCommand
+    /// Linha sob o cursor do teclado ou do mouse.
     let selected: Bool
 
+    /// - Parameters:
+    ///   - command: a ação, já com a disponibilidade do contexto.
+    ///   - selected: se é a linha escolhida.
+    init(command: AppCommand, selected: Bool) {
+        self.command = command
+        self.selected = selected
+    }
+
+    /// Transparência do ícone, do título e do atalho de ação indisponível (D6).
+    static let disabledOpacity: Double = 0.42
+
+    /// O que o VoiceOver lê: título, atalho e motivo de indisponibilidade.
     static func spokenLabel(_ command: AppCommand) -> String {
         var texto = command.title
         if let atalho = command.shortcut { texto += ", atalho \(atalho.spoken)" }
@@ -243,14 +283,14 @@ struct CommandPaletteRow: View {
         let destaque = selected && command.isEnabled
         // Desabilitado: 42% no ícone e no título, sem sumir (design system). O
         // motivo fica com a cor secundária, legível.
-        let esmaecer = command.isEnabled ? 1 : 0.42
-        HStack(spacing: 10) {
+        let esmaecer = command.isEnabled ? 1 : Self.disabledOpacity
+        HStack(spacing: DesignMetrics.CommandPalette.gap) {
             Image(systemName: command.symbol)
-                .font(.system(size: 13))
-                .frame(width: 18)
+                .font(DSFont.Symbol.body)
+                .frame(width: DesignMetrics.CommandPalette.rowIconWidth)
                 .foregroundStyle(destaque ? theme.onAccent : theme.labelSecondary)
                 .opacity(esmaecer)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: DesignMetrics.CommandPalette.titleReasonGap) {
                 Text(command.title)
                     .font(DSFont.body)
                     .foregroundStyle(destaque ? theme.onAccent : theme.labelPrimary)
@@ -263,7 +303,7 @@ struct CommandPaletteRow: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DesignMetrics.Spacing.s4)
             if let atalho = command.shortcut {
                 Text(atalho.display)
                     .font(DSFont.mono(12))
@@ -271,16 +311,88 @@ struct CommandPaletteRow: View {
                     .opacity(esmaecer)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DesignMetrics.CommandPalette.gap)
+        .padding(.vertical, DesignMetrics.Spacing.s3)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: DesignMetrics.Radius.menuItem, style: .continuous)
                 .fill(destaque ? theme.accent : (selected ? theme.fillPrimary : Color.clear))
         )
-        .padding(.horizontal, 6)
+        .padding(.horizontal, DesignMetrics.Spacing.s3)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.spokenLabel(command))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
+}
+
+// MARK: - Previews
+
+/// Ambiente de preview: estado novo, motor que não sobe (sem processo de
+/// verdade) e o tema Praia. Sem aparelho e com o motor parado, boa parte das
+/// ações aparece indisponível com o motivo, como na primeira abertura.
+@MainActor
+private enum CommandPalettePreview {
+    static func ambiente<V: View>(_ conteudo: V, tema: any ThemeTokens = PraiaLightTheme()) -> some View {
+        let estado = AppState()
+        let sessao = EngineSession(state: estado) {
+            throw EngineError.engineNotFound("Preview: o motor não sobe aqui.")
+        }
+        return conteudo
+            .environment(estado)
+            .environment(sessao)
+            .environment(ThemeManager(preview: tema))
+            .padding(DesignMetrics.Spacing.s7)
+    }
+
+    static let rodar = AppCommand(
+        id: .run, title: "Rodar Automação", category: .automation, symbol: "play.fill",
+        shortcut: .cmd("r")
+    )
+    static let proxy = AppCommand(
+        id: .proxy, title: "Iniciar Proxy", category: .services, symbol: "network"
+    )
+    static let rodarSemPassos = AppCommand(
+        id: .run, title: "Rodar Automação", category: .automation, symbol: "play.fill",
+        shortcut: .cmd("r"), disabledReason: "Grave ao menos um passo"
+    )
+    static let exportarHAR = AppCommand(
+        id: .exportHAR, title: "Exportar HAR…", category: .network, symbol: "square.and.arrow.up",
+        shortcut: .cmdShift("e"), disabledReason: "Nenhum tráfego capturado ainda"
+    )
+}
+
+#Preview("Paleta: sem termo (recentes e categorias)") {
+    CommandPalettePreview.ambiente(CommandPaletteView())
+}
+
+#Preview("Paleta: com resultados (proxy)") {
+    @Previewable @State var termo = "proxy"
+    CommandPalettePreview.ambiente(CommandPaletteView(query: $termo))
+}
+
+#Preview("Paleta: sem resultado") {
+    @Previewable @State var termo = "teletransportar"
+    CommandPalettePreview.ambiente(CommandPaletteView(query: $termo))
+}
+
+#Preview("Linhas: selecionada, comum e indisponível") {
+    VStack(spacing: 0) {
+        CommandPaletteRow(command: CommandPalettePreview.rodar, selected: true)
+        CommandPaletteRow(command: CommandPalettePreview.proxy, selected: false)
+        CommandPaletteRow(command: CommandPalettePreview.rodarSemPassos, selected: false)
+        CommandPaletteRow(command: CommandPalettePreview.exportarHAR, selected: true)
+    }
+    .frame(width: DesignMetrics.CommandPalette.width)
+    .padding(.vertical, DesignMetrics.Spacing.s3)
+    .environment(ThemeManager(preview: PraiaLightTheme()))
+}
+
+#Preview("Linhas: escuro") {
+    VStack(spacing: 0) {
+        CommandPaletteRow(command: CommandPalettePreview.rodar, selected: true)
+        CommandPaletteRow(command: CommandPalettePreview.rodarSemPassos, selected: false)
+    }
+    .frame(width: DesignMetrics.CommandPalette.width)
+    .padding(.vertical, DesignMetrics.Spacing.s3)
+    .environment(ThemeManager(preview: PraiaDarkTheme()))
 }

@@ -5,29 +5,51 @@ import SwiftUI
 /// As linhas vêm de `diagnostics.check`, medido pelo motor, e o botão faz o
 /// que promete. Cada checagem usa ícone, cor e texto juntos: o ✓ ! ✕ do
 /// original dependia só da cor para ser lido.
+///
+/// Montado pela `NoDeviceView`, um por plataforma. Só um cartão por vez leva
+/// a ênfase `.nextStep` ("Próximo passo"), escolhida por
+/// `NoDeviceRecommendation.pick`. Doc: `docs/design/componentes/diagnostic-card.md`.
 struct DiagnosticCard: View {
     @Environment(ThemeManager.self) private var themeManager
 
+    /// Ênfase do cartão na tela sem aparelho. Fechada: só um cartão por vez
+    /// é `.nextStep` (FLU-3, D9).
+    enum Emphasis: Equatable {
+        /// Botão comum; mostra "Pronto" quando o ambiente está pronto.
+        case standard
+        /// Etiqueta "Próximo passo", aro no destaque e o único botão em destaque da tela.
+        case nextStep
+    }
+
+    /// Plataforma do cartão: dá o ponto de cor e o título de reserva.
     let platform: Platform
+    /// Checagens medidas pelo motor. `nil`: ainda verificando (spinner).
     let diagnostics: EngineDTO.PlatformDiagnostics?
+    /// Ação em andamento: o botão vira "Iniciando…" e fica desabilitado.
     let isBusy: Bool
+    /// O que o botão faz.
     let action: () -> Void
+    /// Rótulo do botão, no verbo da ação ("Abrir Simulador").
     let actionTitle: String
+    /// `false` desabilita o botão (por exemplo, sem emulador criado).
     let actionEnabled: Bool
     /// O próximo passo recomendado da tela: só um cartão por vez (FLU-3).
-    var recommended: Bool = false
+    var emphasis: Emphasis = .standard
+
+    private var recommended: Bool { emphasis == .nextStep }
 
     private var theme: any ThemeTokens { themeManager.current }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s5) {
+            HStack(spacing: DesignMetrics.Spacing.s4) {
                 Circle()
                     .fill(PlatformIdentity.color(platform))
-                    .frame(width: 8, height: 8)
+                    .frame(width: DesignMetrics.DiagnosticCard.platformDot,
+                           height: DesignMetrics.DiagnosticCard.platformDot)
                     .accessibilityHidden(true)
                 Text(diagnostics?.title ?? platform.displayName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(DSFont.body.weight(.semibold))
                     .foregroundStyle(theme.labelPrimary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
@@ -43,15 +65,15 @@ struct DiagnosticCard: View {
             }
 
             if let checks = diagnostics?.checks, !checks.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s4) {
                     ForEach(checks) { check in
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: DesignMetrics.Spacing.s4) {
                             Image(systemName: Self.symbol(check.daemonState))
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(DSFont.Symbol.small)
                                 .foregroundStyle(cor(check.daemonState))
-                                .frame(width: 14)
+                                .frame(width: DesignMetrics.DiagnosticCard.checkIconWidth)
                                 .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 1) {
+                            VStack(alignment: .leading, spacing: DesignMetrics.DiagnosticCard.detailGap) {
                                 Text(check.label)
                                     .font(DSFont.body)
                                     .foregroundStyle(theme.labelPrimary)
@@ -70,7 +92,7 @@ struct DiagnosticCard: View {
                     }
                 }
             } else {
-                HStack(spacing: 6) {
+                HStack(spacing: DesignMetrics.Spacing.s3) {
                     ProgressView().controlSize(.small)
                     Text("Verificando ambiente…")
                         .font(DSFont.callout)
@@ -84,12 +106,13 @@ struct DiagnosticCard: View {
         }
         .frame(width: DesignMetrics.Widths.diagnosticCard - 2 * DesignMetrics.Spacing.groupBoxPadding,
                alignment: .topLeading)
-        .frame(minHeight: 236 - 2 * DesignMetrics.Spacing.groupBoxPadding, alignment: .topLeading)
+        .frame(minHeight: DesignMetrics.DiagnosticCard.minHeight - 2 * DesignMetrics.Spacing.groupBoxPadding,
+               alignment: .topLeading)
         .dsCard()
         .overlay {
             if recommended {
                 RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous)
-                    .strokeBorder(theme.accent, lineWidth: 1.5)
+                    .strokeBorder(theme.accent, lineWidth: DesignMetrics.DiagnosticCard.recommendedStroke)
                     .accessibilityHidden(true)
             }
         }
@@ -109,6 +132,7 @@ struct DiagnosticCard: View {
         }
     }
 
+    /// Símbolo SF de cada estado de checagem (forma, além da cor).
     static func symbol(_ status: DaemonState) -> String {
         switch status {
         case .ok: return "checkmark.circle.fill"
@@ -128,6 +152,94 @@ struct DiagnosticCard: View {
         case .off: return theme.labelTertiary
         }
     }
+}
+
+// MARK: - Previews do cartão
+
+/// Diagnósticos de exemplo com os textos que o motor manda de verdade
+/// (`engine/src/mobaile/services/diagnostics.py`).
+private enum DiagnosticCardPreview {
+    typealias Check = EngineDTO.Check
+
+    static let iosSimuladorDesligado = EngineDTO.PlatformDiagnostics(
+        platform: "ios", title: "iOS · WebDriverAgent", ready: false,
+        checks: [
+            Check(label: "Simulador instalado", state: "ok", detail: "3 disponíveis", action: nil),
+            Check(label: "Simulador ligado", state: "warn", detail: "Nenhum em execucao.", action: "boot_simulator"),
+            Check(label: "WebDriverAgent", state: "off", detail: "ligue um simulador primeiro", action: nil),
+        ]
+    )
+
+    static let iosPronto = EngineDTO.PlatformDiagnostics(
+        platform: "ios", title: "iOS · WebDriverAgent", ready: true,
+        checks: [
+            Check(label: "Simulador instalado", state: "ok", detail: "3 disponíveis", action: nil),
+            Check(label: "Simulador ligado", state: "ok", detail: "iPhone 16 Pro", action: nil),
+            Check(label: "WebDriverAgent", state: "ok", detail: "http://127.0.0.1:8100", action: nil),
+        ]
+    )
+
+    static let androidEmuladorParado = EngineDTO.PlatformDiagnostics(
+        platform: "android", title: "Android · ADB", ready: false,
+        checks: [
+            Check(label: "ADB instalado", state: "ok", detail: "/opt/homebrew/bin/adb", action: nil),
+            Check(label: "Dispositivo autorizado", state: "warn", detail: "Nenhum aparelho conectado.", action: nil),
+            Check(label: "Emulador disponivel", state: "warn", detail: "2 emuladores parados.", action: "boot_avd"),
+        ]
+    )
+
+    static let androidSemEmulador = EngineDTO.PlatformDiagnostics(
+        platform: "android", title: "Android · ADB", ready: false,
+        checks: [
+            Check(label: "ADB instalado", state: "ok", detail: "/opt/homebrew/bin/adb", action: nil),
+            Check(label: "Dispositivo autorizado", state: "warn", detail: "Nenhum aparelho conectado.", action: nil),
+            Check(label: "Emulador disponivel", state: "error",
+                  detail: "Nenhum emulador criado. Crie um pelo Android Studio.", action: nil),
+        ]
+    )
+}
+
+#Preview("Próximo passo: iOS") {
+    HStack(alignment: .top, spacing: DesignMetrics.Spacing.s6) {
+        DiagnosticCard(platform: .ios, diagnostics: DiagnosticCardPreview.iosSimuladorDesligado,
+                       isBusy: false, action: {}, actionTitle: "Abrir Simulador",
+                       actionEnabled: true, emphasis: .nextStep)
+        DiagnosticCard(platform: .android, diagnostics: DiagnosticCardPreview.androidEmuladorParado,
+                       isBusy: false, action: {}, actionTitle: "Abrir Emulador", actionEnabled: true)
+    }
+    .padding(DesignMetrics.Spacing.s8)
+    .environment(ThemeManager(preview: PraiaLightTheme()))
+}
+
+#Preview("Próximo passo: Android (iOS pronto)") {
+    HStack(alignment: .top, spacing: DesignMetrics.Spacing.s6) {
+        DiagnosticCard(platform: .ios, diagnostics: DiagnosticCardPreview.iosPronto,
+                       isBusy: false, action: {}, actionTitle: "Ir para o Simulador", actionEnabled: true)
+        DiagnosticCard(platform: .android, diagnostics: DiagnosticCardPreview.androidEmuladorParado,
+                       isBusy: false, action: {}, actionTitle: "Abrir Emulador",
+                       actionEnabled: true, emphasis: .nextStep)
+    }
+    .padding(DesignMetrics.Spacing.s8)
+    .environment(ThemeManager(preview: PraiaLightTheme()))
+}
+
+#Preview("Sem próximo passo: verificando e sem emulador (escuro)") {
+    HStack(alignment: .top, spacing: DesignMetrics.Spacing.s6) {
+        DiagnosticCard(platform: .ios, diagnostics: nil,
+                       isBusy: false, action: {}, actionTitle: "Abrir Simulador", actionEnabled: true)
+        DiagnosticCard(platform: .android, diagnostics: DiagnosticCardPreview.androidSemEmulador,
+                       isBusy: false, action: {}, actionTitle: "Abrir Emulador", actionEnabled: false)
+    }
+    .padding(DesignMetrics.Spacing.s8)
+    .environment(ThemeManager(preview: PraiaDarkTheme()))
+}
+
+#Preview("Próximo passo em andamento") {
+    DiagnosticCard(platform: .ios, diagnostics: DiagnosticCardPreview.iosSimuladorDesligado,
+                   isBusy: true, action: {}, actionTitle: "Abrir Simulador",
+                   actionEnabled: true, emphasis: .nextStep)
+        .padding(DesignMetrics.Spacing.s8)
+        .environment(ThemeManager(preview: PraiaLightTheme()))
 }
 
 /// Tela de quando não há dispositivo.
@@ -214,7 +326,7 @@ struct NoDeviceView: View {
                 action: { Task { await acaoIOS() } },
                 actionTitle: tituloAcaoIOS,
                 actionEnabled: acaoIOSHabilitada,
-                recommended: recomendado == .ios
+                emphasis: recomendado == .ios ? .nextStep : .standard
             )
 
             // Escolher qual, quando há mais de um. Com um só, o botão do
@@ -247,7 +359,7 @@ struct NoDeviceView: View {
                 action: { Task { await session.bootEmulator() } },
                 actionTitle: "Abrir Emulador",
                 actionEnabled: !session.avds.isEmpty,
-                recommended: recomendado == .android
+                emphasis: recomendado == .android ? .nextStep : .standard
             )
 
             if session.avds.count > 1 {
