@@ -10,21 +10,32 @@
 # no estado vazio, nao reconhece dispositivo e nao espelha simulador. Foi
 # exatamente isso que aconteceu em 05/09/2026 as 20:17.
 #
-# Duas travas agora impedem que se repita:
+# Travas que impedem que se repita:
 #   1. `swift test` roda antes, e a instalacao aborta se algum teste falhar;
 #   2. o destino padrao e "Mo baile (nativo).app", um app separado. Substituir
 #      o app em uso passou a ser um ato explicito:
 #        APP_NAME="Mo baile" bash tools/package_macos_app.sh
+#   3. com o app aberto, o script recusa rodar (nao encerra o processo);
+#   4. o bundle e montado num diretorio temporario (staging) no mesmo volume,
+#      assinado e conferido com `codesign --verify`. So depois o app instalado
+#      e trocado, com `mv` atomico: o antigo vira backup e volta se algo falhar.
 #
-# Para instalar a interface Python, que e a que funciona hoje, use
-# tools/install_tk_app.sh.
+# Variaveis:
+#   DEST_DIR       destino do .app (padrao /Applications). O workflow de release
+#                  usa um diretorio do runner.
+#   APP_NAME       nome do bundle (padrao "Mo baile (nativo)").
+#   SIGN_IDENTITY  identidade do codesign (padrao "-", ad-hoc). Outra identidade
+#                  liga hardened runtime e timestamp (docs/RELEASE.md).
+#
+# Para instalar a interface Python, use tools/install_tk_app.sh.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="${APP_NAME:-Mo baile (nativo)}"
 DEST_DIR="${DEST_DIR:-/Applications}"
+DEST_DIR="${DEST_DIR%/}"
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 APP_DIR="$DEST_DIR/$APP_NAME.app"
-CONTENTS="$APP_DIR/Contents"
 # Fonte unica da versao (docs/VERSIONAMENTO.md). Sem ela, nao empacota: um app
 # com versao inventada nao diz qual codigo esta rodando.
 VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
@@ -32,6 +43,30 @@ VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
 python3 "$REPO_ROOT/tools/version.py" check || { echo "ABORTADO: versao inconsistente."; exit 1; }
 
 command -v swift >/dev/null || { echo "erro: swift nao encontrado. Instale as Command Line Tools do Xcode."; exit 1; }
+
+# pgrep -f usa regex: "Mo baile (nativo)" sem escape casaria "Mo baile nativo"
+# e nunca acharia o app. Escapa o caminho do executavel e procura por ele.
+regex_literal() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|/]/\\&/g'; }
+APP_PROC_REGEX="$(regex_literal "$APP_DIR/Contents/MacOS/")"
+
+recusar_se_aberto() {
+    if pgrep -f "$APP_PROC_REGEX" >/dev/null 2>&1; then
+        echo
+        echo "ABORTADO: $APP_DIR esta aberto."
+        echo "Feche o app (Cmd+Q) e rode de novo. O script nao encerra o processo:"
+        echo "trocar o bundle por baixo de um app aberto derruba o motor em uso."
+        exit 1
+    fi
+}
+
+recusar_se_aberto
+
+if [ "$APP_NAME" = "Mo baile" ]; then
+    echo
+    echo "ATENCAO: isto vai SUBSTITUIR o app em uso em $DEST_DIR/Mo baile.app."
+    read -r -p "Digite 'substituir' para confirmar: " confirmacao
+    [ "$confirmacao" = "substituir" ] || { echo "Cancelado."; exit 1; }
+fi
 
 cd "$REPO_ROOT/apps/MoBaile"
 
@@ -46,15 +81,34 @@ fi
 echo "==> Compilando o front (release)"
 swift build -c release
 
-if [ "$APP_NAME" = "Mo baile" ]; then
-    echo
-    echo "ATENCAO: isto vai SUBSTITUIR o app em uso em $DEST_DIR/Mo baile.app."
-    read -r -p "Digite 'substituir' para confirmar: " confirmacao
-    [ "$confirmacao" = "substituir" ] || { echo "Cancelado."; exit 1; }
-fi
+# --- Staging -----------------------------------------------------------------
+# No mesmo volume do destino, para o `mv` final ser um rename atomico.
+mkdir -p "$DEST_DIR"
+STAGE="$(mktemp -d "$DEST_DIR/.mobaile-staging.XXXXXX")"
+NOVO="$STAGE/$APP_NAME.app"
+BACKUP="$STAGE/anterior.app"
+CONTENTS="$NOVO/Contents"
 
-echo "==> Montando o bundle em $APP_DIR"
-rm -rf "$APP_DIR"
+finalizar() {
+    local rc=$?
+    # Falhou entre tirar o antigo e pôr o novo: devolve o antigo.
+    if [ -d "$BACKUP" ] && [ ! -e "$APP_DIR" ]; then
+        if mv "$BACKUP" "$APP_DIR"; then
+            echo "Restaurado o app anterior em $APP_DIR."
+        else
+            echo "ERRO: nao consegui restaurar o app anterior. Ele esta em $BACKUP." >&2
+            exit "$rc"
+        fi
+    fi
+    case "$STAGE" in
+        "$DEST_DIR"/.mobaile-staging.*) rm -rf "$STAGE" ;;
+    esac
+    exit "$rc"
+}
+trap finalizar EXIT
+trap 'exit 130' INT TERM
+
+echo "==> Montando o bundle em staging ($STAGE)"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 cp ".build/release/MoBaile" "$CONTENTS/MacOS/$APP_NAME"
@@ -62,9 +116,9 @@ cp ".build/release/MoBaile" "$CONTENTS/MacOS/$APP_NAME"
 echo "==> Copiando recursos"
 ASSETS="$REPO_ROOT/assets"
 for file in icon.icns icon.png mascot.png splash_bg.png splash_app.mp4; do
-    [ -f "$ASSETS/$file" ] && cp "$ASSETS/$file" "$CONTENTS/Resources/"
+    if [ -f "$ASSETS/$file" ]; then cp "$ASSETS/$file" "$CONTENTS/Resources/"; fi
 done
-[ -f "$ASSETS/icon.icns" ] && cp "$ASSETS/icon.icns" "$CONTENTS/Resources/AppIcon.icns"
+if [ -f "$ASSETS/icon.icns" ]; then cp "$ASSETS/icon.icns" "$CONTENTS/Resources/AppIcon.icns"; fi
 
 echo "==> Compilando a cor de destaque (Assets.car)"
 # O flamingo do design system (#C2456E) vira a cor de destaque do app: seleção
@@ -73,11 +127,11 @@ echo "==> Compilando a cor de destaque (Assets.car)"
 # Command Line Tools.
 ACCENT_PLIST=""
 if xcrun --find actool >/dev/null 2>&1; then
-    parcial="$(mktemp -d)/parcial.plist"
+    parcial="$STAGE/actool-parcial.plist"
     xcrun actool "$REPO_ROOT/apps/MoBaile/AppResources/Assets.xcassets" \
         --compile "$CONTENTS/Resources" --platform macosx --minimum-deployment-target 14.0 \
         --output-partial-info-plist "$parcial" --errors >/dev/null
-    rm -rf "$(dirname "$parcial")"
+    rm -f "$parcial"
     ACCENT_PLIST="<key>NSAccentColorName</key>
     <string>AccentColor</string>"
 else
@@ -126,15 +180,35 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 </dict>
 PLIST
 echo "</plist>" >> "$CONTENTS/Info.plist"
+plutil -lint "$CONTENTS/Info.plist" >/dev/null
 
-echo "==> Assinando (ad-hoc)"
-# Ad-hoc serve para rodar na propria maquina. Para distribuir para o time sem o
-# aviso do Gatekeeper e preciso Developer ID + notarizacao:
-#   codesign --force --options runtime --sign "Developer ID Application: <nome>" "$APP_DIR"
-#   xcrun notarytool submit ... && xcrun stapler staple "$APP_DIR"
-codesign --force --deep --sign - "$APP_DIR"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "==> Assinando (ad-hoc)"
+    # Ad-hoc serve para rodar na propria maquina. Para distribuir sem o aviso do
+    # Gatekeeper: Developer ID + notarizacao (docs/RELEASE.md).
+    codesign --force --deep --sign - "$NOVO"
+else
+    echo "==> Assinando com $SIGN_IDENTITY (hardened runtime)"
+    codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$NOVO"
+fi
 
-echo "==> Registrando no LaunchServices"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" || true
+echo "==> Conferindo a assinatura"
+codesign --verify --deep --strict --verbose=2 "$NOVO"
+
+# --- Troca atomica -----------------------------------------------------------
+# O app pode ter sido aberto durante o build.
+recusar_se_aberto
+
+echo "==> Instalando em $APP_DIR"
+if [ -e "$APP_DIR" ]; then
+    mv "$APP_DIR" "$BACKUP"
+fi
+mv "$NOVO" "$APP_DIR"
+rm -rf "$BACKUP"
+
+if [ "$DEST_DIR" = "/Applications" ]; then
+    echo "==> Registrando no LaunchServices"
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" || true
+fi
 
 echo "OK: $APP_DIR (versao $VERSION)"
