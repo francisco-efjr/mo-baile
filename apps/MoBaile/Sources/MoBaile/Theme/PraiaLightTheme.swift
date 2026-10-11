@@ -15,7 +15,8 @@ struct PraiaLightTheme: ThemeTokens {
     // Rótulos
     var labelPrimary: Color { highContrast ? Color(hex: "#0B0C2E") : .navy(0.90) }
     var labelSecondary: Color { highContrast ? Color(r: 11, g: 12, b: 46, 0.80) : .navy(0.62) }
-    var labelTertiary: Color { highContrast ? Color(r: 11, g: 12, b: 46, 0.62) : .navy(0.40) }
+    // Terciário: o menor alfa com 4,5:1 sobre conteúdo, janela e sidebar (UX-1).
+    var labelTertiary: Color { highContrast ? Color(r: 11, g: 12, b: 46, 0.62) : .navy(0.62) }
     let labelQuaternary = Color.navy(0.20)
 
     // Separadores e preenchimentos
