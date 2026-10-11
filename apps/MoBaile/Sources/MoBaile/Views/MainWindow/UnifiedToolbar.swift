@@ -297,12 +297,15 @@ struct HierarchySearchButton: View {
     var body: some View {
         if !appState.usesToolbarSearch {
             Button {
-                appState.inspectorVisible = true
-                appState.hierarchySearchFocusRequest += 1
+                appState.requestHierarchySearch()
             } label: {
                 Label("Buscar na Hierarquia", systemImage: "magnifyingglass")
             }
-            .help("Buscar na hierarquia (⌘F)")
+            // Como o botão do inspector: sem aparelho, a hierarquia não existe.
+            .disabled(!appState.canSearchHierarchy)
+            .help(appState.canSearchHierarchy
+                  ? "Buscar na hierarquia (⌘F)"
+                  : "Conecte um aparelho para buscar na hierarquia")
         }
     }
 }

@@ -154,6 +154,34 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(state.inspectorShown, "quem fechou à mão continua com ele fechado")
     }
 
+    /// COD-4: com o inspector suprimido, buscar na hierarquia não mexe na
+    /// escolha da pessoa nem deixa pedido de foco pendente para depois.
+    func testBuscaNaHierarquiaSuprimidaNaoMexeEmNada() {
+        let state = AppState()
+        state.selectedDevice = nil
+        state.workspaceTab = .pageObjects
+        state.inspectorVisible = false
+        XCTAssertTrue(state.inspectorSuppressed)
+        XCTAssertFalse(state.canSearchHierarchy)
+        XCTAssertFalse(state.canSearch, "⌘F fica desabilitado sem aparelho em Page Objects")
+
+        state.requestHierarchySearch()
+        state.search()
+        XCTAssertFalse(state.inspectorVisible, "a escolha da pessoa não muda")
+        XCTAssertEqual(state.hierarchySearchFocusRequest, 0, "nenhum pedido de foco pendente")
+
+        state.selectedDevice = "7303D258"
+        XCTAssertTrue(state.canSearchHierarchy)
+        state.search()
+        XCTAssertTrue(state.inspectorVisible, "com aparelho, buscar abre o inspector")
+        XCTAssertEqual(state.hierarchySearchFocusRequest, 1)
+
+        state.workspaceTab = .network
+        state.search()
+        XCTAssertTrue(state.toolbarSearchPresented, "em Rede, ⌘F abre a busca da toolbar")
+        XCTAssertEqual(state.hierarchySearchFocusRequest, 1)
+    }
+
     /// COD-3: a divisória some com o ponteiro em cima e devolve o cursor; sair
     /// duas vezes não tira da pilha o cursor de outra view.
     func testCursorDaDivisoriaFicaEmPar() {

@@ -97,8 +97,9 @@ struct MoBaileCommands: Commands {
         // MARK: Editar
         CommandGroup(after: .pasteboard) {
             Divider()
-            Button("Buscar") { buscar() }
+            Button("Buscar") { appState.search() }
                 .keyboardShortcut("f", modifiers: .command)
+                .disabled(!appState.canSearch)
             Divider()
             Button("Limpar Tráfego…") { appState.pendingClear = .network }
                 .disabled(appState.httpRequests.isEmpty)
@@ -216,17 +217,6 @@ struct MoBaileCommands: Commands {
         CommandGroup(after: .windowArrangement) {
             Divider()
             Button("Mostrar Splash") { SplashController.shared.show() }
-        }
-    }
-
-    /// ⌘F: em Rede, Analytics e Relatório, a busca da toolbar; nas outras, a
-    /// da hierarquia, no inspector.
-    private func buscar() {
-        if appState.usesToolbarSearch {
-            appState.toolbarSearchPresented = true
-        } else {
-            appState.inspectorVisible = true
-            appState.hierarchySearchFocusRequest += 1
         }
     }
 }
