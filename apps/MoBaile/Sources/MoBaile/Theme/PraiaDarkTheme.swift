@@ -15,7 +15,8 @@ struct PraiaDarkTheme: ThemeTokens {
     // Rótulos
     var labelPrimary: Color { highContrast ? .white : .white(0.90) }
     var labelSecondary: Color { highContrast ? .white(0.82) : .white(0.60) }
-    var labelTertiary: Color { highContrast ? .white(0.62) : .white(0.34) }
+    // Terciário: o menor alfa com 4,5:1 sobre conteúdo, janela e sidebar (UX-1).
+    var labelTertiary: Color { highContrast ? .white(0.62) : .white(0.49) }
     let labelQuaternary = Color.white(0.17)
 
     // Separadores e preenchimentos

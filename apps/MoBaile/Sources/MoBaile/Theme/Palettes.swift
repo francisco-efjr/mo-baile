@@ -95,6 +95,21 @@ extension PaletteSpec {
         all.first { $0.id == id }
     }
 
+    /// Fundos opacos sobre os quais o texto aparece: conteúdo, conteúdo
+    /// alternativo, janela e sidebar.
+    var textBackgrounds: [String] { [content, alt, window, side] }
+
+    /// Alfa do rótulo terciário (UX-1).
+    ///
+    /// O terciário a 0,42 dava cerca de 2,5:1, abaixo dos 4,5:1 da WCAG
+    /// 1.4.3. Agora o alfa é o menor, em centésimos, a partir do piso de
+    /// antes, que dá 4,5:1 sobre todos os fundos de texto da paleta. É a
+    /// mesma conta de `paletas-data.js`.
+    func tertiaryAlpha(highContrast: Bool) -> Double {
+        let piso = highContrast ? 0.62 : (isDark ? 0.34 : 0.42)
+        return PaletteMath.minimumAlpha(ink, over: textBackgrounds.map(PaletteMath.rgb), ratio: 4.5, floor: piso)
+    }
+
     /// As 11 amostras do cartão, na ordem do design.
     var swatches: [(name: String, hex: String)] {
         [("Janela", window), ("Conteúdo", content), ("Sidebar", side), ("Texto", PaletteMath.hex(ink)),
@@ -137,7 +152,7 @@ struct PaletteTheme: ThemeTokens {
         return light ? c(PaletteMath.hex(spec.ink)) : .white
     }
     var labelSecondary: Color { ink(highContrast ? 0.82 : (light ? 0.68 : 0.60)) }
-    var labelTertiary: Color { ink(highContrast ? 0.62 : (light ? 0.42 : 0.34)) }
+    var labelTertiary: Color { ink(spec.tertiaryAlpha(highContrast: highContrast)) }
     var labelQuaternary: Color { ink(light ? 0.20 : 0.17) }
 
     // Separadores e preenchimentos
@@ -313,6 +328,18 @@ enum PaletteMath {
     static func contrast(_ a: [Double], _ b: [Double]) -> Double {
         let x = luminance(a), y = luminance(b)
         return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    /// Menor opacidade, em centésimos e a partir de `floor`, com que a tinta
+    /// `fg` atinge `ratio` sobre todos os fundos. Devolve 1 se nem opaca chegar.
+    static func minimumAlpha(_ fg: [Double], over fundos: [[Double]], ratio: Double, floor: Double = 0) -> Double {
+        var centesimos = Int((floor * 100).rounded())
+        while centesimos <= 100 {
+            let alpha = Double(centesimos) / 100
+            if fundos.allSatisfy({ contrast(over(fg, alpha, $0), $0) >= ratio }) { return alpha }
+            centesimos += 1
+        }
+        return 1
     }
 
     static func oklab(_ rgb: [Double]) -> [Double] {

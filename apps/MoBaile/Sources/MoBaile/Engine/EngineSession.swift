@@ -22,6 +22,17 @@ enum LaunchPhase: Equatable, Sendable {
     case startingEngine, scanning, ready, failed
 }
 
+/// Saúde do motor, como a faixa global da janela mostra (FLU-2).
+enum EngineStatus: Equatable, Sendable {
+    /// Primeira subida, ainda sem resposta. O splash cobre esta fase.
+    case starting
+    case running
+    /// A supervisão está subindo outro motor depois de uma queda.
+    case restarting(String)
+    /// O motor não está no ar e ninguém vai tentar de novo sozinho.
+    case stopped(String)
+}
+
 @MainActor
 @Observable
 final class EngineSession {
@@ -39,6 +50,18 @@ final class EngineSession {
 
     /// Resultado do handshake: versão do motor e tabela de métodos.
     private(set) var hello: EngineDTO.Hello?
+
+    /// A supervisão está tentando subir outro motor (ver `recover`).
+    private(set) var isRecovering = false
+
+    /// O que a faixa "Motor parado" mostra. Conectado vence tudo: um erro de
+    /// chamada qualquer também grava `lastError` e não é motor parado.
+    var engineStatus: EngineStatus {
+        if isConnected { return .running }
+        if isRecovering { return .restarting(state.statusMessage) }
+        if let lastError { return .stopped(lastError) }
+        return .starting
+    }
 
     /// Em que ponto da abertura o app está. O splash acompanha isto e só sai
     /// quando o motor respondeu e a primeira varredura de aparelhos e do
@@ -161,6 +184,7 @@ final class EngineSession {
         // ser lido como queda e disparar reinício.
         restartTask?.cancel()
         restartTask = nil
+        isRecovering = false
         stopBackgroundWork()
         try? await client?.callIgnoringResult("devices.watch_stop")
         await client?.stop()
@@ -170,6 +194,18 @@ final class EngineSession {
         state.streamActive = false
         state.proxyRunning = false
         state.analyticsListenerActive = false
+    }
+
+    /// Reinício pedido pela pessoa, pela faixa "Motor parado" ou pela paleta.
+    ///
+    /// É o mesmo ciclo de vida da janela: `disconnect()` cancela a supervisão
+    /// e para o motor atual, se houver, e `connect()` sobe um novo, com a
+    /// contagem de tentativas zerada. Não há um segundo caminho de subida.
+    func restartEngine() async {
+        await disconnect()
+        lastError = nil
+        state.statusMessage = "Reiniciando o motor…"
+        await connect()
     }
 
     /// Sobe um motor novo e faz o handshake antes de qualquer outra chamada.
@@ -310,12 +346,17 @@ final class EngineSession {
         if state.runState == .running { state.runState = .failed }
 
         restartTask?.cancel()
+        // Já marca aqui: entre a queda e o início da tarefa, a faixa diria
+        // "parado" por um instante.
+        isRecovering = true
         restartTask = Task { [weak self] in
             await self?.recover(after: status, restoring: snapshot)
         }
     }
 
     private func recover(after status: Int32, restoring snapshot: RestoreSnapshot) async {
+        isRecovering = true
+        defer { isRecovering = false }
         var motivo = EngineError.processTerminated(status).localizedDescription
         while !Task.isCancelled {
             // A janela conta tentativas, com ou sem sucesso: um motor que sobe e
@@ -325,7 +366,7 @@ final class EngineSession {
             restartAttempts.removeAll { agora.timeIntervalSince($0) > restartPolicy.window }
             guard restartAttempts.count < restartPolicy.maxAttempts else {
                 let mensagem = "O motor caiu e não voltou depois de \(restartPolicy.maxAttempts) tentativas "
-                    + "de reinício. \(motivo) Feche e abra o Mo baile para tentar de novo."
+                    + "de reinício. \(motivo) Use Reiniciar Motor para tentar de novo."
                 lastError = mensagem
                 state.statusMessage = mensagem
                 return
@@ -344,6 +385,11 @@ final class EngineSession {
                 novo = try await launch()
             } catch EngineError.incompatibleProtocol(let mensagem) {
                 // Tentar de novo não muda a versão do motor no disco.
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            } catch EngineError.pythonUnsuitable(let mensagem) {
+                // Nem instala o Python que falta.
                 lastError = mensagem
                 state.statusMessage = mensagem
                 return

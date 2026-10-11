@@ -257,6 +257,33 @@ class AppState {
         guard !inspectorSuppressed else { return }
         inspectorVisible.toggle()
     }
+
+    /// A busca da hierarquia mora no inspector: sem ele na janela não há
+    /// campo para focar (COD-4).
+    var canSearchHierarchy: Bool { !inspectorSuppressed }
+
+    /// Abre o inspector e pede foco no campo de busca da hierarquia.
+    ///
+    /// Com o inspector suprimido, não faz nada: antes, o pedido de foco ficava
+    /// pendente e roubava o foco de repente ao conectar o aparelho, e a
+    /// escolha `inspectorVisible` mudava sem a pessoa ter pedido.
+    func requestHierarchySearch() {
+        guard canSearchHierarchy else { return }
+        inspectorVisible = true
+        hierarchySearchFocusRequest += 1
+    }
+
+    /// ⌘F: em Rede, Analytics e Relatório, a busca da toolbar; nas outras, a
+    /// da hierarquia, no inspector.
+    var canSearch: Bool { usesToolbarSearch || canSearchHierarchy }
+
+    func search() {
+        if usesToolbarSearch {
+            toolbarSearchPresented = true
+        } else {
+            requestHierarchySearch()
+        }
+    }
     /// Passo escolhido na seção Fluxo da barra lateral. Destaca o código dele.
     var selectedStepID: UUID? = nil
     /// Confirmação de limpeza aberta (tráfego, eventos ou passos).
@@ -265,6 +292,8 @@ class AppState {
     var hierarchySearchFocusRequest: Int = 0
     /// Busca da toolbar aberta (⌘F em Rede e Analytics).
     var toolbarSearchPresented: Bool = false
+    /// Paleta de comandos aberta (⇧⌘P).
+    var commandPalettePresented: Bool = false
     /// Ajustes › Geral › "Iniciar o espelho automaticamente".
     var autoStartStream: Bool = UserDefaults.standard.object(forKey: AppState.autoStartStreamKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoStartStream, forKey: AppState.autoStartStreamKey) }

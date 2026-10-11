@@ -4,7 +4,7 @@
 [data-palette="salvia"]{
   --label-primary: rgba(34,45,33,0.9);
   --label-secondary: rgba(34,45,33,0.68);
-  --label-tertiary: rgba(34,45,33,0.42);
+  --label-tertiary: rgba(34,45,33,0.68);
   --label-quaternary: rgba(34,45,33,0.2);
   --separator: rgba(34,45,33,0.11);
   --separator-strong: rgba(34,45,33,0.2);
@@ -61,7 +61,7 @@
   --accent-text: #6E414F;
   --label-primary: #222D21;
   --label-secondary: rgba(34,45,33,0.82);
-  --label-tertiary: rgba(34,45,33,0.62);
+  --label-tertiary: rgba(34,45,33,0.68);
   --separator: rgba(34,45,33,0.34);
   --separator-strong: rgba(34,45,33,0.55);
   --control-border: rgba(34,45,33,0.6);
@@ -72,7 +72,7 @@
 [data-palette="bergamin"]{
   --label-primary: rgba(18,28,66,0.9);
   --label-secondary: rgba(18,28,66,0.68);
-  --label-tertiary: rgba(18,28,66,0.42);
+  --label-tertiary: rgba(18,28,66,0.64);
   --label-quaternary: rgba(18,28,66,0.2);
   --separator: rgba(18,28,66,0.11);
   --separator-strong: rgba(18,28,66,0.2);
@@ -129,7 +129,7 @@
   --accent-text: #233D8B;
   --label-primary: #121C42;
   --label-secondary: rgba(18,28,66,0.82);
-  --label-tertiary: rgba(18,28,66,0.62);
+  --label-tertiary: rgba(18,28,66,0.64);
   --separator: rgba(18,28,66,0.34);
   --separator-strong: rgba(18,28,66,0.55);
   --control-border: rgba(18,28,66,0.6);
@@ -140,7 +140,7 @@
 [data-palette="draper"]{
   --label-primary: rgba(20,24,22,0.9);
   --label-secondary: rgba(20,24,22,0.68);
-  --label-tertiary: rgba(20,24,22,0.42);
+  --label-tertiary: rgba(20,24,22,0.62);
   --label-quaternary: rgba(20,24,22,0.2);
   --separator: rgba(20,24,22,0.11);
   --separator-strong: rgba(20,24,22,0.2);
@@ -208,7 +208,7 @@
 [data-palette="mahdavi"]{
   --label-primary: rgba(52,24,40,0.9);
   --label-secondary: rgba(52,24,40,0.68);
-  --label-tertiary: rgba(52,24,40,0.42);
+  --label-tertiary: rgba(52,24,40,0.65);
   --label-quaternary: rgba(52,24,40,0.2);
   --separator: rgba(52,24,40,0.11);
   --separator-strong: rgba(52,24,40,0.2);
@@ -265,7 +265,7 @@
   --accent-text: #6B294F;
   --label-primary: #341828;
   --label-secondary: rgba(52,24,40,0.82);
-  --label-tertiary: rgba(52,24,40,0.62);
+  --label-tertiary: rgba(52,24,40,0.65);
   --separator: rgba(52,24,40,0.34);
   --separator-strong: rgba(52,24,40,0.55);
   --control-border: rgba(52,24,40,0.6);
@@ -276,7 +276,7 @@
 [data-palette="wearstler"]{
   --label-primary: rgba(255,246,236,0.9);
   --label-secondary: rgba(255,246,236,0.6);
-  --label-tertiary: rgba(255,246,236,0.34);
+  --label-tertiary: rgba(255,246,236,0.5);
   --label-quaternary: rgba(255,246,236,0.17);
   --separator: rgba(255,246,236,0.1);
   --separator-strong: rgba(255,246,236,0.18);
@@ -344,7 +344,7 @@
 [data-palette="garcia"]{
   --label-primary: rgba(255,242,236,0.9);
   --label-secondary: rgba(255,242,236,0.6);
-  --label-tertiary: rgba(255,242,236,0.34);
+  --label-tertiary: rgba(255,242,236,0.5);
   --label-quaternary: rgba(255,242,236,0.17);
   --separator: rgba(255,242,236,0.1);
   --separator-strong: rgba(255,242,236,0.18);
@@ -412,7 +412,7 @@
 [data-palette="hicks"]{
   --label-primary: rgba(246,240,255,0.9);
   --label-secondary: rgba(246,240,255,0.6);
-  --label-tertiary: rgba(246,240,255,0.34);
+  --label-tertiary: rgba(246,240,255,0.51);
   --label-quaternary: rgba(246,240,255,0.17);
   --separator: rgba(246,240,255,0.1);
   --separator-strong: rgba(246,240,255,0.18);
@@ -480,7 +480,7 @@
 [data-palette="dirand"]{
   --label-primary: rgba(240,244,248,0.9);
   --label-secondary: rgba(240,244,248,0.6);
-  --label-tertiary: rgba(240,244,248,0.34);
+  --label-tertiary: rgba(240,244,248,0.52);
   --label-quaternary: rgba(240,244,248,0.17);
   --separator: rgba(240,244,248,0.1);
   --separator-strong: rgba(240,244,248,0.18);
@@ -548,7 +548,7 @@
 [data-palette="tudisco"]{
   --label-primary: rgba(30,20,70,0.9);
   --label-secondary: rgba(30,20,70,0.68);
-  --label-tertiary: rgba(30,20,70,0.42);
+  --label-tertiary: rgba(30,20,70,0.63);
   --label-quaternary: rgba(30,20,70,0.2);
   --separator: rgba(30,20,70,0.11);
   --separator-strong: rgba(30,20,70,0.2);
@@ -605,7 +605,7 @@
   --accent-text: #422A96;
   --label-primary: #1E1446;
   --label-secondary: rgba(30,20,70,0.82);
-  --label-tertiary: rgba(30,20,70,0.62);
+  --label-tertiary: rgba(30,20,70,0.63);
   --separator: rgba(30,20,70,0.34);
   --separator-strong: rgba(30,20,70,0.55);
   --control-border: rgba(30,20,70,0.6);

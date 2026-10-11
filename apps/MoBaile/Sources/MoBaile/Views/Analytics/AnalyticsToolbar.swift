@@ -26,7 +26,7 @@ struct AnalyticsToolbar: View {
         let ouvindo = appState.analyticsListenerActive
         return HStack(spacing: 8) {
             if !compacto {
-                StatusIndicator(status: ouvindo ? .ok : .off, label: ouvindo ? "FA Listener ativo" : "FA Listener inativo")
+                StatusIndicator(status: ouvindo ? .ok : .off, label: ouvindo ? "Escuta de analytics ativa" : "Escuta de analytics inativa", mono: false)
             }
             if appState.platform == .ios {
                 iosSourceMenu(compacto: compacto)

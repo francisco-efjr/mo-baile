@@ -323,6 +323,42 @@ final class WindowSnapshotTests: XCTestCase {
         try fotografar(janela(e, s, t), tamanho: CGSize(width: 980, height: 640), nome: "15-relatorio-vazio-claro", tema: t)
     }
 
+    // MARK: - Fluidez 3.5 (docs/design/telas/3.5)
+
+    func testPaletaDeComandos() throws {
+        let (e, s, t) = ambiente()
+        e.commandPalettePresented = true
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "3.5-paleta-de-comandos-claro", tema: t)
+        let (e2, s2, t2) = ambiente(conectado: false)
+        e2.commandPalettePresented = true
+        try fotografar(janela(e2, s2, t2), tamanho: CGSize(width: 1280, height: 800), nome: "3.5-paleta-sem-aparelho-escuro", escuro: true, tema: t2)
+    }
+
+    func testFaixaMotorParado() async throws {
+        let (e, _, t) = ambiente(conectado: false)
+        let parado = EngineSession(state: e) {
+            try EngineLocator.selectPython(
+                from: ["/usr/bin/python3"], isExecutable: { _ in true },
+                probe: { _ in PythonProbe.Result(kind: .tooOld, version: "3.9.6") }
+            )
+            throw EngineError.notRunning
+        }
+        await parado.connect()
+        try fotografar(janela(e, parado, t), tamanho: CGSize(width: 1280, height: 800), nome: "3.5-motor-parado-claro", tema: t)
+        try fotografar(janela(e, parado, t), tamanho: CGSize(width: 1280, height: 800), nome: "3.5-motor-parado-escuro", escuro: true, tema: t)
+    }
+
+    func testSemAparelhoComProximoPasso() async throws {
+        _ = try destino()
+        let (e, _, t) = ambiente(conectado: false)
+        // Diagnóstico das fixtures do motor: WDA sem resposta no iOS e AVDs
+        // parados no Android. Só o iOS, plataforma em uso, ganha o destaque.
+        let s = EngineSession(state: e, client: FakeEngine(respostas: try resultadosDasFixtures()))
+        await s.refreshEnvironment()
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "3.5-sem-aparelho-claro", tema: t)
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "3.5-sem-aparelho-escuro", escuro: true, tema: t)
+    }
+
     func testJanelaPaletaSalvia() throws {
         let (e, s, t) = ambiente()
         e.selectedStepID = e.steps[1].id
@@ -412,7 +448,7 @@ extension WindowSnapshotTests {
                  conferir: "Estado vazio enquanto o motor ainda não respondeu ao diagnóstico",
                  montar: janelaPronta({ _, _ in }, conectado: false)),
             Cena(id: "02b-sem-dispositivo-diagnostico", titulo: "Sem dispositivo, diagnóstico medido",
-                 conferir: "Cartões iOS e Android com checagens reais, ações sugeridas, rodapé do último scan",
+                 conferir: "Cartões iOS e Android com checagens reais, um só próximo passo em destaque, rodapé da última verificação",
                  montar: { _ in
                      let (e, _, t) = self.ambiente(conectado: false)
                      let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))

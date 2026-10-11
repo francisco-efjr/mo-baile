@@ -19,6 +19,9 @@ const lum=rgb=>.2126*lin(rgb[0])+.7152*lin(rgb[1])+.0722*lin(rgb[2]);
 const cr=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
 const over=(fg,a,bg)=>fg.map((v,i)=>v*a+bg[i]*(1-a));
 const oklab=rgb=>{const [r,g,b]=rgb.map(lin);const l=Math.cbrt(.4122214708*r+.5363325363*g+.0514459929*b),m=Math.cbrt(.2119034982*r+.6806995451*g+.1073969566*b),s=Math.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);return [.2104542553*l+.793617785*m-.0040720468*s,1.9779984951*l-2.428592205*m+.4505937099*s,.0259040371*l+.7827717662*m-.808675766*s]};
+// Menor alfa (em centésimos, a partir do piso) com 4,5:1 sobre todos os fundos de texto (UX-1).
+const minA=(k,bgs,floor)=>{for(let c=Math.round(floor*100);c<=100;c++){const a=c/100;if(bgs.every(b=>cr(over(k,a,hx(b)),hx(b))>=4.5))return a}return 1};
+const textBgs=p=>[p.content,p.alt,p.window,p.side];
 const dE=(a,b)=>{const x=oklab(a),y=oklab(b);return Math.hypot(x[0]-y[0],x[1]-y[1],x[2]-y[2])};
 
 function vars(p){
@@ -26,7 +29,7 @@ function vars(p){
   const al=L?{p:.90,s:.68,t:.42,q:.20,sep:.11,sepS:.20,f1:.10,f2:.07,f3:.045,f4:.025,grp:.035,ch:.06,cp:.12,cb:.14,sel:.10}
            :{p:.90,s:.60,t:.34,q:.17,sep:.10,sepS:.18,f1:.12,f2:.08,f3:.05,f4:.03,grp:.04,ch:.08,cp:.15,cb:.12,sel:.12};
   return {
-    '--label-primary':rgba(k,al.p),'--label-secondary':rgba(k,al.s),'--label-tertiary':rgba(k,al.t),'--label-quaternary':rgba(k,al.q),
+    '--label-primary':rgba(k,al.p),'--label-secondary':rgba(k,al.s),'--label-tertiary':rgba(k,minA(k,textBgs(p),al.t)),'--label-quaternary':rgba(k,al.q),
     '--separator':rgba(k,al.sep),'--separator-strong':rgba(k,al.sepS),
     '--fill-primary':rgba(k,al.f1),'--fill-secondary':rgba(k,al.f2),'--fill-tertiary':rgba(k,al.f3),'--fill-quaternary':rgba(k,al.f4),
     '--bg-desktop':p.desk,'--bg-window':p.window,'--bg-sidebar':rgba(hx(p.side),.78),'--bg-sidebar-solid':p.side,
@@ -48,7 +51,7 @@ function hc(p){
   const L=p.mode==='light';
   return {'--accent':mixHex(p.accent,'#000000',.16),'--selection':mixHex(p.accent,'#000000',.16),
     '--accent-text':L?mixHex(p.atext,toHex(p.ink),.3):mixHex(p.atext,'#FFFFFF',.35),
-    '--label-primary':L?toHex(p.ink):'#FFFFFF','--label-secondary':rgba(p.ink,.82),'--label-tertiary':rgba(p.ink,.62),
+    '--label-primary':L?toHex(p.ink):'#FFFFFF','--label-secondary':rgba(p.ink,.82),'--label-tertiary':rgba(p.ink,minA(p.ink,textBgs(p),.62)),
     '--separator':rgba(p.ink,.34),'--separator-strong':rgba(p.ink,.55),'--control-border':rgba(p.ink,.60),'--bg-sidebar':p.side};
 }
 function checks(p){

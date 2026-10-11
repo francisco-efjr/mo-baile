@@ -12,6 +12,9 @@ struct StatusIndicator: View {
     let label: String
     var detail: String? = nil
     var mono: Bool = true
+    /// Nome por extenso para o leitor de tela e o tooltip, quando `label` é
+    /// uma sigla ("WDA 8100" → "WebDriverAgent, porta 8100").
+    var spokenName: String? = nil
 
     private var theme: any ThemeTokens { themeManager.current }
 
@@ -29,12 +32,13 @@ struct StatusIndicator: View {
         .fixedSize()
         .help(ajuda)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
+        .accessibilityLabel(spokenName ?? label)
         .accessibilityValue(Self.word(status))
+        .accessibilityHint(detail ?? "")
     }
 
     private var ajuda: String {
-        var texto = "\(label): \(Self.word(status))"
+        var texto = "\(spokenName ?? label): \(Self.word(status))"
         if let detail, !detail.isEmpty { texto += ". \(detail)" }
         return texto
     }

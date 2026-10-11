@@ -25,7 +25,7 @@
   /* Rótulos */
   --label-primary: rgba(20,21,67,.90);
   --label-secondary: rgba(20,21,67,.62);
-  --label-tertiary: rgba(20,21,67,.40);
+  --label-tertiary: rgba(20,21,67,.62); /* 4,5:1 sobre conteúdo, janela e sidebar (UX-1) */
   --label-quaternary: rgba(20,21,67,.20);
   /* Separadores e preenchimentos (para separar elementos sobre vidro) */
   --separator: rgba(20,21,67,.11);
@@ -109,7 +109,7 @@
 [data-theme="dark"]{
   --label-primary: rgba(255,255,255,.90);
   --label-secondary: rgba(255,255,255,.60);
-  --label-tertiary: rgba(255,255,255,.34);
+  --label-tertiary: rgba(255,255,255,.49); /* 4,5:1 sobre conteúdo, janela e sidebar (UX-1) */
   --label-quaternary: rgba(255,255,255,.17);
   --separator: rgba(255,255,255,.10);
   --separator-strong: rgba(255,255,255,.18);

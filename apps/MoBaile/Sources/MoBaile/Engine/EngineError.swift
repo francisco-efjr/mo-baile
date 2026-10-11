@@ -24,6 +24,9 @@ enum EngineError: LocalizedError, Equatable {
     case cancelled
     /// O motor fala outra versao do protocolo. A mensagem cita as duas.
     case incompatibleProtocol(String)
+    /// Nenhum Python candidato tem a versão e as dependências do motor. A
+    /// mensagem diz o que foi achado e o que instalar (PY-1).
+    case pythonUnsuitable(String)
 
     var errorDescription: String? {
         switch self {
@@ -44,13 +47,15 @@ enum EngineError: LocalizedError, Equatable {
             return "Chamada cancelada."
         case .incompatibleProtocol(let message):
             return message
+        case .pythonUnsuitable(let message):
+            return message
         }
     }
 
     /// `true` quando a falha e do ambiente e vale sugerir um conserto ao usuario.
     var isRecoverableBySetup: Bool {
         switch self {
-        case .engineNotFound, .notRunning, .processTerminated, .incompatibleProtocol: return true
+        case .engineNotFound, .notRunning, .processTerminated, .incompatibleProtocol, .pythonUnsuitable: return true
         case .engine, .protocolViolation, .timeout, .cancelled: return false
         }
     }
