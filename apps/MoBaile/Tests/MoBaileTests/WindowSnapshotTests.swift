@@ -412,7 +412,7 @@ extension WindowSnapshotTests {
                  conferir: "Estado vazio enquanto o motor ainda não respondeu ao diagnóstico",
                  montar: janelaPronta({ _, _ in }, conectado: false)),
             Cena(id: "02b-sem-dispositivo-diagnostico", titulo: "Sem dispositivo, diagnóstico medido",
-                 conferir: "Cartões iOS e Android com checagens reais, ações sugeridas, rodapé do último scan",
+                 conferir: "Cartões iOS e Android com checagens reais, um só próximo passo em destaque, rodapé da última verificação",
                  montar: { _ in
                      let (e, _, t) = self.ambiente(conectado: false)
                      let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))

@@ -14,6 +14,8 @@ struct DiagnosticCard: View {
     let action: () -> Void
     let actionTitle: String
     let actionEnabled: Bool
+    /// O próximo passo recomendado da tela: só um cartão por vez (FLU-3).
+    var recommended: Bool = false
 
     private var theme: any ThemeTokens { themeManager.current }
 
@@ -29,7 +31,11 @@ struct DiagnosticCard: View {
                     .foregroundStyle(theme.labelPrimary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                if diagnostics?.ready == true {
+                if recommended {
+                    Text("Próximo passo")
+                        .font(DSFont.subheadlineSemibold)
+                        .foregroundStyle(theme.accentText)
+                } else if diagnostics?.ready == true {
                     Label("Pronto", systemImage: "checkmark")
                         .font(DSFont.subheadline)
                         .foregroundStyle(theme.success)
@@ -52,7 +58,7 @@ struct DiagnosticCard: View {
                                 // O detalhe é o que transforma "algo está errado"
                                 // em "faça isto".
                                 if !check.detail.isEmpty {
-                                    Text(check.detail)
+                                    Text(DiagnosticCopy.natural(check.detail))
                                         .font(DSFont.subheadline)
                                         .foregroundStyle(theme.labelSecondary)
                                         .fixedSize(horizontal: false, vertical: true)
@@ -60,7 +66,7 @@ struct DiagnosticCard: View {
                             }
                         }
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(check.label). \(StatusIndicator.word(check.daemonState)). \(check.detail)")
+                        .accessibilityLabel("\(check.label). \(StatusIndicator.word(check.daemonState)). \(DiagnosticCopy.natural(check.detail))")
                     }
                 }
             } else {
@@ -74,14 +80,33 @@ struct DiagnosticCard: View {
 
             Spacer(minLength: 0)
 
-            Button(isBusy ? "Iniciando…" : actionTitle, action: action)
-                .buttonStyle(.borderedProminent)
-                .disabled(!actionEnabled || isBusy)
+            botao
         }
         .frame(width: DesignMetrics.Widths.diagnosticCard - 2 * DesignMetrics.Spacing.groupBoxPadding,
                alignment: .topLeading)
         .frame(minHeight: 236 - 2 * DesignMetrics.Spacing.groupBoxPadding, alignment: .topLeading)
         .dsCard()
+        .overlay {
+            if recommended {
+                RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous)
+                    .strokeBorder(theme.accent, lineWidth: 1.5)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    /// Só o cartão recomendado tem o botão em destaque. Dois botões
+    /// prominentes com o mesmo peso não dizem por onde começar.
+    @ViewBuilder
+    private var botao: some View {
+        let botao = Button(isBusy ? "Iniciando…" : actionTitle, action: action)
+            .disabled(!actionEnabled || isBusy)
+            .accessibilityHint(recommended ? "Próximo passo recomendado" : "")
+        if recommended {
+            botao.buttonStyle(.borderedProminent)
+        } else {
+            botao.buttonStyle(.bordered)
+        }
     }
 
     static func symbol(_ status: DaemonState) -> String {
@@ -150,8 +175,8 @@ struct NoDeviceView: View {
                 }
 
                 HStack(spacing: 10) {
-                    Text(textoDoScan)
-                        .font(DSFont.mono(11).monospacedDigit())
+                    Text(NoDeviceCopy.ultimaVerificacao(session.lastScan))
+                        .font(DSFont.subheadline.monospacedDigit())
                         .foregroundStyle(theme.labelSecondary)
                     Button {
                         Task {
@@ -159,7 +184,7 @@ struct NoDeviceView: View {
                             await session.refreshEnvironment()
                         }
                     } label: {
-                        Label("Verificar de Novo", systemImage: "arrow.clockwise")
+                        Label("Verificar Novamente", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(PlainTextButtonStyle(theme: theme))
                     .controlSize(.small)
@@ -188,7 +213,8 @@ struct NoDeviceView: View {
                 isBusy: session.isBooting,
                 action: { Task { await acaoIOS() } },
                 actionTitle: tituloAcaoIOS,
-                actionEnabled: acaoIOSHabilitada
+                actionEnabled: acaoIOSHabilitada,
+                recommended: recomendado == .ios
             )
 
             // Escolher qual, quando há mais de um. Com um só, o botão do
@@ -220,7 +246,8 @@ struct NoDeviceView: View {
                 isBusy: session.isBooting,
                 action: { Task { await session.bootEmulator() } },
                 actionTitle: "Abrir Emulador",
-                actionEnabled: !session.avds.isEmpty
+                actionEnabled: !session.avds.isEmpty,
+                recommended: recomendado == .android
             )
 
             if session.avds.count > 1 {
@@ -275,11 +302,83 @@ struct NoDeviceView: View {
         }
     }
 
-    /// Horário real da última varredura. O antigo era a string `14:00:00`.
-    private var textoDoScan: String {
-        guard let lastScan = session.lastScan else { return "procurando dispositivos…" }
+    /// O cartão cujo botão fica em destaque (FLU-3).
+    private var recomendado: Platform? {
+        NoDeviceRecommendation.pick(
+            activePlatform: appState.platform,
+            ios: .init(pendingAction: acaoPendenteIOS, enabled: acaoIOSHabilitada),
+            android: .init(
+                pendingAction: session.diagnostics?.android.checks.compactMap(\.action).first,
+                enabled: !session.avds.isEmpty
+            )
+        )
+    }
+}
+
+/// Qual cartão do estado sem aparelho leva o único botão em destaque.
+///
+/// O motor marca, em cada checagem, a ação que resolve (`action`). A
+/// interface só escolhe a ênfase: a plataforma em uso vence, depois a outra.
+/// Sem ação pendente que possa ser executada, nenhum botão fica em destaque.
+enum NoDeviceRecommendation {
+    struct Card: Equatable {
+        var pendingAction: String?
+        var enabled: Bool
+        var actionable: Bool { pendingAction != nil && enabled }
+    }
+
+    static func pick(activePlatform: Platform, ios: Card, android: Card) -> Platform? {
+        let ordem: [(Platform, Card)] = activePlatform == .ios
+            ? [(.ios, ios), (.android, android)]
+            : [(.android, android), (.ios, ios)]
+        return ordem.first { $0.1.actionable }?.0
+    }
+}
+
+/// Textos do estado sem aparelho.
+enum NoDeviceCopy {
+    /// "Última verificação às 10:54". O antigo usava o anglicismo "scan" e os segundos.
+    static func ultimaVerificacao(_ data: Date?, calendar: Calendar = .current) -> String {
+        guard let data else { return "Procurando aparelhos…" }
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return "último scan \(formatter.string(from: lastScan))"
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "HH:mm"
+        return "Última verificação às \(formatter.string(from: data))"
+    }
+}
+
+/// Detalhe do diagnóstico em linguagem natural.
+///
+/// O texto vem do motor (`services/diagnostics.py`) com abreviações como
+/// "3 AVD(s)" e "1 conectado(s)". Aqui só a forma muda, nunca o fato. O
+/// conserto definitivo é no motor, e esta tradução vira no-op quando ele
+/// mudar o texto.
+enum DiagnosticCopy {
+    static func natural(_ detalhe: String) -> String {
+        var texto = detalhe
+        texto = trocar(texto, #"(\d+) AVD\(s\) parados"#) { n in
+            n == 1 ? "1 emulador Android (AVD) parado" : "\(n) emuladores Android (AVD) parados"
+        }
+        texto = trocar(texto, #"(\d+) AVD\(s\)"#) { n in
+            n == 1 ? "1 emulador Android (AVD)" : "\(n) emuladores Android (AVD)"
+        }
+        texto = trocar(texto, #"(\d+) conectado\(s\)"#) { n in
+            n == 1 ? "1 conectado" : "\(n) conectados"
+        }
+        return texto.replacingOccurrences(of: "Nenhum AVD criado", with: "Nenhum emulador Android (AVD) criado")
+    }
+
+    private static func trocar(_ texto: String, _ padrao: String, _ forma: (Int) -> String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: padrao) else { return texto }
+        var resultado = texto
+        let faixa = NSRange(resultado.startIndex..., in: resultado)
+        for casamento in regex.matches(in: resultado, range: faixa).reversed() {
+            guard let total = Range(casamento.range, in: resultado),
+                  let numero = Range(casamento.range(at: 1), in: resultado),
+                  let n = Int(resultado[numero]) else { continue }
+            resultado.replaceSubrange(total, with: forma(n))
+        }
+        return resultado
     }
 }
