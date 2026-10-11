@@ -5,6 +5,12 @@ Rode sempre que o formato de uma resposta do motor mudar:
 
     make fixtures
 
+Para so conferir, sem escrever (o `make check` faz isto, alvo
+`fixtures-check`): gera em memoria, compara com o arquivo e sai com erro se
+houver diferenca.
+
+    python tools/generate_fixtures.py --check
+
 As fixtures nao sao escritas a mao: saem do proprio motor, com os mesmos
 serializadores que rodam em producao. E o que torna o contrato entre Python e
 Swift verificavel dos dois lados.
@@ -12,6 +18,7 @@ Swift verificavel dos dois lados.
 
 from __future__ import annotations
 
+import argparse
 import base64
 import contextlib
 import io
@@ -37,6 +44,8 @@ from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
 from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
 from mobaile.services.report import ReportService  # noqa: E402
+
+FIXTURE_PATH = REPO_ROOT / "apps/MoBaile/Tests/MoBaileTests/Fixtures/engine_payloads.json"
 
 HIERARCHY_XML = (
     '<hierarchy rotation="0">'
@@ -283,12 +292,48 @@ def build() -> dict:
     return fixtures
 
 
-def main() -> None:
-    destination = REPO_ROOT / "apps/MoBaile/Tests/MoBaileTests/Fixtures/engine_payloads.json"
+def _render(fixtures: dict) -> str:
+    return json.dumps(fixtures, ensure_ascii=False, indent=2) + "\n"
+
+
+def _nome(caminho: pathlib.Path) -> str:
+    try:
+        return str(caminho.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(caminho)
+
+
+def check(destination: pathlib.Path) -> int:
+    """0 se o arquivo e igual ao que o motor gera agora; 1 se nao."""
+    gerado = build()
+    try:
+        atual = json.loads(destination.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"fixtures ausentes ou ilegiveis em {_nome(destination)}: {exc}", file=sys.stderr)
+        print("Rode 'make fixtures' e faca o commit.", file=sys.stderr)
+        return 1
+    if _render(atual) == _render(gerado):
+        print(f"fixtures em dia: {_nome(destination)}")
+        return 0
+    mudaram = sorted(k for k in atual.keys() | gerado.keys() if atual.get(k) != gerado.get(k))
+    print(f"As fixtures do contrato estao desatualizadas em {_nome(destination)}.", file=sys.stderr)
+    print(f"Chaves diferentes: {', '.join(mudaram)}", file=sys.stderr)
+    print("Rode 'make fixtures' e faca o commit.", file=sys.stderr)
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true", help="so confere; nao escreve")
+    args = parser.parse_args(argv)
+    destination = FIXTURE_PATH
+    if args.check:
+        return check(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(build(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"fixtures gravadas em {destination.relative_to(REPO_ROOT)}")
+    destination.write_text(_render(build()), encoding="utf-8")
+    print(f"fixtures gravadas em {_nome(destination)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
