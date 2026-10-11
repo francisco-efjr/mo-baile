@@ -1,0 +1,183 @@
+name: Release
+
+# Publica o app nativo como zip num GitHub Release. Processo completo, secrets
+# e assinatura: docs/RELEASE.md.
+#
+# - push de tag vX.Y.Z: testa, empacota e publica o Release da tag;
+# - workflow_dispatch: testa e empacota a partir da ref escolhida e guarda o zip
+#   como artefato do workflow. Só publica Release se "publicar" for marcado e a
+#   tag vX.Y.Z (X.Y.Z = VERSION da ref) já existir.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Criar o GitHub Release (exige a tag vX.Y.Z já enviada)"
+        type: boolean
+        default: false
+
+# Nada no topo; cada job pede só o que usa.
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Empacotar e publicar (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write   # gh release create
+    env:
+      APP_NAME: "Mo baile (nativo)"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Versão
+        id: versao
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          versao="$(tr -d '[:space:]' < VERSION)"
+          python tools/version.py check
+          if [ "$REF_TYPE" = "tag" ] && [ "$REF_NAME" != "v$versao" ]; then
+            echo "::error::A tag $REF_NAME não bate com VERSION ($versao)."
+            exit 1
+          fi
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+
+      - name: Instalar o motor
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "engine[dev]"
+
+      - name: Testes do motor e fluxos de QA
+        run: |
+          (cd engine && python -m pytest -q)
+          python -m pytest qa/tests -q
+          python qa/run_all.py
+
+      # ---------------------------------------------------------------------
+      # Assinatura Developer ID (desligada). Hoje o app sai com assinatura
+      # ad-hoc. Para ligar, crie os secrets listados em docs/RELEASE.md,
+      # descomente este passo e o env SIGN_IDENTITY do passo "Empacotar".
+      # Sintaxe a conferir no runner com `security help` e `codesign --help`.
+      # ---------------------------------------------------------------------
+      # - name: Importar certificado Developer ID
+      #   env:
+      #     MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+      #     MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      #     MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+      #   run: |
+      #     keychain="$RUNNER_TEMP/assinatura.keychain-db"
+      #     cert="$RUNNER_TEMP/cert.p12"
+      #     printf '%s' "$MACOS_CERT_P12_BASE64" | base64 --decode > "$cert"
+      #     security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$keychain"
+      #     security set-keychain-settings -lut 21600 "$keychain"
+      #     security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$keychain"
+      #     security import "$cert" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+      #     security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$keychain"
+      #     security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+      #     rm -f "$cert"
+
+      # Roda `swift test` antes, monta em staging, assina e confere.
+      # DEST_DIR fora de /Applications: nada é instalado no runner.
+      - name: Empacotar
+        env:
+          DEST_DIR: ${{ runner.temp }}/dist
+          # SIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: bash tools/package_macos_app.sh
+
+      - name: Zip e SHA-256
+        id: zip
+        env:
+          DEST_DIR: ${{ runner.temp }}/dist
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          mkdir -p saida
+          zip="saida/MoBaile-${VERSAO}-macOS.zip"
+          ditto -c -k --keepParent "$DEST_DIR/$APP_NAME.app" "$zip"
+          (cd saida && shasum -a 256 "$(basename "$zip")" > "$(basename "$zip").sha256")
+          cat saida/*.sha256
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------------
+      # Notarização (desligada). Depende da assinatura Developer ID acima.
+      # Usa chave da App Store Connect API. Sintaxe a conferir com
+      # `xcrun notarytool --help` e `xcrun stapler --help`.
+      # ---------------------------------------------------------------------
+      # - name: Notarizar e grampear
+      #   env:
+      #     DEST_DIR: ${{ runner.temp }}/dist
+      #     ZIP: ${{ steps.zip.outputs.zip }}
+      #     APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      #     APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      #     APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      #   run: |
+      #     chave="$RUNNER_TEMP/AuthKey.p8"
+      #     printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$chave"
+      #     xcrun notarytool submit "$ZIP" --key "$chave" --key-id "$APPLE_API_KEY_ID" \
+      #       --issuer "$APPLE_API_ISSUER_ID" --wait
+      #     rm -f "$chave"
+      #     xcrun stapler staple "$DEST_DIR/$APP_NAME.app"
+      #     # Refaz o zip com o ticket grampeado e o SHA-256.
+      #     rm -f "$ZIP" "$ZIP.sha256"
+      #     ditto -c -k --keepParent "$DEST_DIR/$APP_NAME.app" "$ZIP"
+      #     (cd "$(dirname "$ZIP")" && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
+      #     spctl -a -vv "$DEST_DIR/$APP_NAME.app"
+
+      - name: Guardar o zip como artefato do workflow
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MoBaile-${{ steps.versao.outputs.versao }}-macOS
+          path: saida/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Notas da versão (seção do CHANGELOG)
+        env:
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          awk -v v="$VERSAO" '
+            $0 ~ "^## \\[" v "\\]" { dentro = 1; next }
+            dentro && /^## \[/ { exit }
+            dentro { print }
+          ' CHANGELOG.md > saida/notas.md
+          # Links relativos do CHANGELOG apontam para o arquivo na tag.
+          sed -i '' -E "s#\]\((docs/|[A-Z_]+\.md)#](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSAO}/\1#g" saida/notas.md
+          if ! grep -q '[^[:space:]]' saida/notas.md; then
+            echo "::error::CHANGELOG.md não tem a seção [$VERSAO]."
+            exit 1
+          fi
+          cat >> saida/notas.md <<'EOF'
+
+          ---
+
+          **Instalação:** baixe o zip, descompacte e mova o app para Aplicativos.
+          Esta versão tem assinatura ad-hoc e **não é notarizada**: na primeira
+          abertura use clique direito > Abrir. Detalhes, riscos e a conferência do
+          SHA-256 no [README](https://github.com/francisco-efjr/mo-baile#instalação).
+          EOF
+
+      - name: Criar GitHub Release
+        if: github.ref_type == 'tag' || inputs.publicar
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSAO: ${{ steps.versao.outputs.versao }}
+          ZIP: ${{ steps.zip.outputs.zip }}
+        run: |
+          gh release create "v$VERSAO" "$ZIP" "$ZIP.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Mo baile $VERSAO" \
+            --notes-file saida/notas.md
