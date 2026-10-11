@@ -203,6 +203,27 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(StatusBar.Servico.visiveis(.android), [.adb, .proxy, .fa])
     }
 
+    /// UX-4: siglas da barra explicadas por extenso e métricas legíveis.
+    func testBarraDeStatusExplicaAsSiglas() {
+        let portas = StatusBar.Portas(wda: 8100, proxy: 8082)
+        XCTAssertEqual(StatusBar.Servico.wda.rotulo(portas), "WDA 8100")
+        XCTAssertEqual(StatusBar.Servico.wda.nome(portas), "WebDriverAgent, porta 8100")
+        XCTAssertEqual(StatusBar.Servico.fa.rotulo(portas), "Analytics", "nada de \"FA listener\"")
+        XCTAssertEqual(StatusBar.Servico.proxy.rotulo(StatusBar.Portas()), "Proxy", "sem motor, sem porta inventada")
+        for servico in StatusBar.Servico.allCases {
+            let nome = servico.nome(portas)
+            XCTAssertNotEqual(nome, servico.rotulo(portas), "\(servico): o nome por extenso tem de ir além da sigla")
+            XCTAssertGreaterThan(servico.explicacao.count, 30, "\(servico): explicação curta demais")
+            XCTAssertTrue(servico.explicacao.hasSuffix("."))
+        }
+
+        let m = StatusBar.Metricas(x: 196, y: 725, fps: 24, estavelMs: 180, latenciaMs: 42)
+        XCTAssertFalse(m.completa.contains("settle"))
+        XCTAssertTrue(m.porExtenso.contains("quadros por segundo"))
+        XCTAssertTrue(m.porExtenso.contains("parar de mudar"))
+        XCTAssertGreaterThanOrEqual(StatusBar.metricsFontSize, 11)
+    }
+
     func testHARExporterGeneratesValidJSON() throws {
         let event = NetworkEvent(
             id: 1,
