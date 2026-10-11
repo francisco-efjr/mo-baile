@@ -11,9 +11,9 @@
 #      engine.hello com a versao certa.
 #
 # O Python e escolhido com a mesma regra do EngineLocator.swift quando o app
-# roda fora do repositorio: na ordem MOBAILE_PYTHON, /opt/homebrew/bin/python3,
-# /usr/local/bin/python3, /usr/bin/python3, vale o primeiro com Python >= 3.10
-# e as dependencias do motor importaveis. Se o EngineLocator mudar, mude aqui
+# roda fora do repositorio: MOBAILE_PYTHON executavel vale sem sonda; senao, na
+# ordem /opt/homebrew/bin/python3, /usr/local/bin/python3, /usr/bin/python3,
+# vale o primeiro com Python >= 3.10 e as dependencias do motor importaveis. Se o EngineLocator mudar, mude aqui
 # junto.
 #
 # `--so-python` so escolhe e imprime o Python, sem olhar o app (usado pelos
@@ -49,8 +49,13 @@ except Exception:
 # instalar, e devolve 1.
 escolher_python() {
     local motivos="" candidato rc versao sem_deps=""
+    # Igual ao EngineLocator.swift: quem aponta MOBAILE_PYTHON escolheu de
+    # proposito, e ele vale sem sonda se for executavel.
+    if [ -n "${MOBAILE_PYTHON:-}" ] && [ -x "$MOBAILE_PYTHON" ]; then
+        echo "$MOBAILE_PYTHON"; return 0
+    fi
     # shellcheck disable=SC2086 # a lista e separada por espaco de proposito
-    for candidato in "${MOBAILE_PYTHON:-}" $CANDIDATOS_PYTHON; do
+    for candidato in $CANDIDATOS_PYTHON; do
         [ -n "$candidato" ] || continue
         if [ ! -x "$candidato" ]; then
             motivos+="  - $candidato: nao existe"$'\n'

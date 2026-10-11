@@ -1,7 +1,7 @@
 """PY-1: tools/verify_native_app.sh escolhe o Python com a regra do app.
 
-A regra: o primeiro candidato (MOBAILE_PYTHON, depois os caminhos fixos do
-EngineLocator) com Python >= 3.10 e as dependencias do motor importaveis.
+A regra: MOBAILE_PYTHON executavel vale sem sonda, como no app; senao, o
+primeiro dos caminhos fixos do EngineLocator com Python >= 3.10 e as dependencias do motor importaveis.
 `/usr/bin/python3` do macOS e 3.9 sem Pillow: antes ele era aceito so por
 existir, e o handshake falhava sem dizer o porque.
 
@@ -60,9 +60,18 @@ class TestEscolhaDoPython(unittest.TestCase):
         r = self.escolher([self.falso("outro", 0)], override=bom)
         self.assertEqual(r.stdout.strip(), bom, r.stderr)
 
-    def test_override_que_nao_serve_cai_para_a_lista(self):
+    def test_override_executavel_vale_sem_sonda_como_no_app(self):
+        # EngineLocator.swift usa MOBAILE_PYTHON sem testar; o verify nao pode
+        # aprovar um Python diferente do que o app vai subir.
         bom = self.bom()
-        r = self.escolher([bom], override=self.falso("override_velho", 3))
+        velho = self.falso("override_velho", 3)
+        r = self.escolher([bom], override=velho)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), velho)
+
+    def test_override_inexistente_cai_para_a_lista(self):
+        bom = self.bom()
+        r = self.escolher([bom], override=str(self.pasta / "nao_existe"))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.strip(), bom)
 
