@@ -5,6 +5,57 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.5.0] - 2026-10-11
+
+### Adicionado
+
+- 
+
+## [3.5.0] - 2026-10-11
+
+Fluidez, correções da auditoria orquestrada de 11/10 e preparação para open
+source. Detalhes da paleta em [docs/design/FLUIDEZ_3.5.md](docs/design/FLUIDEZ_3.5.md).
+
+### Adicionado
+
+- **Paleta de comandos (⇧⌘P):** qualquer ação do app pelo teclado, com busca
+  aproximada sem acento, sinônimos, atalho visível, recentes no topo e motivo
+  quando a ação não está disponível. Menus e paleta leem o mesmo registro.
+- **Faixa "Motor parado"** com o botão Reiniciar Motor e anúncio ao VoiceOver.
+- **Próximo passo** em destaque no estado sem aparelho.
+- Licença MIT, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, templates de issue e
+  PR, Dependabot e workflow de release que publica o app zipado com SHA-256
+  ([docs/RELEASE.md](docs/RELEASE.md)).
+
+### Mudado
+
+- O app escolhe o primeiro Python 3.10+ com as dependências do motor e, sem
+  nenhum, diz o que instalar. O `verify-native` segue a mesma regra.
+- Empacotamento em staging com troca atômica, recusa com o app aberto e grava
+  o commit no Info.plist; o `verify-native` confere commit e assinatura.
+- `make check` falha com fixtures do contrato desatualizadas.
+- Contraste do texto terciário ≥ 4,5:1 em todos os temas; barra de status com
+  nomes por extenso e 11 pt; textos do diagnóstico com acento e plural.
+- Chave padrão do Page Object passa a `minha_tela_objs`.
+- App Tk congelado ([ADR 0005](docs/adr/0005-app-tk-congelado.md)); docs
+  históricos em `docs/historico/`.
+
+### Corrigido
+
+- Código gerado: valor vindo da tela entra só como string (antes, um texto com
+  aspas podia virar código no Page Object).
+- `analytics.stop` desliga o debug do Firebase no aparelho; fila de eventos
+  com limite.
+- Proxy desfeito no aparelho em que foi ligado, inclusive ao trocar de aparelho.
+- `codegen.save` só grava dentro da pasta de trabalho.
+- Log bruto do iPhone com URL redigida e arquivos só com o dono.
+- Cursor da divisória não fica preso; buscar na hierarquia não age com o
+  inspector fora da janela.
+
+### Removido
+
+- `web_app.py`, que executava `main.py` recebido por upload sem autenticação.
+
 ## [3.4.0] - 2026-10-09
 
 P1 de interface da [revisão de produto](docs/MELHORIAS_2026-10-09.md): D3 e D4.

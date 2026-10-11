@@ -34,7 +34,7 @@ make update-native    # = make build-native + make verify-native
 Cuidados:
 
 1. **Feche o app antes.** O empacotamento apaga e recria o bundle, e o app aberto
-   perde o motor que estava usando. Se `pgrep -f "Mo baile (nativo)"` encontrar o
+   perde o motor que estava usando. Se `pgrep -f 'Mo baile \(nativo\)\.app/Contents/MacOS/'` encontrar o
    app rodando, peça ao dono para fechá-lo. Não encerre o processo por conta própria.
 2. **Nunca substitua o `Mo baile.app`.** Esse é o app Tkinter. Nada de
    `APP_NAME="Mo baile"`, a menos que o dono peça explicitamente.
