@@ -388,6 +388,11 @@ final class EngineSession {
                 lastError = mensagem
                 state.statusMessage = mensagem
                 return
+            } catch EngineError.pythonUnsuitable(let mensagem) {
+                // Nem instala o Python que falta.
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
             } catch {
                 motivo = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 continue
