@@ -176,6 +176,11 @@ class _Lane:
             self._run(request)
 
 
+def _dentro_de(caminho: pathlib.Path, raiz: pathlib.Path) -> bool:
+    """`caminho`, com links simbolicos e `..` resolvidos, fica sob `raiz`?"""
+    return caminho.resolve().is_relative_to(raiz.resolve())
+
+
 class EngineServer:
     """Estado da sessao e tabela de metodos."""
 
@@ -1142,7 +1147,14 @@ class EngineServer:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", chave):
             raise InvalidInputError(f"Chave invalida para nome de arquivo: {chave!r}")
 
-        destino = pathlib.Path(params.get("directory") or (pathlib.Path.home() / "Documents" / "Mo baile"))
+        # So dentro da pasta de trabalho (SEC-5): o RPC nao escreve codigo em
+        # pasta arbitraria, nem seguindo link simbolico para fora dela.
+        raiz = pathlib.Path.home() / "Documents" / "Mo baile"
+        destino = pathlib.Path(str(params.get("directory") or raiz)).expanduser()
+        if not destino.is_absolute():
+            destino = raiz / destino
+        if not _dentro_de(destino, raiz):
+            raise InvalidInputError(f"A pasta precisa ficar dentro de {raiz}.")
         acoes = str(params.get("actions_code") or "")
         locators = str(params.get("locators_code") or "")
         if not acoes.strip() and not locators.strip():
@@ -1151,8 +1163,10 @@ class EngineServer:
         escritos = []
         for subpasta, conteudo in (("pages", acoes), ("locators", locators)):
             pasta = destino / subpasta
-            pasta.mkdir(parents=True, exist_ok=True)
             arquivo = pasta / f"{chave}.py"
+            if not _dentro_de(arquivo, raiz):
+                raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
+            pasta.mkdir(parents=True, exist_ok=True)
             arquivo.write_text(conteudo, encoding="utf-8")
             escritos.append(str(arquivo))
 
