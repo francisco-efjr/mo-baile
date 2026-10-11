@@ -263,7 +263,7 @@ enum PythonProbe {
             return Result(kind: .failed("não executou"), version: nil)
         }
         if terminou.wait(timeout: .now() + timeout) == .timedOut {
-            processo.terminate()
+            encerrar(processo, terminou: terminou)
             return Result(kind: .failed("não respondeu em \(Int(timeout)) s"), version: nil)
         }
         let dados = saida.fileHandleForReading.readDataToEndOfFile()
@@ -271,5 +271,20 @@ enum PythonProbe {
             return Result(kind: .failed("saiu com erro \(processo.terminationStatus)"), version: nil)
         }
         return parse(texto)
+    }
+
+    /// Quanto o processo tem para sair depois do SIGTERM antes do SIGKILL.
+    static let killGrace: TimeInterval = 0.5
+
+    /// SIGTERM, uma espera curta e SIGKILL se ainda estiver vivo (R-05).
+    /// Um interpretador travado que ignora o SIGTERM não fica pendurado no app.
+    private static func encerrar(_ processo: Process, terminou: DispatchSemaphore) {
+        processo.terminate()
+        guard terminou.wait(timeout: .now() + killGrace) == .timedOut else { return }
+        if processo.isRunning {
+            kill(processo.processIdentifier, SIGKILL)
+        }
+        // O SIGKILL não pode ser ignorado; a espera só cobre a colheita.
+        _ = terminou.wait(timeout: .now() + killGrace)
     }
 }

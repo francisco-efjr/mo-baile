@@ -98,6 +98,40 @@ final class EngineLocatorTests: XCTestCase {
         XCTAssertEqual(PythonProbe.run(quebrado).kind, .failed("saiu com erro 3"))
     }
 
+    /// R-05: um interpretador que ignora o SIGTERM leva SIGKILL logo depois do
+    /// prazo, e não fica vivo pendurado no app.
+    func testSondaMataQuemIgnoraOSIGTERM() throws {
+        let pasta = FileManager.default.temporaryDirectory.appendingPathComponent("sonda-kill-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: pasta, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: pasta) }
+        let pidArquivo = pasta.appendingPathComponent("pid")
+        let teimoso = pasta.appendingPathComponent("teimoso")
+        // `exec` troca o sh pelo próprio laço: o PID gravado é o do processo
+        // que a sonda lançou. O laço só dorme em pedaços curtos.
+        try """
+        #!/bin/sh
+        trap '' TERM
+        echo $$ > "\(pidArquivo.path)"
+        while :; do sleep 0.05; done
+        """.write(to: teimoso, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: teimoso.path)
+
+        // Prazo folgado: a primeira execução de um arquivo novo passa pela
+        // checagem do sistema, e o SIGTERM não pode chegar antes do `trap`.
+        let inicio = Date()
+        let resultado = PythonProbe.run(teimoso.path, timeout: 1.5)
+        XCTAssertFalse(resultado.isUsable)
+        XCTAssertLessThan(Date().timeIntervalSince(inicio), 4, "a escalada demorou demais")
+
+        let texto = try String(contentsOf: pidArquivo, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try XCTUnwrap(pid_t(texto))
+        // O processo já foi colhido quando `run` volta; a margem cobre a
+        // entrega do sinal em máquina carregada.
+        let limite = Date().addingTimeInterval(1)
+        while kill(pid, 0) == 0, Date() < limite { usleep(20_000) }
+        XCTAssertNotEqual(kill(pid, 0), 0, "o processo que ignorou o SIGTERM continua vivo")
+    }
+
     /// R-02: falha não fica em cache. Quem instala o Pillow e usa Reiniciar
     /// Motor precisa que a sonda rode de novo, e uma partida a frio lenta não
     /// pode marcar o Python como inútil até o app ser reaberto.
