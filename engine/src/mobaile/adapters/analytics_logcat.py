@@ -172,6 +172,10 @@ class FirebaseAnalyticsListener:
         self._callbacks: list[Callable[[AnalyticsEvent], None]] = []
         # (fingerprint, estagios ja vistos, instante) dos ultimos eventos iOS.
         self._ios_recent: deque[tuple[tuple, set[str], float]] = deque(maxlen=64)
+        # Aparelho em que o DebugView do Firebase foi ligado, para o `stop`
+        # desligar no mesmo aparelho. Lista de um item: `None` e serial valido
+        # (adb sem `-s`), entao "nada ligado" e a lista vazia.
+        self._firebase_debug_on: list[str | None] = []
 
     def add_event_callback(self, cb: Callable[[AnalyticsEvent], None]) -> None:
         self._callbacks.append(cb)
@@ -200,6 +204,10 @@ class FirebaseAnalyticsListener:
                 pkg = self.adb.get_current_package(device_id)
 
             if pkg:
+                if self._firebase_debug_on != [device_id]:
+                    # Ligado antes em outro aparelho: desliga la primeiro.
+                    self._disable_firebase_debug()
+                self._firebase_debug_on = [device_id]
                 subprocess.run(
                     [*cmd_base, "shell", "setprop", "debug.firebase.analytics.app", pkg],
                     timeout=5, check=False,
@@ -209,6 +217,28 @@ class FirebaseAnalyticsListener:
         except (InvalidInputError, OSError, subprocess.TimeoutExpired) as exc:
             logger.warning("Nao foi possivel habilitar o modo VERBOSE do FA: %s", exc)
             return False
+
+    def _disable_firebase_debug(self) -> None:
+        """Desfaz o `debug.firebase.analytics.app` onde ele foi ligado (COD-2).
+
+        Sem isto o app segue mandando eventos de debug para o DebugView ate o
+        aparelho reiniciar. `.none.` e o valor que a documentacao do Firebase
+        manda usar para desligar. Idempotente: so roda uma vez por ligacao.
+        """
+        if not self._firebase_debug_on:
+            return
+        device_id = self._firebase_debug_on.pop()
+        try:
+            cmd_base = [self.adb.adb_path]
+            if device_id:
+                cmd_base += ["-s", validate_device_id(device_id)]
+            subprocess.run(
+                [*cmd_base, "shell", "setprop", "debug.firebase.analytics.app", ".none."],
+                timeout=5, check=False,
+            )
+            logger.info("Firebase Analytics debug mode desligado em %s", device_id or "aparelho padrao")
+        except (InvalidInputError, OSError, subprocess.TimeoutExpired) as exc:
+            logger.warning("Nao foi possivel desligar o debug mode do Firebase: %s", exc)
 
     def clear_device_logcat(self, device_id: str | None = None) -> bool:
         """Limpa o buffer do logcat no dispositivo Android."""
@@ -333,6 +363,7 @@ class FirebaseAnalyticsListener:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
             self._thread = None
+        self._disable_firebase_debug()
 
     def is_running(self) -> bool:
         return self._is_running

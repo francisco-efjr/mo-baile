@@ -274,5 +274,64 @@ class TestAnalyticsListener(unittest.TestCase):
             self.assertTrue(any("log.tag.FirebaseAnalytics VERBOSE" in cmd for cmd in executed_cmds))
 
 
+LIMPEZA_FIREBASE = ["shell", "setprop", "debug.firebase.analytics.app", ".none."]
+
+
+class TestAnalyticsDesfazDebugDoFirebase(unittest.TestCase):
+    """COD-2: o `stop` desfaz o `debug.firebase.analytics.app` no aparelho em que foi ligado."""
+
+    LIMPEZA = LIMPEZA_FIREBASE
+
+    def setUp(self):
+        self.listener = FirebaseAnalyticsListener()
+        self.listener.adb.adb_path = "/falso/adb"
+
+    def _limpezas(self, mock_run) -> list[list[str]]:
+        return [c[0][0] for c in mock_run.call_args_list if c[0][0][-4:] == self.LIMPEZA]
+
+    def test_stop_desfaz_no_aparelho_em_que_ligou(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.stop()
+        self.assertEqual(self._limpezas(mock_run), [["/falso/adb", "-s", "emulator-5554", *self.LIMPEZA]])
+
+    def test_segundo_stop_nao_repete(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.stop()
+            self.listener.stop()
+        self.assertEqual(len(self._limpezas(mock_run)), 1)
+
+    def test_ligar_em_outro_aparelho_desliga_no_anterior(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.setup_props("R58M123", package_name="com.exemplo.app")
+            self.listener.stop()
+        self.assertEqual(
+            self._limpezas(mock_run),
+            [["/falso/adb", "-s", "emulator-5554", *self.LIMPEZA], ["/falso/adb", "-s", "R58M123", *self.LIMPEZA]],
+        )
+
+    def test_sem_app_em_debug_nao_mexe_no_aparelho(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.adb.get_current_package = lambda _dev: None
+            self.listener.setup_props("emulator-5554")
+            self.listener.stop()
+        self.assertEqual(self._limpezas(mock_run), [])
+
+    def test_falha_do_adb_na_limpeza_nao_quebra_o_stop(self):
+        import subprocess
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            mock_run.side_effect = subprocess.TimeoutExpired("adb", 5)
+            self.listener.stop()
+        self.assertFalse(self.listener.is_running())
+
+
 if __name__ == "__main__":
     unittest.main()
