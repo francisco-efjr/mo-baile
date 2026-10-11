@@ -154,6 +154,21 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(state.inspectorShown, "quem fechou à mão continua com ele fechado")
     }
 
+    /// COD-3: a divisória some com o ponteiro em cima e devolve o cursor; sair
+    /// duas vezes não tira da pilha o cursor de outra view.
+    func testCursorDaDivisoriaFicaEmPar() {
+        var pilha = 0
+        let cursor = PaneDividerCursor(push: { pilha += 1 }, pop: { pilha -= 1 })
+        cursor.enter()
+        cursor.enter()
+        XCTAssertEqual(pilha, 1, "hover repetido não empilha de novo")
+        cursor.leave() // onDisappear
+        cursor.leave() // onHover(false) atrasado
+        XCTAssertEqual(pilha, 0)
+        cursor.leave()
+        XCTAssertEqual(pilha, 0, "sumir sem ter entrado não faz pop")
+    }
+
     /// D4: a barra de status só mostra os serviços da plataforma ativa.
     func testBarraDeStatusMostraSoOsServicosDaPlataforma() {
         XCTAssertEqual(StatusBar.Servico.visiveis(.ios), [.wda, .proxy, .fa])

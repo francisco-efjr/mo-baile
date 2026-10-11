@@ -240,6 +240,8 @@ private struct PaneDivider: View {
     let mudou: (Double) -> Void
 
     @State private var inicio: CGFloat?
+    /// O push do cursor que esta divisória deve ao NSCursor (COD-3).
+    @State private var cursor = PaneDividerCursor()
 
     var body: some View {
         Rectangle()
@@ -249,8 +251,12 @@ private struct PaneDivider: View {
             .contentShape(Rectangle())
             .padding(.horizontal, -3)
             .onHover { dentro in
-                if dentro { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                if dentro { cursor.enter() } else { cursor.leave() }
             }
+            // Esconder o workspace (⌥2, modo Zen) com o ponteiro em cima tira
+            // a divisória da janela sem `onHover(false)`, e o cursor de
+            // redimensionar ficava preso até outro push/pop casar.
+            .onDisappear { cursor.leave() }
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { arraste in
@@ -261,6 +267,34 @@ private struct PaneDivider: View {
                     .onEnded { _ in inicio = nil }
             )
             .accessibilityHidden(true)
+    }
+}
+
+/// Push e pop do cursor de redimensionar, sempre em par.
+///
+/// Só faz pop do que empurrou: sair duas vezes, ou sumir depois de já ter
+/// saído, não tira da pilha o cursor de outra view.
+final class PaneDividerCursor {
+    private(set) var pushed = false
+    private let push: () -> Void
+    private let pop: () -> Void
+
+    init(push: @escaping () -> Void = { NSCursor.resizeLeftRight.push() },
+         pop: @escaping () -> Void = { NSCursor.pop() }) {
+        self.push = push
+        self.pop = pop
+    }
+
+    func enter() {
+        guard !pushed else { return }
+        push()
+        pushed = true
+    }
+
+    func leave() {
+        guard pushed else { return }
+        pop()
+        pushed = false
     }
 }
 
