@@ -73,6 +73,7 @@ Sem parâmetros. Lê `AppState.commandPalettePresented`.
 | --- | --- | --- | --- |
 | `command` | `AppCommand` | - | A ação, já com a disponibilidade do contexto. `disabledReason` não nulo esmaece a linha e mostra o motivo. |
 | `selected` | `Bool` | - | Linha sob o cursor do teclado ou do mouse. Disponível e selecionada: fundo no destaque. Indisponível e selecionada: fundo neutro. |
+| `action` | `(() -> Void)?` | `nil` | O que o clique e o VO-Espaço (AXPress) fazem. Na paleta, executa a ação ou mostra o motivo de indisponível. `nil` em preview. |
 | `disabledOpacity` (estático) | `Double` | `0.42` | Transparência do símbolo, título e atalho de ação indisponível (D6). |
 | `spokenLabel(_:)` (estático) | `(AppCommand) -> String` | - | Rótulo do VoiceOver: título, atalho por extenso e motivo. Coberto por `CommandPaletteTests`. |
 
@@ -112,7 +113,7 @@ Faltar um ambiente obrigatório derruba a view na hora (comportamento do `@Envir
 
 ## Accessibility
 
-- Papel: o painel é um grupo modal (`.isModal`) com rótulo "Paleta de comandos". Como o traço sozinho não prende o VoiceOver no SwiftUI hospedado pelo AppKit, a barra lateral, a coluna central e o inspector saem da árvore de acessibilidade enquanto a paleta está aberta (`HiddenBehindCommandPalette`). A toolbar é do AppKit e continua visível ao VoiceOver. Cada linha é apresentada como botão, com `.isSelected` na escolhida. Os títulos de seção são cabeçalhos.
+- Papel: o painel é um grupo modal (`.isModal`) com rótulo "Paleta de comandos". Como o traço sozinho não prende o VoiceOver no SwiftUI hospedado pelo AppKit, a barra lateral, a coluna central e o inspector saem da árvore de acessibilidade enquanto a paleta está aberta (`HiddenBehindCommandPalette`). A toolbar é do AppKit e continua visível ao VoiceOver. Cada linha é apresentada como botão, com `.isSelected` na escolhida, e tem `.accessibilityAction`: VO-Espaço executa, como o clique (o `onTapGesture` sozinho não gera AXPress; `CommandPaletteModalTests` confere). Os títulos de seção são cabeçalhos.
 - Teclado: ⇧⌘P abre. ↑ e ↓ movem a seleção (com volta ao início), Enter (Return ou Enter do teclado numérico) executa, Esc fecha. Um monitor local de teclado pega essas teclas antes do campo, e só quando são da paleta (`CommandPaletteKeyboard`): paleta aberta, tecla na janela onde ela abriu, sem sheet nem janela modal por cima e sem ⌘, ⌥ ou ⌃. Assim ⌘↑ e ⌥Return continuam com o campo, e as teclas de Ajustes ou de um painel de arquivo não mexem na paleta.
 - Janela: se a janela da paleta perde o foco (Ajustes, painel de arquivo, outro app), a paleta fecha. O monitor sai no próprio fechar, antes da transição, para um Return rápido não executar de novo.
 - Foco: ao abrir, o foco vai para o campo de busca. A seleção começa na primeira ação disponível. O foco de teclado nunca sai do campo: Tab, ⇧Tab e ⌃Tab são consumidos e devolvem o foco ao campo; as linhas não são paradas de Tab. Ao fechar sem executar (Esc, clique fora, janela sem foco), o foco volta para onde estava; um campo em edição volta como o próprio campo. Ao executar uma ação, o foco fica com o que a ação abrir.

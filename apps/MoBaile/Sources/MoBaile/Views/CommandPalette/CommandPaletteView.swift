@@ -171,9 +171,8 @@ struct CommandPaletteView: View {
                             .padding(.bottom, DesignMetrics.Spacing.s2)
                             .accessibilityAddTraits(.isHeader)
                         ForEach(secao.commands) { comando in
-                            CommandPaletteRow(command: comando, selected: comando.id == selection)
+                            CommandPaletteRow(command: comando, selected: comando.id == selection) { executar(comando) }
                                 .id(comando.id)
-                                .onTapGesture { executar(comando) }
                                 .onHover { dentro in if dentro { selection = comando.id } }
                         }
                     }
@@ -299,20 +298,25 @@ struct CommandPaletteView: View {
 ///
 /// Não é botão de verdade: o foco de teclado fica no campo da paleta, e a
 /// linha é escolhida por ↑ e ↓ ou pelo mouse. Para o VoiceOver, ela se
-/// apresenta como botão com o rótulo de `spokenLabel(_:)`.
+/// apresenta como botão com o rótulo de `spokenLabel(_:)`, e VO-Espaço
+/// chama `action`, como o clique.
 struct CommandPaletteRow: View {
     @Environment(ThemeManager.self) private var themeManager
     /// A ação desenhada. `disabledReason` não nulo esmaece a linha e mostra o motivo.
     let command: AppCommand
     /// Linha sob o cursor do teclado ou do mouse.
     let selected: Bool
+    /// Clique na linha.
+    let action: (() -> Void)?
 
     /// - Parameters:
     ///   - command: a ação, já com a disponibilidade do contexto.
     ///   - selected: se é a linha escolhida.
-    init(command: AppCommand, selected: Bool) {
+    ///   - action: o que o clique faz. `nil` em preview.
+    init(command: AppCommand, selected: Bool, action: (() -> Void)? = nil) {
         self.command = command
         self.selected = selected
+        self.action = action
     }
 
     /// Transparência do ícone, do título e do atalho de ação indisponível (D6).
@@ -369,9 +373,14 @@ struct CommandPaletteRow: View {
         )
         .padding(.horizontal, DesignMetrics.Spacing.s3)
         .contentShape(Rectangle())
+        .onTapGesture { action?() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.spokenLabel(command))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        // O `onTapGesture` não vira AXPress: sem isto, VO-Espaço na linha não
+        // fazia nada (A11Y-02). Ação indisponível também responde, e mostra o
+        // motivo, como o Enter.
+        .accessibilityAction { action?() }
     }
 }
 

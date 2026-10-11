@@ -144,4 +144,50 @@ final class CommandPaletteModalTests: XCTestCase {
         XCTAssertTrue(CommandPaletteFocus.restorable(botao, in: janela) === botao)
         XCTAssertNil(CommandPaletteFocus.restorable(botao, in: nil))
     }
+
+    // MARK: - A11Y-02: VO-Espaço numa linha executa
+
+    /// Procura o elemento de acessibilidade com este rótulo.
+    private func elemento(_ rotulo: String, em objeto: NSObject, nivel: Int = 0) -> NSObject? {
+        let seletorRotulo = Selector(("accessibilityLabel"))
+        if objeto.responds(to: seletorRotulo),
+           (objeto.perform(seletorRotulo)?.takeUnretainedValue() as? String) == rotulo {
+            return objeto
+        }
+        let seletorFilhos = Selector(("accessibilityChildren"))
+        guard nivel < 40, objeto.responds(to: seletorFilhos),
+              let filhos = objeto.perform(seletorFilhos)?.takeUnretainedValue() as? [Any]
+        else { return nil }
+        for case let filho as NSObject in filhos {
+            if let achado = elemento(rotulo, em: filho, nivel: nivel + 1) { return achado }
+        }
+        return nil
+    }
+
+    func testLinhaExecutaPeloVoiceOver() throws {
+        let comando = AppCommand(id: .proxy, title: "Iniciar Proxy", category: .services, symbol: "network")
+        var executou = 0
+        let linha = CommandPaletteRow(command: comando, selected: false) { executou += 1 }
+            .environment(ThemeManager(preview: PraiaLightTheme()))
+        // Monta e confere que a árvore existe; o inspetor pula sem sessão gráfica.
+        _ = try AccessibilityInspector.arvore(de: linha, largura: 560, altura: 60)
+
+        let host = NSHostingView(rootView: linha.frame(width: 560, height: 60))
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 60)
+        let janela = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        janela.isReleasedWhenClosed = false
+        janela.contentView = host
+        defer { janela.close() }
+        janela.orderFront(nil)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        let rotulo = CommandPaletteRow.spokenLabel(comando)
+        let no = try XCTUnwrap(elemento(rotulo, em: host), "linha não encontrada na árvore")
+        // VO-Espaço é o AXPress do elemento (`accessibilityPerformPress`).
+        let pressionou = (no as AnyObject).accessibilityPerformPress?() ?? false
+        XCTAssertTrue(pressionou, "a linha não aceita AXPress")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(executou, 1, "VO-Espaço não executou a ação")
+    }
 }
