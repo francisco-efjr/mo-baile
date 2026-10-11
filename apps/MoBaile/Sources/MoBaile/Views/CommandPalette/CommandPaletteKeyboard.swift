@@ -15,6 +15,8 @@ enum CommandPaletteKeyboard {
         case execute
         /// Fecha a paleta. A tecla é consumida.
         case close
+        /// Tab e ⇧Tab: o foco fica no campo. A tecla é consumida.
+        case keepFocus
         /// Não é da paleta: a tecla segue para quem ia recebê-la.
         case passThrough
     }
@@ -38,6 +40,7 @@ enum CommandPaletteKeyboard {
         static let returnKey: UInt16 = 36
         static let keypadEnter: UInt16 = 76
         static let escape: UInt16 = 53
+        static let tab: UInt16 = 48
     }
 
     /// Modificadores que tiram a tecla da paleta. ⇧, Caps Lock e as marcas
@@ -48,9 +51,15 @@ enum CommandPaletteKeyboard {
         guard situation.paletteOpen,
               situation.eventInPaletteWindow,
               !situation.modalOpen,
-              !situation.sheetAttached,
-              modifiers.intersection(blockingModifiers).isEmpty
+              !situation.sheetAttached
         else { return .passThrough }
+
+        // Tab, ⇧Tab e ⌃Tab (que no AppKit tira o foco de um campo de texto)
+        // não saem da paleta: ela se apresenta como modal (A11Y-01).
+        if keyCode == Key.tab, modifiers.intersection([.command, .option]).isEmpty {
+            return .keepFocus
+        }
+        guard modifiers.intersection(blockingModifiers).isEmpty else { return .passThrough }
 
         switch keyCode {
         case Key.down: return .move(1)

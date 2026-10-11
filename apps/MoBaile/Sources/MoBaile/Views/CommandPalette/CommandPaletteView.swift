@@ -50,6 +50,11 @@ struct CommandPaletteView: View {
     @State private var keyMonitor: Any?
     /// Janela onde a paleta abriu. Tecla de outra janela não é da paleta.
     @State private var janela: NSWindow?
+    /// Quem tinha o foco antes de a paleta abrir (A11Y-01).
+    @State private var focoAnterior: NSResponder?
+    /// Falso quando a paleta fecha para executar uma ação: o foco fica com o
+    /// que a ação abrir (busca, sheet), e não volta para trás.
+    @State private var devolverFoco = true
     @State private var aviso: String?
     @FocusState private var campoFocado: Bool
 
@@ -101,14 +106,21 @@ struct CommandPaletteView: View {
         .shadow(color: theme.floatingShadow, radius: DesignMetrics.Shadow.floatingRadius, y: DesignMetrics.Shadow.floatingY)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Paleta de comandos")
+        // O traço sozinho não prende o VoiceOver no AppKit: o fundo sai da
+        // árvore por `HiddenBehindCommandPalette`, e Tab fica no campo.
         .accessibilityAddTraits(.isModal)
         .onAppear {
+            janela = NSApp.keyWindow
+            // Antes de focar o campo, senão o foco anterior já é o da paleta.
+            focoAnterior = CommandPaletteFocus.restorable(janela?.firstResponder, in: janela)
             campoFocado = true
             selection = flat.first(where: \.isEnabled)?.id ?? flat.first?.id
-            janela = NSApp.keyWindow
             instalarTeclado(em: janela)
         }
-        .onDisappear(perform: removerTeclado)
+        .onDisappear {
+            removerTeclado()
+            devolverFocoAnterior()
+        }
         // A janela perdeu o foco (Ajustes, painel de arquivo, outro app): a
         // paleta fecha, como um popover.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { aviso in
@@ -221,6 +233,9 @@ struct CommandPaletteView: View {
             case .close:
                 fechar()
                 return nil
+            case .keepFocus:
+                campoFocado = true
+                return nil
             case .passThrough:
                 return evento
             }
@@ -230,6 +245,15 @@ struct CommandPaletteView: View {
     private func removerTeclado() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+    }
+
+    /// Esc, clique fora ou janela sem foco: o foco volta para onde estava.
+    private func devolverFocoAnterior() {
+        defer { focoAnterior = nil }
+        guard devolverFoco, let janela,
+              let alvo = CommandPaletteFocus.restorable(focoAnterior, in: janela)
+        else { return }
+        janela.makeFirstResponder(alvo)
     }
 
     private func mover(_ passo: Int) {
@@ -259,6 +283,7 @@ struct CommandPaletteView: View {
             return
         }
         recents.record(comando.id)
+        devolverFoco = false
         fechar()
         let performer = CommandPerformer(
             appState: appState, session: session, themeManager: themeManager,

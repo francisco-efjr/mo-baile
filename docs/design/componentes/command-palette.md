@@ -16,6 +16,7 @@ Partes:
 - `CommandPaletteView`: campo, lista por seção, aviso de indisponível e rodapé de teclas.
 - `CommandPaletteRow`: uma linha (símbolo, título, motivo e atalho).
 - `CommandPaletteKeyboard`: função pura que decide se uma tecla é da paleta e o que fazer com ela (`CommandPaletteKeyboardTests`).
+- `HiddenBehindCommandPalette` e `CommandPaletteFocus` (`CommandPaletteModal.swift`): fundo fora do VoiceOver com a paleta aberta e foco devolvido ao fechar (`CommandPaletteModalTests`).
 
 Previews no arquivo:
 
@@ -81,7 +82,17 @@ Sem parâmetros. Lê `AppState.commandPalettePresented`.
 | --- | --- | --- |
 | `action(keyCode:modifiers:situation:)` | `(UInt16, NSEvent.ModifierFlags, Situation) -> Action` | O que o monitor faz com a tecla. Fora da paleta, devolve `.passThrough` e a tecla segue normalmente. |
 | `Situation` | `struct` | `paletteOpen`, `eventInPaletteWindow`, `modalOpen`, `sheetAttached`, lidos do AppKit no momento da tecla. |
-| `Action` | `enum` | `.move(Int)`, `.execute`, `.close`, `.passThrough`. |
+| `Action` | `enum` | `.move(Int)`, `.execute`, `.close`, `.keepFocus` (Tab, ⇧Tab, ⌃Tab), `.passThrough`. |
+
+### HiddenBehindCommandPalette
+
+`ViewModifier` sem parâmetros. Lê `AppState.commandPalettePresented` e aplica `.accessibilityHidden` ao conteúdo. Em `ContentView`, vai na barra lateral, na coluna central e no inspector.
+
+### CommandPaletteFocus
+
+| Membro | Type | Description |
+| --- | --- | --- |
+| `restorable(_:in:)` | `(NSResponder?, NSWindow?) -> NSResponder?` | O responder a devolver ao fechar. Editor de campo vira o próprio campo; view fora da janela dá `nil`. |
 | `blockingModifiers` | `NSEvent.ModifierFlags` | ⌘, ⌥ e ⌃: com qualquer um, a tecla não é da paleta. |
 
 ### Ambiente
@@ -101,16 +112,16 @@ Faltar um ambiente obrigatório derruba a view na hora (comportamento do `@Envir
 
 ## Accessibility
 
-- Papel: o painel é um grupo modal (`.isModal`) com rótulo "Paleta de comandos". Cada linha é apresentada como botão, com `.isSelected` na escolhida. Os títulos de seção são cabeçalhos.
+- Papel: o painel é um grupo modal (`.isModal`) com rótulo "Paleta de comandos". Como o traço sozinho não prende o VoiceOver no SwiftUI hospedado pelo AppKit, a barra lateral, a coluna central e o inspector saem da árvore de acessibilidade enquanto a paleta está aberta (`HiddenBehindCommandPalette`). A toolbar é do AppKit e continua visível ao VoiceOver. Cada linha é apresentada como botão, com `.isSelected` na escolhida. Os títulos de seção são cabeçalhos.
 - Teclado: ⇧⌘P abre. ↑ e ↓ movem a seleção (com volta ao início), Enter (Return ou Enter do teclado numérico) executa, Esc fecha. Um monitor local de teclado pega essas teclas antes do campo, e só quando são da paleta (`CommandPaletteKeyboard`): paleta aberta, tecla na janela onde ela abriu, sem sheet nem janela modal por cima e sem ⌘, ⌥ ou ⌃. Assim ⌘↑ e ⌥Return continuam com o campo, e as teclas de Ajustes ou de um painel de arquivo não mexem na paleta.
 - Janela: se a janela da paleta perde o foco (Ajustes, painel de arquivo, outro app), a paleta fecha. O monitor sai no próprio fechar, antes da transição, para um Return rápido não executar de novo.
-- Foco: ao abrir, o foco vai para o campo de busca. A seleção começa na primeira ação disponível. O foco de teclado nunca sai do campo; as linhas não são paradas de Tab.
+- Foco: ao abrir, o foco vai para o campo de busca. A seleção começa na primeira ação disponível. O foco de teclado nunca sai do campo: Tab, ⇧Tab e ⌃Tab são consumidos e devolvem o foco ao campo; as linhas não são paradas de Tab. Ao fechar sem executar (Esc, clique fora, janela sem foco), o foco volta para onde estava; um campo em edição volta como o próprio campo. Ao executar uma ação, o foco fica com o que a ação abrir.
 - VoiceOver: ao mover com as setas, um anúncio lê a linha escolhida ("Rodar Automação, atalho Command R. Indisponível: Grave ao menos um passo"). Enter numa ação indisponível não executa: mostra o motivo numa faixa e o anuncia.
 - Indisponível sem sumir: a linha fica a 42% com o motivo em `labelSecondary`, que é legível. Na seleção, ação indisponível não ganha o fundo de destaque, para não parecer que Enter vai executar.
 - Movimento reduzido: a entrada e a saída são só opacidade (`Motion.crossfade`, 180 ms), que já serve a quem pede menos movimento. A rolagem até a linha escolhida não é animada. Não há outra animação.
 - Contraste: texto principal em `labelPrimary`, motivo em `labelSecondary`. Selecionada e disponível: `onAccent` sobre `accent`, o par de botão do design system.
 - Alvo: cada linha tem pelo menos 28 pt de altura (6 pt de respiro acima e abaixo do texto de 13 pt) e ocupa a largura do painel.
-- Não testado: VoiceOver real com a paleta aberta, Controle Total por Teclado (Tab pela janela inteira), Aumentar contraste e Reduzir transparência sobre o `.regularMaterial`, uso por QA de verdade. O retorno do foco à janela depois do Esc não tem teste automatizado.
+- Não testado: VoiceOver real com a paleta aberta, Controle Total por Teclado (Tab pela janela inteira), Aumentar contraste e Reduzir transparência sobre o `.regularMaterial`, uso por QA de verdade. O retorno do foco é testado na regra (`CommandPaletteFocus`), não com a paleta montada numa janela real.
 
 ## Features
 

@@ -21,6 +21,7 @@ struct ContentView: View {
 
         NavigationSplitView(columnVisibility: $state.sidebarVisibility) {
             AppSidebar()
+                .modifier(HiddenBehindCommandPalette())
                 .navigationSplitViewColumnWidth(
                     min: DesignMetrics.Widths.sidebarMin,
                     ideal: DesignMetrics.Widths.sidebarIdeal,
@@ -28,6 +29,7 @@ struct ContentView: View {
                 )
         } detail: {
             DetailColumn()
+                .modifier(HiddenBehindCommandPalette())
                 .modifier(SectionSearch())
                 .modifier(ToolbarTitle(title: windowTitle, subtitle: windowSubtitle))
                 .toolbar { MainToolbar(title: windowTitle, subtitle: windowSubtitle) }
@@ -36,6 +38,7 @@ struct ContentView: View {
                     set: { if !appState.inspectorSuppressed { appState.inspectorVisible = $0 } }
                 )) {
                     InspectorContent()
+                        .modifier(HiddenBehindCommandPalette())
                         .inspectorColumnWidth(
                             min: DesignMetrics.Widths.inspectorMin,
                             ideal: DesignMetrics.Widths.inspectorIdeal,
