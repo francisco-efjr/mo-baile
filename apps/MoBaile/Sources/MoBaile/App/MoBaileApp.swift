@@ -34,7 +34,7 @@ struct MoBaileApp: App {
         .defaultSize(DesignMetrics.Window.defaultSize)
         .windowToolbarStyle(.unified)
         .commands {
-            MoBaileCommands(appState: appState, session: session)
+            MoBaileCommands(appState: appState, session: session, themeManager: themeManager)
         }
 
         Settings {
@@ -54,169 +54,124 @@ struct MoBaileApp: App {
 /// hierarquia de views: no menu ele aparece descoberto pelo usuario, funciona
 /// com foco em qualquer painel e e lido por tecnologia assistiva. Toda acao da
 /// toolbar tambem aparece aqui.
+///
+/// Título, atalho e disponibilidade de cada item vêm do `CommandRegistry`, o
+/// mesmo que a paleta de comandos lê (FLU-1), e a execução passa pelo
+/// `CommandPerformer`. Ficam como `Toggle` próprios só os itens com marca de
+/// seleção (área, modo do clique, 60 FPS).
 struct MoBaileCommands: Commands {
     let appState: AppState
     let session: EngineSession
+    let themeManager: ThemeManager
+
+    private var contexto: CommandContext { .current(appState, session, themeManager) }
+    private var performer: CommandPerformer {
+        CommandPerformer(appState: appState, session: session, themeManager: themeManager)
+    }
 
     var body: some Commands {
+        let c = contexto
         SidebarCommands()
 
         // MARK: Arquivo
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .saveItem) {
-            Button("Salvar Page Object") {
-                Task { await session.saveCode() }
-            }
-            .keyboardShortcut("s", modifiers: .command)
-            .disabled(appState.actionsCode.isEmpty && appState.locatorsCode.isEmpty)
+            item(.save, c)
         }
         CommandGroup(replacing: .importExport) {
-            Button("Abrir Spec de Tagueamento…") {
-                appState.workspaceTab = .report
-                appState.selectedStepID = nil
-                ReportActions.openSpec(session)
-            }
-            .keyboardShortcut("o", modifiers: .command)
-            .disabled(appState.reportOperation != nil)
-            Button("Importar Prints do Figma…") {
-                appState.workspaceTab = .report
-                appState.selectedStepID = nil
-                ReportActions.importPrints(appState, session)
-            }
-            .disabled(appState.reportOperation != nil)
-            Button("Exportar Relatório…") { ReportActions.exportTo(session) }
-                .disabled(appState.report == nil || appState.reportOperation != nil)
+            item(.openSpec, c)
+            item(.importPrints, c)
+            item(.exportReport, c)
             Divider()
-            Button("Exportar HAR…") { Exporters.exportHAR(appState) }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(appState.httpRequests.isEmpty)
-            Button("Exportar JSON de Analytics…") { Exporters.exportAnalyticsJSON(appState) }
-                .disabled(appState.analyticsEvents.isEmpty)
+            item(.exportHAR, c)
+            item(.exportAnalytics, c)
         }
 
         // MARK: Editar
         CommandGroup(after: .pasteboard) {
             Divider()
-            Button("Buscar") { appState.search() }
-                .keyboardShortcut("f", modifiers: .command)
-                .disabled(!appState.canSearch)
+            item(.search, c)
             Divider()
-            Button("Limpar Tráfego…") { appState.pendingClear = .network }
-                .disabled(appState.httpRequests.isEmpty)
-            Button("Limpar Eventos…") { appState.pendingClear = .analytics }
-                .disabled(appState.analyticsEvents.isEmpty)
+            item(.clearTraffic, c)
+            item(.clearAnalytics, c)
         }
 
         // MARK: Visualizar
         CommandGroup(after: .sidebar) {
-            Button(appState.inspectorShown ? "Ocultar Inspector" : "Mostrar Inspector") {
-                appState.toggleInspector()
-            }
-            .keyboardShortcut("i", modifiers: [.command, .option])
-            .disabled(appState.inspectorSuppressed)
-            Button(appState.mirrorVisible ? "Ocultar Espelho" : "Mostrar Espelho") {
-                withAnimation(Motion.smooth()) { appState.mirrorVisible.toggle() }
-            }
-            .keyboardShortcut("1", modifiers: .option)
-            Button(appState.workspaceVisible ? "Ocultar Workspace" : "Mostrar Workspace") {
-                withAnimation(Motion.smooth()) { appState.workspaceVisible.toggle() }
-            }
-            .keyboardShortcut("2", modifiers: .option)
-            Button("Mostrar Todos os Painéis") {
-                withAnimation(Motion.smooth()) { appState.restoreAllPanels() }
-            }
-            .keyboardShortcut("f", modifiers: [.command, .option])
-            Button(appState.zenMode ? "Sair do Modo Zen" : "Modo Zen") {
-                withAnimation(Motion.smooth()) { appState.toggleZenMode() }
-            }
-            .keyboardShortcut("z", modifiers: [.command, .control])
+            item(.palette, c)
             Divider()
-            ForEach(Array(WorkspaceTab.allCases.enumerated()), id: \.element) { indice, area in
+            item(.inspector, c)
+            item(.mirror, c)
+            item(.workspace, c)
+            item(.allPanels, c)
+            item(.zen, c)
+            Divider()
+            ForEach(WorkspaceTab.allCases, id: \.self) { area in
+                let atalho = CommandRegistry.command(.area(area), in: c)?.shortcut
                 Toggle(area.displayName, isOn: Binding(
                     get: { appState.workspaceTab == area && appState.selectedStepID == nil },
-                    set: { _ in
-                        appState.selectedStepID = nil
-                        appState.workspaceTab = area
-                    }
+                    set: { _ in performer.perform(.area(area)) }
                 ))
-                .keyboardShortcut(KeyEquivalent(Character("\(indice + 1)")), modifiers: .command)
+                .keyboardShortcut(atalho?.keyEquivalent ?? KeyEquivalent(" "), modifiers: atalho?.modifiers ?? [])
             }
         }
 
         // MARK: Dispositivo
         CommandMenu("Dispositivo") {
-            Button("Atualizar Lista") {
-                Task { await session.refreshDevices() }
-            }
-            .keyboardShortcut("r", modifiers: [.command, .shift])
-
-            Button("Atualizar Tela") {
-                Task { await session.captureNow() }
-            }
-            .keyboardShortcut("k", modifiers: .command)
-            .disabled(!appState.isDeviceConnected)
-
-            Button(appState.streamActive ? "Parar Espelho" : "Iniciar Espelho") {
-                Task {
-                    if appState.streamActive {
-                        await session.stopStream()
-                    } else {
-                        await session.startStream()
-                    }
-                }
-            }
-            .keyboardShortcut("e", modifiers: .command)
-            .disabled(!appState.isDeviceConnected)
+            item(.refreshDevices, c)
+            item(.captureNow, c)
+            item(.stream, c)
 
             Divider()
 
             ForEach(InteractionMode.allCases) { modo in
                 Toggle(modo.menuTitle, isOn: Binding(
                     get: { appState.interactionMode == modo },
-                    set: { if $0 { appState.interactionMode = modo } }
+                    set: { if $0 { performer.perform(.interaction(modo)) } }
                 ))
-                .disabled(!appState.isDeviceConnected)
+                .disabled(!c.deviceConnected)
             }
 
             Divider()
 
-            Button(appState.passiveListening ? "Parar Captura do Aparelho" : "Gravar do Aparelho") {
-                Task {
-                    if appState.passiveListening { await session.stopPassive() } else { await session.startPassive() }
-                }
-            }
-            .disabled(!appState.isDeviceConnected)
-            Button(appState.screenRecording ? "Parar de Gravar a Tela" : "Gravar a Tela") {
-                Task {
-                    if appState.screenRecording { await session.stopScreenRecording() } else { await session.startScreenRecording() }
-                }
-            }
-            .disabled(!appState.isDeviceConnected)
+            item(.passive, c)
+            item(.screenRecording, c)
             Toggle("Espelho 60 FPS (scrcpy)", isOn: Binding(
                 get: { appState.scrcpyRunning },
-                set: { _ in Task { await session.toggleScrcpy() } }
+                set: { _ in performer.perform(.scrcpy) }
             ))
-            .disabled(!appState.isDeviceConnected || appState.platform != .android || !appState.scrcpyAvailable)
+            .disabled(!(CommandRegistry.command(.scrcpy, in: c)?.isEnabled ?? false))
+
+            Divider()
+            item(.restartEngine, c)
         }
 
         // MARK: Automação
         CommandMenu("Automação") {
-            Button("Estrutura do Fluxo…") { appState.showingStructure = true }
-                .disabled(appState.steps.isEmpty)
-            Button("Rodar Automação") {
-                RunAutomationButton.run(appState: appState, session: session)
-            }
-            .keyboardShortcut("r", modifiers: .command)
-            .disabled(!RunAutomationButton.podeRodar(appState))
+            item(.structure, c)
+            item(.run, c)
             Divider()
-            Button("Limpar Passos…") { appState.pendingClear = .steps }
-                .disabled(appState.steps.isEmpty)
+            item(.clearSteps, c)
         }
 
         // MARK: Janela
         CommandGroup(after: .windowArrangement) {
             Divider()
             Button("Mostrar Splash") { SplashController.shared.show() }
+        }
+    }
+
+    /// Item de menu lido do registro: título, atalho e disponibilidade.
+    @ViewBuilder
+    private func item(_ id: CommandID, _ c: CommandContext) -> some View {
+        if let comando = CommandRegistry.command(id, in: c) {
+            let botao = Button(comando.title) { performer.perform(id) }
+                .disabled(!comando.isEnabled)
+            if let atalho = comando.shortcut {
+                botao.keyboardShortcut(atalho.keyEquivalent, modifiers: atalho.modifiers)
+            } else {
+                botao
+            }
         }
     }
 }

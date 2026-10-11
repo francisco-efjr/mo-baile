@@ -47,6 +47,9 @@ struct ContentView: View {
                 }
         }
         .tint(theme.accent)
+        // Paleta de comandos (⇧⌘P), por cima de tudo na janela.
+        .overlay { CommandPaletteOverlay().tint(theme.accent) }
+        .animation(Motion.crossfade, value: appState.commandPalettePresented)
         .sheet(isPresented: $state.showingStructure) {
             StructureSheet()
                 .environment(appState).environment(session).environment(themeManager)

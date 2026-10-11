@@ -292,6 +292,8 @@ class AppState {
     var hierarchySearchFocusRequest: Int = 0
     /// Busca da toolbar aberta (⌘F em Rede e Analytics).
     var toolbarSearchPresented: Bool = false
+    /// Paleta de comandos aberta (⇧⌘P).
+    var commandPalettePresented: Bool = false
     /// Ajustes › Geral › "Iniciar o espelho automaticamente".
     var autoStartStream: Bool = UserDefaults.standard.object(forKey: AppState.autoStartStreamKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoStartStream, forKey: AppState.autoStartStreamKey) }
