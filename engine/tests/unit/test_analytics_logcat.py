@@ -184,14 +184,14 @@ class TestAnalyticsListener(unittest.TestCase):
         proc.stdout = io.StringIO(saida)
         with patch("subprocess.Popen", return_value=proc) as popen, \
              patch("mobaile.adapters.ios_device_log.is_available", return_value=True):
-            resultado = self.listener.start(platform="ios", device_id="00008020-001549180128402E", ios_physical=True)
+            resultado = self.listener.start(platform="ios", device_id="00008020-000000000000001A", ios_physical=True)
         return resultado, popen
 
     def test_start_iphone_fisico_roda_o_filho_e_espera_ficar_pronto(self):
         resultado, popen = self._start_fisico_com_saida('{"status": "ready"}\n')
         self.assertTrue(resultado)
         cmd = popen.call_args[0][0]
-        self.assertEqual(cmd[1:5], ["-m", "mobaile.adapters.ios_device_log", "stream", "00008020-001549180128402E"])
+        self.assertEqual(cmd[1:5], ["-m", "mobaile.adapters.ios_device_log", "stream", "00008020-000000000000001A"])
         self.assertIn("PYTHONPATH", popen.call_args[1]["env"])
         self.assertEqual(self.listener.active_source, "ios_device")
         self.listener.stop()
@@ -221,7 +221,7 @@ class TestAnalyticsListener(unittest.TestCase):
 
         with patch("mobaile.adapters.ios_device_log.is_available", return_value=False), \
              self.assertRaises(AdapterError) as ctx:
-            self.listener.start(platform="ios", device_id="00008020-001549180128402E", ios_physical=True)
+            self.listener.start(platform="ios", device_id="00008020-000000000000001A", ios_physical=True)
         self.assertIn("pip install pymobiledevice3", ctx.exception.detail)
 
     def test_export_tsv_and_json(self):

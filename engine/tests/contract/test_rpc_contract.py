@@ -477,7 +477,7 @@ if __name__ == "__main__":
 class TestAnalyticsIOSFisico(ContractBase):
     """De onde vem o tagueamento no iOS: simulador da sessao ou iPhone por cabo."""
 
-    UDID = "00008020-001549180128402E"
+    UDID = "00008020-000000000000001A"
     IPHONE: ClassVar[dict] = {"udid": UDID, "name": "iPhone", "ios_version": "18.7", "connection": "USB"}
 
     def setUp(self):
