@@ -434,8 +434,14 @@ class IOSDebugNetworkCapture:
         """Acrescenta o bloco ao log bruto, legivel so pelo dono (0600)."""
         with self._raw_lock:
             RAW_LOG_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            # mkdir nao muda pasta que ja existia, e o .log.1 de versao anterior
+            # pode ter nascido 0644: os dois ficam so com o dono.
+            os.chmod(RAW_LOG_PATH.parent, 0o700)
             if RAW_LOG_PATH.exists() and RAW_LOG_PATH.stat().st_size > RAW_LOG_MAX_BYTES:
                 RAW_LOG_PATH.replace(RAW_LOG_PATH.with_suffix(".log.1"))
+            rotacionado = RAW_LOG_PATH.with_suffix(".log.1")
+            if rotacionado.exists():
+                os.chmod(rotacionado, 0o600)
             fd = os.open(RAW_LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
             # Arquivo de versao anterior pode ter nascido 0644.
             os.fchmod(fd, 0o600)
