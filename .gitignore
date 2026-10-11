@@ -56,3 +56,23 @@ DerivedData/
 qa/calls.log
 qa/cert.pem
 qa/key.pem
+
+# Artefatos de release (tools/package_macos_app.sh e .github/workflows/release.yml)
+*.zip
+*.zip.sha256
+*.dmg
+saida/
+.tmp-dist/
+.mobaile-staging.*/
+
+# Material de assinatura e notarizacao: nunca no repositorio (docs/RELEASE.md)
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.keychain
+*.keychain-db
+
+# Estado local de agentes e ferramentas
+.claude/worktrees/
+.claude/settings.local.json

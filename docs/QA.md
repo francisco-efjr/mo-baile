@@ -3,7 +3,7 @@
 ## Estado atual
 
 Atualizado em 09/10/2026 (3.3.0: busca em tudo, App em Debug no Android, splash). Detalhes das correções
-de 05/10, evidências e limites em [QA_2026-10-05.md](QA_2026-10-05.md).
+de 05/10, evidências e limites em [QA_2026-10-05.md](historico/QA_2026-10-05.md).
 
 | Suite | Onde | Testes | Precisa de |
 |---|---|---|---|
