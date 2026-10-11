@@ -14,10 +14,12 @@ final class EngineStatusTests: XCTestCase {
         var fila: [FakeEngine] = []
         var fabricados: [FakeEngine] = []
         var tentativas = 0
+        /// O que a fábrica lança quando a fila acaba.
+        var erroSemMotor: EngineError = .engineNotFound("sem motor no teste")
 
         func fazer() throws -> any EngineCalling {
             tentativas += 1
-            guard !fila.isEmpty else { throw EngineError.engineNotFound("sem motor no teste") }
+            guard !fila.isEmpty else { throw erroSemMotor }
             let motor = fila.removeFirst()
             fabricados.append(motor)
             return motor
@@ -73,6 +75,35 @@ final class EngineStatusTests: XCTestCase {
             return XCTFail("esperava parado, veio \(sessao.engineStatus)")
         }
         XCTAssertTrue(mensagem.contains("Python 3.10"), mensagem)
+    }
+
+    /// T-01: o motor cai e, na hora de subir outro, o Python não serve mais
+    /// (alguém desinstalou o Pillow). Tentar de novo não instala nada: a
+    /// supervisão para na primeira tentativa, com a mensagem do `EngineLocator`.
+    func testQuedaComPythonInadequadoParaSemNovasTentativas() async throws {
+        let estado = AppState()
+        let fabrica = Fabrica()
+        fabrica.fila = [try novoMotor()]
+        fabrica.erroSemMotor = .pythonUnsuitable("Nenhum Python 3.10 com Pillow. Depois, use Reiniciar Motor.")
+        let sessao = EngineSession(state: estado, restartPolicy: politicaRapida) { try fabrica.fazer() }
+        await sessao.connect()
+        XCTAssertEqual(fabrica.tentativas, 1)
+
+        await fabrica.fabricados[0].cair(status: 1)
+        try await esperar("a supervisão desistir") {
+            if case .stopped = sessao.engineStatus { return true }
+            return false
+        }
+
+        guard case .stopped(let mensagem) = sessao.engineStatus else {
+            return XCTFail("esperava parado, veio \(sessao.engineStatus)")
+        }
+        XCTAssertTrue(mensagem.contains("Pillow"), mensagem)
+        XCTAssertEqual(estado.statusMessage, mensagem)
+        // Uma tentativa da supervisão e nenhuma outra: a tarefa já terminou,
+        // então não há quem tente de novo.
+        XCTAssertEqual(fabrica.tentativas, 2, "a supervisão insistiu com um Python inadequado")
+        XCTAssertFalse(sessao.isRestarting)
     }
 
     func testErroDeChamadaComMotorNoArNaoViraFaixa() async throws {
