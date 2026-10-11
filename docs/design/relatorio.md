@@ -32,7 +32,7 @@ daqui. Decisões de produto e de arquitetura em
 │ Status · Seção · Fluxo · Evento · Variação · Divergências · Horário · N  │
 ├ Detalhe (VSplitView) ────────────────────────────────────────────────────┤
 │ Validação [status]       [Copiar] │ Bloco | Disparo            [Copiar]  │
-│ ✓ screen_name  obtido  esperado   │ // CPAGI · evento [ERRO]             │
+│ ✓ screen_name  obtido  esperado   │ // PDE · evento [ERRO]             │
 │ ✕ component    toggle  button     │ { "component": "toggle",  ✗ ... }    │
 └──────────────────────────────────────────────────────────────────────────┘
 Inspector: "Card do Figma" — seção, card, evento, fluxo, variação e o print.

@@ -41,7 +41,7 @@ def relatorio(log=None, platform="android"):
 
 class TestNormalizacao(unittest.TestCase):
     def test_espacos_em_volta_dos_dois_pontos_somem(self):
-        self.assertEqual(clean_colon_spacing(" app: credito :home "), "app:credito:home")
+        self.assertEqual(clean_colon_spacing(" app: pedido :home "), "app:pedido:home")
 
     def test_sufixo_do_sdk_sai_do_evento_e_da_chave(self):
         self.assertEqual(strip_event_suffixes("screen_view(_vs)"), "screen_view")
@@ -59,8 +59,8 @@ class TestPlaceholders(unittest.TestCase):
     def test_alternancia_inteira_e_em_trecho(self):
         self.assertTrue(value_matches("[0|1]", "0"))
         self.assertFalse(value_matches("[0|1]", "2"))
-        self.assertTrue(value_matches("app:credito:[pessoal|investimentos]:sucesso", "app:credito:pessoal:sucesso"))
-        self.assertFalse(value_matches("app:credito:[pessoal|investimentos]:sucesso", "app:credito:outro:sucesso"))
+        self.assertTrue(value_matches("app:pedido:[pessoal|empresa]:sucesso", "app:pedido:pessoal:sucesso"))
+        self.assertFalse(value_matches("app:pedido:[pessoal|empresa]:sucesso", "app:pedido:outro:sucesso"))
 
     def test_numero_data_e_preenchido(self):
         self.assertTrue(value_matches("click:[numero]-parcela-sem-seguro", "click:10-parcela-sem-seguro"))
@@ -94,9 +94,9 @@ class TestExpansao(unittest.TestCase):
     def test_params_por_fluxo_sobrescreve_so_o_fluxo_dele(self):
         variants = expand_spec(SpecTemplate.from_dict(SPEC))
         pessoal = next(v for v in variants if v.event == "add_to_cart" and v.flow == "pessoal")
-        investimentos = next(v for v in variants if v.event == "add_to_cart" and v.flow == "investimentos")
-        self.assertEqual(pessoal.expected["items"][0], {"item_id": "14063", "item_name": "credito-pessoal"})
-        self.assertEqual(investimentos.expected["items"][0]["item_id"], "[preenchido]")
+        empresa = next(v for v in variants if v.event == "add_to_cart" and v.flow == "empresa")
+        self.assertEqual(pessoal.expected["items"][0], {"item_id": "14063", "item_name": "pedido-pessoal"})
+        self.assertEqual(empresa.expected["items"][0]["item_id"], "[preenchido]")
 
 
 class TestLeituraDoLog(unittest.TestCase):
@@ -119,7 +119,7 @@ class TestLeituraDoLog(unittest.TestCase):
         events, _ = events_from_items(LOG, "android")
         home = next(e for e in events if e.event_name == "screen_view")
         self.assertNotIn("quebrado", home.params)
-        self.assertEqual(home.params["ga_screen"], "app:credito:home")
+        self.assertEqual(home.params["ga_screen"], "app:pedido:home")
 
     def test_formatos_de_arquivo_aceitos(self):
         self.assertEqual(len(items_from_json({"eventos": LOG})), len(LOG))
@@ -129,7 +129,7 @@ class TestLeituraDoLog(unittest.TestCase):
 
     def test_eventos_da_escuta_do_mo_baile_sao_lidos(self):
         """`AnalyticsEvent.to_dict` (o que a escuta guarda) usa `time`, não `time_str`."""
-        item = dict(android("11:00:00.000", "screen_view(_vs)", "flow_name=credito, ga_screen(_sn)=app:credito:home"))
+        item = dict(android("11:00:00.000", "screen_view(_vs)", "flow_name=pedido, ga_screen(_sn)=app:pedido:home"))
         item["time"] = item.pop("time_str")
         events, _ = events_from_items([item], "android")
         self.assertEqual(events[0].time_str, "11:00:00.000")
@@ -163,7 +163,7 @@ class TestAuditoria(unittest.TestCase):
         self.assertIs(self.resultado(0).status, VariantStatus.OK)
         self.assertIs(self.resultado(1, "pessoal", "click:parcelas").status, VariantStatus.OK)
         self.assertIs(self.resultado(1, "pessoal", "click:[numero]-parcela-sem-seguro").status, VariantStatus.MISSING)
-        erro = self.resultado(1, "investimentos", "click:parcelas")
+        erro = self.resultado(1, "empresa", "click:parcelas")
         self.assertIs(erro.status, VariantStatus.ERROR)
         self.assertEqual([c.field for c in erro.checks if not c.ok], ["component"])
 
@@ -172,23 +172,23 @@ class TestAuditoria(unittest.TestCase):
         self.assertIs(r.status, VariantStatus.OK)
         self.assertEqual(r.matched.time_str, "10:04:00.000")
         self.assertEqual(r.older_divergent, 1)
-        self.assertIn("items[0].item_name=credito-errado", r.older_divergences)
+        self.assertIn("items[0].item_name=pedido-errado", r.older_divergences)
 
     def test_mesma_acao_em_outra_tela_nao_rouba_o_casamento(self):
         self.assertEqual(self.resultado(1, "pessoal", "click:parcelas").matched.time_str, "10:01:00.000")
         self.assertEqual(self.resultado(0).matched.time_str, "10:00:00.000")
 
     def test_tela_certa_com_screen_name_errado_e_erro_de_screen_name(self):
-        r = self.resultado(2, "investimentos")
+        r = self.resultado(2, "empresa")
         self.assertIs(r.status, VariantStatus.ERROR)
         self.assertEqual([c.field for c in r.checks if not c.ok], ["screen_name"])
 
     def test_fora_da_spec_e_alertas(self):
         self.assertEqual(
             [(e.event, e.screen, e.detail) for e in self.report.extras],
-            [("interaction_credito_pessoal", "app:credito:pessoal:detalhes-da-proposta", "click:parcelas"),
-             ("screen_view", "app:credito:outra-tela", None),
-             ("modal_view", "app:credito:pessoal:simulacao", "calendario")],
+            [("interaction_pedido_pessoal", "app:pedido:pessoal:detalhes-do-pedido", "click:parcelas"),
+             ("screen_view", "app:pedido:outra-tela", None),
+             ("modal_view", "app:pedido:pessoal:simulacao", "calendario")],
         )
         self.assertEqual([a.event for a in self.report.alerts], ["app_exception"])
 
@@ -230,15 +230,15 @@ class TestRelatorios(unittest.TestCase):
 
     def test_bloco_de_variacao_nao_disparada_mostra_o_esperado(self):
         ausente = next(r for r in self.report.results if r.status is VariantStatus.MISSING)
-        bloco = variant_block_text(ausente, "CPA")
-        self.assertTrue(bloco.startswith("// CPA · "))
+        bloco = variant_block_text(ausente, "PDP")
+        self.assertTrue(bloco.startswith("// PDP · "))
         self.assertIn("NÃO DISPARADO", bloco)
         self.assertIn("esperado (spec)", bloco)
 
     def test_texto_hostil_da_spec_e_do_log_nao_vira_marcacao(self):
         spec = dict(SPEC, projeto='<script>alert("x")</script>')
         log = [android("10:00:00.000", "screen_view(_vs)",
-                       "flow_name=credito, ga_screen(_sn)=<img src=x onerror=alert(1)>")]
+                       "flow_name=pedido, ga_screen(_sn)=<img src=x onerror=alert(1)>")]
         events, stats = events_from_items(log, "android")
         report = run_audit(SpecTemplate.from_dict(spec), events, "android", stats)
         html = generate_html(report)
@@ -247,8 +247,8 @@ class TestRelatorios(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;", html)
 
     def test_tabulacao_e_quebra_no_valor_nao_quebram_a_planilha(self):
-        log = [android("10:00:00.000", "interaction_credito_pessoal",
-                       "screen_name=app:credito:pessoal:simulacao, flow_name=credito-pessoal, "
+        log = [android("10:00:00.000", "interaction_pedido_pessoal",
+                       "screen_name=app:pedido:pessoal:simulacao, flow_name=pedido-pessoal, "
                        "component=bot\tao, detail=click:parcelas")]
         events, stats = events_from_items(log, "android")
         report = run_audit(SpecTemplate.from_dict(SPEC), events, "android", stats)

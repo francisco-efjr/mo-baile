@@ -199,7 +199,7 @@ def observation_lines(report: AuditReport) -> list[str]:
 
 
 def flow_short_label(report: AuditReport, flow: str | None) -> str | None:
-    """Rótulo curto do fluxo nos blocos: ``CPA · credito-pessoal`` vira ``CPA``."""
+    """Rótulo curto do fluxo nos blocos: ``PDP · pedido-pessoal`` vira ``PDP``."""
     if flow is None:
         return None
     return report.spec.fluxos.get(flow, flow).split(" · ")[0]

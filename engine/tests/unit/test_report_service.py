@@ -47,7 +47,7 @@ class TestResumoDaSpec(Base):
         self.assertEqual(resumo["cards"], 3)
         self.assertEqual(resumo["variants"], TOTAL)
         self.assertEqual(resumo["sections"], ["Home", "Simulação"])
-        self.assertEqual([f["key"] for f in resumo["fluxos"]], ["pessoal", "investimentos"])
+        self.assertEqual([f["key"] for f in resumo["fluxos"]], ["pessoal", "empresa"])
         self.assertIsNone(resumo["prints_dir"])
         self.assertFalse(resumo["prints_dir_exists"])
 
@@ -86,7 +86,7 @@ class TestArquivosRecusados(Base):
         quebrada.write_text('{"projeto": "x",\n "cards": [}', encoding="utf-8")
         self.recusa(lambda: self.service.spec(str(quebrada)), "linha 2")
         latin1 = self.pasta / "latin1.json"
-        latin1.write_bytes('{"projeto": "Crédito"}'.encode("latin-1"))
+        latin1.write_bytes('{"projeto": "Pedido Único"}'.encode("latin-1"))
         self.recusa(lambda: self.service.spec(str(latin1)), "UTF-8")
         texto = self.pasta / "spec.txt"
         texto.write_text("{}", encoding="utf-8")
@@ -136,12 +136,12 @@ class TestAuditoria(Base):
     def test_linha_divergente_traz_o_que_corrigir(self):
         relatorio = self.auditar()
         erro = next(r for r in relatorio["results"]
-                    if r["status"] == "error" and r["flow"] == "investimentos" and r["variation"] == "click:parcelas")
-        self.assertEqual(erro["flow_label"], "CPAGI · credito-investimentos")
+                    if r["status"] == "error" and r["flow"] == "empresa" and r["variation"] == "click:parcelas")
+        self.assertEqual(erro["flow_label"], "PDE · pedido-empresa")
         falhas = [c for c in erro["checks"] if not c["ok"]]
         self.assertEqual(falhas, [{"field": "component", "expected": "button", "obtained": "toggle", "ok": False}])
         self.assertEqual(erro["divergences"], "component: obtido toggle, esperado button")
-        self.assertTrue(erro["block"].startswith("// CPAGI · interaction_credito_investimentos [ERRO]"))
+        self.assertTrue(erro["block"].startswith("// PDE · interaction_pedido_empresa [ERRO]"))
         self.assertEqual(erro["matched"]["time"], "10:02:00.000")
         self.assertEqual(erro["matched"]["params"]["component"], "toggle")
 
@@ -214,7 +214,7 @@ class TestExportacao(Base):
 
 class TestAuxiliaresDeArquivo(unittest.TestCase):
     def test_nome_de_arquivo_a_partir_de_texto_livre(self):
-        self.assertEqual(safe_file_stem("Crédito - CPA & CPAGI"), "credito-cpa-cpagi")
+        self.assertEqual(safe_file_stem("Pedido Único - PDP & PDE"), "pedido-unico-pdp-pde")
         self.assertEqual(safe_file_stem("../../etc/passwd"), "etc-passwd")
         self.assertEqual(safe_file_stem("💥"), "relatorio")
         self.assertEqual(len(safe_file_stem("a" * 500)), 60)

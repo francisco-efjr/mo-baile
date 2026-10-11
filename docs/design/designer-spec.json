@@ -95,7 +95,7 @@
         "height": "40px",
         "description": "Barra horizontal secundária de parâmetros de automação",
         "elements": [
-          {"name": "entry_key", "type": "Text Input", "label": "Chave dos Locators", "default": "onboarding_credito_objs", "purpose": "Define o nome do dicionário no arquivo de locators"},
+          {"name": "entry_key", "type": "Text Input", "label": "Chave dos Locators", "default": "cadastro_demo_objs", "purpose": "Define o nome do dicionário no arquivo de locators"},
           {"name": "locator_strategy", "type": "Radiobuttons", "options": ["ID / Accessibility", "XPath", "Coordenadas (Position)"], "purpose": "Define como o seletor é construído no código"},
           {"name": "cb_passive", "type": "Checkbox", "label": "Modo Passivo (Aparelho)", "purpose": "Ativa a captura de toques físicos feitos com a mão no aparelho"},
           {"name": "btn_zen", "type": "FluidPillButton", "label": "Modo Zen", "purpose": "Colapsa as barras de cabeçalho para focar exclusivamente na tela e no código"}

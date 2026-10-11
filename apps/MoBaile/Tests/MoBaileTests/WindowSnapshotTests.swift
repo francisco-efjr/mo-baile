@@ -31,7 +31,7 @@ final class WindowSnapshotTests: XCTestCase {
         UIElement(
             tag: classe, className: classe, resourceId: id, text: texto, contentDesc: "",
             clickable: true, bounds: CGRect(x: x, y: y, width: w, height: h), area: Int(w * h),
-            package: "br.com.bancopraia", platform: .ios, depth: 0, parentIndex: pai
+            package: "com.example.demoapp", platform: .ios, depth: 0, parentIndex: pai
         )
     }
 
@@ -48,11 +48,11 @@ final class WindowSnapshotTests: XCTestCase {
                 ])
             }
             texto("9:41", 40, 18, 15, tinta, bold: true)
-            texto("Crédito pessoal", 140, 70, 16, tinta, bold: true)
+            texto("Novo pedido", 140, 70, 16, tinta, bold: true)
             texto("‹", 24, 62, 26, azul)
             NSColor(hex: "#E3EEF3").setFill()
             NSBezierPath(ovalIn: NSRect(x: 136, y: 150, width: 120, height: 120)).fill()
-            texto("Simule seu crédito", 32, 350, 26, tinta, bold: true)
+            texto("Simule seu pedido", 32, 350, 26, tinta, bold: true)
             texto("em minutos", 32, 382, 26, tinta, bold: true)
             texto("Sem compromisso. A taxa aparece antes de você contratar.", 32, 430, 12, NSColor(hex: "#5A7C8B"))
             for (rotulo, dica, y) in [("CPF", "000.000.000-00", 480.0), ("Valor desejado", "R$ 5.000,00", 560.0)] {
@@ -73,7 +73,7 @@ final class WindowSnapshotTests: XCTestCase {
         AutomationStep(
             stepNum: n, actionType: acao, varName: varName, elementName: elemento, className: "XCUIElementTypeButton",
             strategy: estrategia, locatorValue: elemento, coords: estrategia == .coords ? CGPoint(x: 1095, y: 210) : nil,
-            inputText: texto, package: "br.com.bancopraia", platform: .ios
+            inputText: texto, package: "com.example.demoapp", platform: .ios
         )
     }
 
@@ -82,7 +82,7 @@ final class WindowSnapshotTests: XCTestCase {
             id: id, timestamp: Date(), timeStr: "13:02:1\(id)", method: metodo, url: "https://\(host)\(path)",
             host: host, path: path, statusCode: status, statusText: "", requestHeaders: [
                 "Accept-Language": "pt-BR", "Authorization": "Bearer eyJhbGciOi…", "Content-Type": "application/json",
-                "User-Agent": "BancoPraia/5.42.0 (iPhone; iOS 18.6; Scale/3.00)",
+                "User-Agent": "DemoApp/5.42.0 (iPhone; iOS 18.6; Scale/3.00)",
             ],
             requestBody: metodo == "POST" ? "{\"valor\": 5000, \"parcelas\": 12}" : "", responseHeaders: ["Content-Type": "application/json"],
             responseBody: body, durationMs: ms, protocol: "HTTP/1.1", isTunnel: tunel
@@ -105,13 +105,13 @@ final class WindowSnapshotTests: XCTestCase {
         if conectado {
             estado.currentFrame = Self.quadroDoApp()
             estado.hierarchyElements = [
-                Self.elemento("XCUIElementTypeApplication", texto: "Banco Praia", 0, 0, 393, 852),
+                Self.elemento("XCUIElementTypeApplication", texto: "DemoApp", 0, 0, 393, 852),
                 Self.elemento("XCUIElementTypeWindow", pai: 0, 0, 0, 393, 852),
-                Self.elemento("XCUIElementTypeNavigationBar", id: "Crédito pessoal", pai: 1, 0, 47, 393, 59),
+                Self.elemento("XCUIElementTypeNavigationBar", id: "Novo pedido", pai: 1, 0, 47, 393, 59),
                 Self.elemento("XCUIElementTypeButton", id: "Voltar", texto: "Voltar", pai: 2, 8, 57, 44, 40),
-                Self.elemento("XCUIElementTypeStaticText", texto: "Crédito pessoal", pai: 2, 140, 67, 113, 20),
+                Self.elemento("XCUIElementTypeStaticText", texto: "Novo pedido", pai: 2, 140, 67, 113, 20),
                 Self.elemento("XCUIElementTypeOther", id: "conteudo", pai: 1, 0, 106, 393, 746),
-                Self.elemento("XCUIElementTypeStaticText", texto: "Simule seu crédito em minutos", pai: 5, 32, 345, 300, 70),
+                Self.elemento("XCUIElementTypeStaticText", texto: "Simule seu pedido em minutos", pai: 5, 32, 345, 300, 70),
                 Self.elemento("XCUIElementTypeTextField", id: "campo_cpf", texto: "CPF", pai: 5, 32, 498, 329, 44),
                 Self.elemento("XCUIElementTypeTextField", id: "campo_valor", texto: "Valor desejado", pai: 5, 32, 578, 329, 44),
                 Self.elemento("XCUIElementTypeButton", id: "Continuar", texto: "Continuar", pai: 5, 32, 700, 329, 50),
@@ -119,7 +119,7 @@ final class WindowSnapshotTests: XCTestCase {
             ]
             estado.selectedElement = estado.hierarchyElements[9]
             estado.steps = [
-                Self.passo(1, "click", "Simular crédito", "BOTAO_SIMULAR_CREDITO", .id),
+                Self.passo(1, "click", "Simular pedido", "BOTAO_SIMULAR_PEDIDO", .id),
                 Self.passo(2, "send_keys", "campo_cpf", "CAMPO_CPF", .id, texto: "12345678901"),
                 Self.passo(3, "send_keys", "campo_valor", "CAMPO_VALOR", .id, texto: "5000"),
                 Self.passo(4, "click", "Continuar", "BOTAO_CONTINUAR", .id),
@@ -127,7 +127,7 @@ final class WindowSnapshotTests: XCTestCase {
                 Self.passo(6, "click", "position", "TOQUE_FECHAR", .coords),
             ]
             estado.actionsCode = estado.steps.map { s in
-                let ref = "self.locators['onboarding_credito_objs'].\(s.varName)"
+                let ref = "self.locators['cadastro_demo_objs'].\(s.varName)"
                 let arg = s.actionType == "send_keys" ? "self, texto" : "self"
                 let acao = s.actionType == "send_keys" ? "    self.send_keys(\(ref), texto)" : "    self.click(\(ref), 2)"
                 return "def \(s.actionType == "send_keys" ? "preencher" : "click")_\(s.varName.lowercased())(\(arg)):\n    self.wait_to_be_visible(\(ref), 15)\n\(acao)\n"
@@ -137,13 +137,13 @@ final class WindowSnapshotTests: XCTestCase {
             }.joined(separator: "\n")
             estado.proxyRunning = true
             estado.httpRequests = [
-                Self.requisicao(1, "DELETE", nil, "api.bancopraia.com.br", "/v2/credito/simulacao/sim_8f2c", ms: nil),
-                Self.requisicao(2, "GET", 500, "api.bancopraia.com.br", "/v2/clientes/me/preferencias", ms: 1800),
-                Self.requisicao(3, "POST", 422, "api.bancopraia.com.br", "/v2/credito/contratacao", ms: 266,
-                                body: "{\"erro\": \"limite_excedido\", \"mensagem\": \"Valor acima do limite pré-aprovado.\"}"),
-                Self.requisicao(4, "GET", 304, "cdn.bancopraia.com.br", "/img/onboarding/credito@3x.png", ms: 41),
+                Self.requisicao(1, "DELETE", nil, "api.demoapp.test", "/v2/pedido/simulacao/sim_8f2c", ms: nil),
+                Self.requisicao(2, "GET", 500, "api.demoapp.test", "/v2/clientes/me/preferencias", ms: 1800),
+                Self.requisicao(3, "POST", 422, "api.demoapp.test", "/v2/pedido/contratacao", ms: 266,
+                                body: "{\"erro\": \"limite_excedido\", \"mensagem\": \"Valor acima do limite permitido.\"}"),
+                Self.requisicao(4, "GET", 304, "cdn.demoapp.test", "/img/onboarding/pedido@3x.png", ms: 41),
                 Self.requisicao(5, "CONNECT", 200, "app-measurement.com", ":443", ms: 58, tunel: true),
-                Self.requisicao(6, "POST", 201, "api.bancopraia.com.br", "/v2/credito/simulacao", ms: 812,
+                Self.requisicao(6, "POST", 201, "api.demoapp.test", "/v2/pedido/simulacao", ms: 812,
                                 body: "{\"cet_anual\": 28.4, \"parcelas\": 12, \"simulacao_id\": \"sim_8f2c\", \"valor_parcela\": 487.32}"),
             ]
             estado.selectedRequest = estado.httpRequests[5]
@@ -151,10 +151,10 @@ final class WindowSnapshotTests: XCTestCase {
             estado.analyticsEvents = [
                 AnalyticsEvent(id: 1, timestamp: Date(), timeStr: "13:02:10.880", tag: "iOS (Firebase)", eventName: "session_start", params: [:], rawLog: "Logging event: session_start", platform: .ios),
                 AnalyticsEvent(id: 2, timestamp: Date(), timeStr: "13:02:11.102", tag: "iOS (Firebase)", eventName: "screen_view",
-                               params: ["firebase_screen": "onboarding_credito", "firebase_previous_screen": "home"], rawLog: "Logging event: screen_view", platform: .ios),
-                AnalyticsEvent(id: 3, timestamp: Date(), timeStr: "13:02:14.920", tag: "iOS (Firebase)", eventName: "simulacao_credito_iniciada",
+                               params: ["firebase_screen": "cadastro_demo", "firebase_previous_screen": "home"], rawLog: "Logging event: screen_view", platform: .ios),
+                AnalyticsEvent(id: 3, timestamp: Date(), timeStr: "13:02:14.920", tag: "iOS (Firebase)", eventName: "simulacao_pedido_iniciada",
                                params: ["canal": "app_ios", "parcelas": "12", "produto": "pessoal", "valor": "5000"],
-                               rawLog: "2026-10-08 13:02:14.920 BancoPraia[4821:91234] 11.3.0 - [FirebaseAnalytics][I-ACS023051] Logging event: origin, name, params: app, simulacao_credito_iniciada, {\n    canal: app_ios, parcelas: 12, produto: pessoal, valor: 5000\n}", platform: .ios),
+                               rawLog: "2026-10-08 13:02:14.920 DemoApp[4821:91234] 11.3.0 - [FirebaseAnalytics][I-ACS023051] Logging event: origin, name, params: app, simulacao_pedido_iniciada, {\n    canal: app_ios, parcelas: 12, produto: pessoal, valor: 5000\n}", platform: .ios),
             ]
             estado.selectedAnalyticsEvent = estado.analyticsEvents[2]
         }
@@ -251,9 +251,9 @@ final class WindowSnapshotTests: XCTestCase {
         let agora = Date()
         e.runLog = [
             LogLine(timestamp: agora, prefix: "INFO", message: "Sessão Appium aberta · XCUITest · iPhone 16 (iOS 18.6)"),
-            LogLine(timestamp: agora.addingTimeInterval(1), prefix: "RUN", message: "passo 1 · click BOTAO_SIMULAR_CREDITO"),
+            LogLine(timestamp: agora.addingTimeInterval(1), prefix: "RUN", message: "passo 1 · click BOTAO_SIMULAR_PEDIDO"),
             LogLine(timestamp: agora.addingTimeInterval(2), prefix: "PASS", message: "passo 1 ok"),
-            LogLine(timestamp: agora.addingTimeInterval(3), prefix: "HTTP", message: "POST /v2/credito/simulacao → 201 (812 ms)"),
+            LogLine(timestamp: agora.addingTimeInterval(3), prefix: "HTTP", message: "POST /v2/pedido/simulacao → 201 (812 ms)"),
             LogLine(timestamp: agora.addingTimeInterval(9), prefix: "FAIL", message: "NoSuchElementError: BOTAO_CONFIRMAR_CONTRATACAO não ficou visível em 15 s"),
         ]
         try fotografar(
@@ -297,7 +297,7 @@ final class WindowSnapshotTests: XCTestCase {
         if comRelatorio {
             e.report = relatorio
             e.selectedReportResultID = relatorio.results.first {
-                $0.status == .error && $0.flow == "investimentos" && $0.variation == "click:parcelas"
+                $0.status == .error && $0.flow == "empresa" && $0.variation == "click:parcelas"
             }?.id
         }
         return (e, s, t)
@@ -412,10 +412,10 @@ extension WindowSnapshotTests {
         let agora = Date()
         return [
             LogLine(timestamp: agora, prefix: "INFO", message: "Sessão Appium aberta · XCUITest · iPhone 16 (iOS 18.6)"),
-            LogLine(timestamp: agora.addingTimeInterval(1), prefix: "RUN", message: "passo 1 · click BOTAO_SIMULAR_CREDITO"),
+            LogLine(timestamp: agora.addingTimeInterval(1), prefix: "RUN", message: "passo 1 · click BOTAO_SIMULAR_PEDIDO"),
             LogLine(timestamp: agora.addingTimeInterval(2), prefix: "PASS", message: "passo 1 ok"),
-            LogLine(timestamp: agora.addingTimeInterval(3), prefix: "HTTP", message: "POST /v2/credito/simulacao → 201 (812 ms)"),
-            LogLine(timestamp: agora.addingTimeInterval(4), prefix: "FA", message: "simulacao_credito_iniciada"),
+            LogLine(timestamp: agora.addingTimeInterval(3), prefix: "HTTP", message: "POST /v2/pedido/simulacao → 201 (812 ms)"),
+            LogLine(timestamp: agora.addingTimeInterval(4), prefix: "FA", message: "simulacao_pedido_iniciada"),
             LogLine(timestamp: agora.addingTimeInterval(5), prefix: "RUN", message: "passo 2 · send_keys CAMPO_CPF"),
         ]
     }

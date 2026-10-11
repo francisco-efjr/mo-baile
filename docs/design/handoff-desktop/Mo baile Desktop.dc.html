@@ -86,7 +86,7 @@
       <div style="flex:1;padding:0 6px;font-size:11.5px">
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px"><span style="color:#8FA9B5;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#CBE4EE;color:#5A7C8B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">W</span><span>Application</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px"><span style="color:#8FA9B5;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#CBE4EE;color:#5A7C8B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">V</span><span>ScrollView</span></div>
-        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#F6E7C1;color:#8A6A22;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#5A7C8B">StaticText “Crédito”</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#F6E7C1;color:#8A6A22;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#5A7C8B">StaticText “Pedido”</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#D6EFD4;color:#3F8F4E;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#5A7C8B">TextField cpf_input</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#D6EFD4;color:#3F8F4E;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#5A7C8B">TextField renda_input</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:5px 8px 5px 40px;border-radius:7px;background:#FBE3EA;border:1px solid #EFB6C6"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#E88BA5;color:#fff;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">B</span><span style="font-weight:600">Button btn_continuar</span></div>
@@ -126,16 +126,16 @@
       <div style="flex:1;display:flex;min-height:0">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #C3E2EE">
           <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE">
-            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#2E7FA6">pages/onboarding_credito.py</span>
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#2E7FA6">pages/cadastro_demo.py</span>
             <span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span><span style="font-size:10px;color:#8FA9B5">Salvar</span>
           </div>
           <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
             <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16</div>
-            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#17323F"><span style="color:#C2557A">from</span> locators.credito <span style="color:#C2557A">import</span> objs
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#17323F"><span style="color:#C2557A">from</span> locators.cadastro_demo <span style="color:#C2557A">import</span> objs
 <span style="color:#C2557A">from</span> base.page <span style="color:#C2557A">import</span> BasePage
 
 
-<span style="color:#C2557A">class</span> <span style="color:#7B62B8">OnboardingCredito</span>(BasePage):
+<span style="color:#C2557A">class</span> <span style="color:#7B62B8">CadastroDemo</span>(BasePage):
 
     <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">preencher_cpf</span>(self, valor: <span style="color:#7B62B8">str</span>):
         self.type(objs[<span style="color:#3F8F4E">"cpf_input"</span>], valor)
@@ -151,12 +151,12 @@
         </div>
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
           <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE">
-            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#D9738F">locators/onboarding_credito.py</span>
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#D9738F">locators/cadastro_demo.py</span>
             <span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span><span style="font-size:10px;color:#8FA9B5">Salvar</span>
           </div>
           <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
             <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14</div>
-            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#17323F">onboarding_credito_objs = {
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#17323F">cadastro_demo_objs = {
 
     <span style="color:#3F8F4E">"cpf_input"</span>: {
         <span style="color:#3F8F4E">"ios"</span>: (<span style="color:#3F8F4E">"a11y"</span>, <span style="color:#3F8F4E">"cpf_input"</span>),
@@ -238,14 +238,14 @@
       </div>
       <div style="flex:1;display:flex;min-height:0">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #C3E2EE">
-          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE"><span style="font:600 10px 'SF Mono',Menlo,monospace;color:#2E7FA6">pages/onboarding_credito.py</span><span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span></div>
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE"><span style="font:600 10px 'SF Mono',Menlo,monospace;color:#2E7FA6">pages/cadastro_demo.py</span><span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span></div>
           <div style="flex:1;display:flex;font:12.5px/1.9 'SF Mono',Menlo,monospace;overflow:hidden">
             <div style="width:36px;flex:none;text-align:right;padding:12px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16</div>
-            <div style="flex:1;min-width:0;overflow:hidden;padding:12px 14px;white-space:pre;color:#17323F"><span style="color:#C2557A">from</span> locators.credito <span style="color:#C2557A">import</span> objs
+            <div style="flex:1;min-width:0;overflow:hidden;padding:12px 14px;white-space:pre;color:#17323F"><span style="color:#C2557A">from</span> locators.cadastro_demo <span style="color:#C2557A">import</span> objs
 <span style="color:#C2557A">from</span> base.page <span style="color:#C2557A">import</span> BasePage
 
 
-<span style="color:#C2557A">class</span> <span style="color:#7B62B8">OnboardingCredito</span>(BasePage):
+<span style="color:#C2557A">class</span> <span style="color:#7B62B8">CadastroDemo</span>(BasePage):
 
     <span style="color:#C2557A">def</span> <span style="color:#2E7FA6">preencher_cpf</span>(self, valor: <span style="color:#7B62B8">str</span>):
         self.type(objs[<span style="color:#3F8F4E">"cpf_input"</span>], valor)
@@ -260,10 +260,10 @@
           </div>
         </div>
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE"><span style="font:600 10px 'SF Mono',Menlo,monospace;color:#D9738F">locators/onboarding_credito.py</span><span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span></div>
+          <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#F7FCFE;border-bottom:1px solid #C3E2EE"><span style="font:600 10px 'SF Mono',Menlo,monospace;color:#D9738F">locators/cadastro_demo.py</span><span style="margin-left:auto;font-size:10px;color:#8FA9B5">Copiar</span></div>
           <div style="flex:1;display:flex;font:12.5px/1.9 'SF Mono',Menlo,monospace;overflow:hidden">
             <div style="width:36px;flex:none;text-align:right;padding:12px 8px 0 0;color:#A9C3CE;background:#F7FCFE">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14</div>
-            <div style="flex:1;min-width:0;overflow:hidden;padding:12px 14px;white-space:pre;color:#17323F">onboarding_credito_objs = {
+            <div style="flex:1;min-width:0;overflow:hidden;padding:12px 14px;white-space:pre;color:#17323F">cadastro_demo_objs = {
 
     <span style="color:#3F8F4E">"cpf_input"</span>: {
         <span style="color:#3F8F4E">"ios"</span>: (<span style="color:#3F8F4E">"a11y"</span>, <span style="color:#3F8F4E">"cpf"</span>),
@@ -368,7 +368,7 @@
       <div style="flex:1;overflow:hidden;padding:0 6px;font-size:11.5px">
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px"><span style="color:#6C7086;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#313244;color:#A6ADC8;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">W</span><span>Application</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px"><span style="color:#6C7086;font-size:8px">▾</span><span style="width:15px;height:15px;border-radius:4px;background:#313244;color:#A6ADC8;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">V</span><span>ScrollView</span></div>
-        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#F9E2AF;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#A6ADC8">StaticText “Crédito”</span></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#F9E2AF;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">T</span><span style="color:#A6ADC8">StaticText “Pedido”</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#A6E3A1;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#A6ADC8">TextField cpf_input</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 40px"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#26263a;color:#A6E3A1;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">I</span><span style="color:#A6ADC8">TextField renda_input</span></div>
         <div style="display:flex;align-items:center;gap:6px;padding:5px 8px 5px 40px;border-radius:7px;background:rgba(137,180,250,.16);border:1px solid rgba(137,180,250,.35)"><span style="width:8px"></span><span style="width:15px;height:15px;border-radius:4px;background:#89B4FA;color:#11111B;font:600 8px 'SF Mono',monospace;display:flex;align-items:center;justify-content:center">B</span><span style="font-weight:600">Button btn_continuar</span></div>
@@ -410,16 +410,16 @@
       <div style="flex:1;display:flex;min-height:0">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #313244">
           <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#181825;border-bottom:1px solid #313244">
-            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#89B4FA">pages/onboarding_credito.py</span>
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#89B4FA">pages/cadastro_demo.py</span>
             <span style="margin-left:auto;font-size:10px;color:#6C7086">Copiar</span><span style="font-size:10px;color:#6C7086">Salvar</span>
           </div>
           <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
             <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#45475A;background:#181825">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16</div>
-            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#CDD6F4"><span style="color:#CBA6F7">from</span> locators.credito <span style="color:#CBA6F7">import</span> objs
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#CDD6F4"><span style="color:#CBA6F7">from</span> locators.cadastro_demo <span style="color:#CBA6F7">import</span> objs
 <span style="color:#CBA6F7">from</span> base.page <span style="color:#CBA6F7">import</span> BasePage
 
 
-<span style="color:#CBA6F7">class</span> <span style="color:#F9E2AF">OnboardingCredito</span>(BasePage):
+<span style="color:#CBA6F7">class</span> <span style="color:#F9E2AF">CadastroDemo</span>(BasePage):
 
     <span style="color:#CBA6F7">def</span> <span style="color:#89B4FA">preencher_cpf</span>(self, valor: <span style="color:#F9E2AF">str</span>):
         self.type(objs[<span style="color:#A6E3A1">"cpf_input"</span>], valor)
@@ -435,12 +435,12 @@
         </div>
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
           <div style="height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 13px;background:#181825;border-bottom:1px solid #313244">
-            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#94E2D5">locators/onboarding_credito.py</span>
+            <span style="font:600 10px 'SF Mono',Menlo,monospace;color:#94E2D5">locators/cadastro_demo.py</span>
             <span style="margin-left:auto;font-size:10px;color:#6C7086">Copiar</span><span style="font-size:10px;color:#6C7086">Salvar</span><span style="font-size:10px;color:#F38BA8">Limpar</span>
           </div>
           <div style="flex:1;display:flex;font:11.5px/1.85 'SF Mono',Menlo,monospace;overflow:hidden">
             <div style="width:34px;flex:none;text-align:right;padding:10px 8px 0 0;color:#45475A;background:#181825">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14</div>
-            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#CDD6F4">onboarding_credito_objs = {
+            <div style="flex:1;min-width:0;overflow:hidden;padding:10px 12px;white-space:pre;color:#CDD6F4">cadastro_demo_objs = {
 
     <span style="color:#A6E3A1">"cpf_input"</span>: {
         <span style="color:#A6E3A1">"ios"</span>: (<span style="color:#A6E3A1">"a11y"</span>, <span style="color:#A6E3A1">"cpf_input"</span>),
@@ -598,26 +598,26 @@
           <span>MÉTODO</span><span>STATUS</span><span>HOST</span><span>PATH</span><span style="text-align:right">TAMANHO</span><span style="text-align:right">TEMPO</span>
         </div>
         <div style="flex:1;overflow:hidden;font:11px 'SF Mono',Menlo,monospace">
-          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>api.banco.com.br</span><span>/v2/onboarding/config</span><span style="text-align:right">4.1 kB</span><span style="text-align:right">86 ms</span></div>
-          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>cdn.banco.com.br</span><span>/assets/banner-credito.webp</span><span style="text-align:right">88 kB</span><span style="text-align:right">142 ms</span></div>
-          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid rgba(137,180,250,.35);background:rgba(137,180,250,.14);color:#CDD6F4"><span style="color:#F9E2AF;font-weight:600">POST</span><span style="color:#A6E3A1;font-weight:600">201</span><span style="font-weight:600">api.banco.com.br</span><span style="font-weight:600">/v2/credito/simulacao</span><span style="text-align:right">2.6 kB</span><span style="text-align:right">311 ms</span></div>
-          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#F9E2AF">POST</span><span style="color:#F38BA8">422</span><span>api.banco.com.br</span><span>/v2/credito/documentos</span><span style="text-align:right">640 B</span><span style="text-align:right">204 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>api.demoapp.test</span><span>/v2/onboarding/config</span><span style="text-align:right">4.1 kB</span><span style="text-align:right">86 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>cdn.demoapp.test</span><span>/assets/banner-pedido.webp</span><span style="text-align:right">88 kB</span><span style="text-align:right">142 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid rgba(137,180,250,.35);background:rgba(137,180,250,.14);color:#CDD6F4"><span style="color:#F9E2AF;font-weight:600">POST</span><span style="color:#A6E3A1;font-weight:600">201</span><span style="font-weight:600">api.demoapp.test</span><span style="font-weight:600">/v2/pedido/simulacao</span><span style="text-align:right">2.6 kB</span><span style="text-align:right">311 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#F9E2AF">POST</span><span style="color:#F38BA8">422</span><span>api.demoapp.test</span><span>/v2/pedido/documentos</span><span style="text-align:right">640 B</span><span style="text-align:right">204 ms</span></div>
           <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#A6E3A1">200</span><span>firebaseinstallations.googleapis.com</span><span>/v1/projects/mobaile</span><span style="text-align:right">1.2 kB</span><span style="text-align:right">98 ms</span></div>
           <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#94E2D5">CONNECT</span><span style="color:#7F849C">—</span><span>app-measurement.com</span><span>tunnel TLS</span><span style="text-align:right">—</span><span style="text-align:right">12 ms</span></div>
-          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#F9E2AF">304</span><span>api.banco.com.br</span><span>/v2/feature-flags</span><span style="text-align:right">0 B</span><span style="text-align:right">41 ms</span></div>
-          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;color:#A6ADC8"><span style="color:#F9E2AF">PUT</span><span style="color:#A6E3A1">200</span><span>api.banco.com.br</span><span>/v2/usuario/perfil</span><span style="text-align:right">910 B</span><span style="text-align:right">176 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;border-bottom:1px solid #26263a;color:#A6ADC8"><span style="color:#89B4FA">GET</span><span style="color:#F9E2AF">304</span><span>api.demoapp.test</span><span>/v2/feature-flags</span><span style="text-align:right">0 B</span><span style="text-align:right">41 ms</span></div>
+          <div style="display:grid;grid-template-columns:64px 62px 1fr 300px 84px 76px;padding:7px 14px;color:#A6ADC8"><span style="color:#F9E2AF">PUT</span><span style="color:#A6E3A1">200</span><span>api.demoapp.test</span><span>/v2/usuario/perfil</span><span style="text-align:right">910 B</span><span style="text-align:right">176 ms</span></div>
         </div>
       </div>
 
       <div style="flex:1;display:flex;min-height:0">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #313244">
           <div style="height:30px;flex:none;display:flex;align-items:center;gap:12px;padding:0 13px;background:#181825;border-bottom:1px solid #313244;font-size:11px"><span style="font-weight:620">Request</span><span style="color:#6C7086">Headers</span><span style="color:#CDD6F4;border-bottom:1.5px solid #89B4FA;padding-bottom:6px">Body</span></div>
-          <div style="flex:1;padding:12px 14px;font:11px/1.8 'SF Mono',Menlo,monospace;white-space:pre;color:#CDD6F4;overflow:hidden"><span style="color:#6C7086">POST /v2/credito/simulacao HTTP/1.1</span>
+          <div style="flex:1;padding:12px 14px;font:11px/1.8 'SF Mono',Menlo,monospace;white-space:pre;color:#CDD6F4;overflow:hidden"><span style="color:#6C7086">POST /v2/pedido/simulacao HTTP/1.1</span>
 {
   <span style="color:#89B4FA">"cpf"</span>: <span style="color:#A6E3A1">"***.***.***-12"</span>,
   <span style="color:#89B4FA">"renda_mensal"</span>: <span style="color:#FAB387">7400.00</span>,
   <span style="color:#89B4FA">"prazo_meses"</span>: <span style="color:#FAB387">24</span>,
-  <span style="color:#89B4FA">"origem"</span>: <span style="color:#A6E3A1">"onboarding_credito"</span>
+  <span style="color:#89B4FA">"origem"</span>: <span style="color:#A6E3A1">"cadastro_demo"</span>
 }</div>
         </div>
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
@@ -626,7 +626,7 @@
   <span style="color:#89B4FA">"simulacao_id"</span>: <span style="color:#A6E3A1">"sim_9f2c41"</span>,
   <span style="color:#89B4FA">"limite_aprovado"</span>: <span style="color:#FAB387">18500.00</span>,
   <span style="color:#89B4FA">"taxa_am"</span>: <span style="color:#FAB387">1.99</span>,
-  <span style="color:#89B4FA">"status"</span>: <span style="color:#A6E3A1">"PRE_APROVADO"</span>
+  <span style="color:#89B4FA">"status"</span>: <span style="color:#A6E3A1">"CONFIRMADO"</span>
 }</div>
         </div>
       </div>
@@ -650,7 +650,7 @@
     </div>
     <div style="flex:1;display:flex">
       <div style="width:384px;border-right:1px solid #313244;background:#181825;display:flex;align-items:center;justify-content:center"><div style="width:200px;height:420px;border-radius:32px;background:#0B0B12;border:1px solid #313244;padding:6px"><div style="width:100%;height:100%;border-radius:27px;background:#151520;padding:34px 16px;display:flex;flex-direction:column;gap:10px"><div style="height:9px;width:58%;border-radius:3px;background:#26263a"></div><div style="height:80px;border-radius:10px;background:repeating-linear-gradient(135deg,#1b1b28 0 7px,#212130 7px 14px)"></div><div style="height:30px;border-radius:9px;background:#26263a"></div><div style="height:30px;border-radius:9px;background:#26263a"></div></div></div></div>
-      <div style="flex:1;padding:16px;font:11px/1.9 'SF Mono',Menlo,monospace;color:#45475A;white-space:pre">class OnboardingCredito(BasePage):
+      <div style="flex:1;padding:16px;font:11px/1.9 'SF Mono',Menlo,monospace;color:#45475A;white-space:pre">class CadastroDemo(BasePage):
 
     def preencher_cpf(self, valor: str):
         self.type(objs["cpf_input"], valor)
@@ -664,7 +664,7 @@
 
   <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:860px;border-radius:14px;background:#1E1E2E;border:1px solid #45475A;box-shadow:0 32px 80px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column">
     <div style="height:44px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;background:#181825;border-bottom:1px solid #313244">
-      <span style="font-size:13px;font-weight:640">Executar fluxo · onboarding_credito</span>
+      <span style="font-size:13px;font-weight:640">Executar fluxo · cadastro_demo</span>
       <span style="padding:2px 8px;border-radius:6px;background:rgba(166,227,161,.14);color:#A6E3A1;font:600 10px 'SF Mono',monospace">EM EXECUÇÃO</span>
       <span style="margin-left:auto;font-size:11px;color:#6C7086">iPhone 15 Pro · WDA 8100 ✓ · Proxy 8082 ✓</span>
     </div>
@@ -685,14 +685,14 @@
       </div>
       <div style="flex:1;min-width:0;border-radius:10px;background:#0B0B12;border:1px solid #313244;display:flex;flex-direction:column;overflow:hidden">
         <div style="height:28px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #26263a;font:10px 'SF Mono',Menlo,monospace;color:#6C7086"><span>.flow_runner.py</span><span style="margin-left:auto">stdout · streaming</span></div>
-        <div style="flex:1;padding:11px 12px;font:10.5px/1.75 'SF Mono',Menlo,monospace;white-space:pre-wrap;color:#A6ADC8"><span style="color:#585B70">14:22:01</span> <span style="color:#89B4FA">INFO</span>  sessão WDA criada (bundle br.app.banco)
+        <div style="flex:1;padding:11px 12px;font:10.5px/1.75 'SF Mono',Menlo,monospace;white-space:pre-wrap;color:#A6ADC8"><span style="color:#585B70">14:22:01</span> <span style="color:#89B4FA">INFO</span>  sessão WDA criada (bundle com.example.demoapp)
 <span style="color:#585B70">14:22:02</span> <span style="color:#89B4FA">INFO</span>  proxy global apontado para 127.0.0.1:8082
 <span style="color:#585B70">14:22:03</span> <span style="color:#A6E3A1">PASS</span>  01 abrir_app · 1.2 s
 <span style="color:#585B70">14:22:05</span> <span style="color:#A6E3A1">PASS</span>  02 preencher_cpf · 0.8 s
 <span style="color:#585B70">14:22:06</span> <span style="color:#A6E3A1">PASS</span>  03 preencher_renda · 0.6 s
 <span style="color:#585B70">14:22:07</span> <span style="color:#89B4FA">RUN</span>   04 tocar_continuar
 <span style="color:#585B70">14:22:07</span> <span style="color:#6C7086">·</span>     aguardando settle (diff &lt; 0.4%)…
-<span style="color:#585B70">14:22:08</span> <span style="color:#F9E2AF">HTTP</span>  POST /v2/credito/simulacao → 201 (311 ms)
+<span style="color:#585B70">14:22:08</span> <span style="color:#F9E2AF">HTTP</span>  POST /v2/pedido/simulacao → 201 (311 ms)
 <span style="color:#585B70">14:22:08</span> <span style="color:#F9E2AF">FA</span>    simulacao_concluida {origem, valor}
 <span style="color:#585B70">14:22:08</span> <span style="color:#6C7086">·</span>     tela estável · extraindo hierarquia</div>
       </div>

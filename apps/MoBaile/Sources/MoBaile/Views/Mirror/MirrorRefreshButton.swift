@@ -48,7 +48,7 @@ struct MirrorRefreshButton: View {
 /// Popover de correlação: o último passo gravado e o que foi capturado.
 ///
 /// O cartão antigo mostrava o passo com `String(describing:)` e, sem tráfego,
-/// gerava a asserção para um endpoint fixo (`/v2/credito/simulacao`, status
+/// gerava a asserção para um endpoint fixo (`/v2/pedido/simulacao`, status
 /// 200) que não tinha nada a ver com o app em teste. Sem requisição capturada,
 /// o botão agora fica desabilitado.
 struct CorrelationPopover: View {

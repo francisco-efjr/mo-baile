@@ -6,7 +6,7 @@ from mobaile.services.hierarchy import UIElement
 
 class TestCodeGenerator(unittest.TestCase):
     def setUp(self):
-        self.generator = CodeGenerator(page_objects_key="onboarding_credito_objs")
+        self.generator = CodeGenerator(page_objects_key="cadastro_demo_objs")
         self.element_ios = UIElement(
             tag="XCUIElementTypeButton",
             class_name="XCUIElementTypeButton",
@@ -44,7 +44,7 @@ class TestCodeGenerator(unittest.TestCase):
         )
 
         self.assertIn("AppiumBy.ACCESSIBILITY_ID", obj_line)
-        self.assertIn("self.click(self.locators['onboarding_credito_objs'].CHECK_BOX_BOTAO_", act_block)
+        self.assertIn("self.click(self.locators['cadastro_demo_objs'].CHECK_BOX_BOTAO_", act_block)
 
     def test_bloco_segue_o_padrao_do_page_object(self):
         """O que aparece no editor e colado como esta no Page Object da casa:
@@ -53,7 +53,7 @@ class TestCodeGenerator(unittest.TestCase):
         var_name, obj_line, act_block = self.generator.generate_entry(
             self.element_ios, strategy=LocatorStrategy.ID
         )
-        ref = f"self.locators['onboarding_credito_objs'].{var_name}"
+        ref = f"self.locators['cadastro_demo_objs'].{var_name}"
 
         self.assertEqual(
             obj_line.strip(),
@@ -72,7 +72,7 @@ class TestCodeGenerator(unittest.TestCase):
             bounds=(0, 0, 100, 40), area=4000, package="", platform="ios",
         )
         var_name, _obj, act_block = self.generator.generate_entry(campo, strategy=LocatorStrategy.POSITION)
-        ref = f"self.locators['onboarding_credito_objs'].{var_name}"
+        ref = f"self.locators['cadastro_demo_objs'].{var_name}"
 
         self.assertEqual(act_block.splitlines()[1:], [
             f"        self.wait_to_be_visible({ref}, 15)",

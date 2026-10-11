@@ -17,7 +17,7 @@ function highlight(line) {
 function genPages(steps) {
   const L = [];
   steps.forEach(s => {
-    const ref = "self.locators['onboarding_credito_objs']." + s.varName;
+    const ref = "self.locators['cadastro_demo_objs']." + s.varName;
     const arg = s.action === "send_keys" ? "self, texto" : "self";
     L.push({ t: "def " + s.method + "(" + arg + "):", step: s.id });
     L.push({ t: "    self.wait_to_be_visible(" + ref + ", 15)", step: s.id });
@@ -85,9 +85,9 @@ function PageObjectsView({ steps, strategy, setStrategy, split, setSplit, active
         </div>
       ) : (
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-          {(split || tab === "pages") && <CodeEditor title="onboarding_credito_objs.py" path="pages" color="var(--syntax-function)" lines={pages} activeStep={activeStep} onToast={onToast} onClear={onClearSteps} />}
+          {(split || tab === "pages") && <CodeEditor title="cadastro_demo_objs.py" path="pages" color="var(--syntax-function)" lines={pages} activeStep={activeStep} onToast={onToast} onClear={onClearSteps} />}
           {split && <div className="mb-splitter" />}
-          {(split || tab === "locators") && <CodeEditor title="onboarding_credito_objs.py" path="locators" color="var(--accent-text)" lines={locs} activeStep={activeStep} onToast={onToast} onClear={onClearSteps} />}
+          {(split || tab === "locators") && <CodeEditor title="cadastro_demo_objs.py" path="locators" color="var(--accent-text)" lines={locs} activeStep={activeStep} onToast={onToast} onClear={onClearSteps} />}
         </div>
       )}
       <div style={{ height: 26, flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "0 12px", borderTop: "1px solid var(--separator)", fontSize: 11, color: "var(--label-secondary)", background: "var(--bg-content)" }}>

@@ -39,14 +39,14 @@ def novo_parser() -> OkHttpLogParser:
 
 
 NIVEL_BODY = [
-    linha("--> POST https://api.exemplo.com.br/v2/credito/simulacao?canal=app"),
+    linha("--> POST https://api.exemplo.com.br/v2/pedido/simulacao?canal=app"),
     linha("Content-Type: application/json; charset=UTF-8"),
     linha("Content-Length: 15"),
     linha("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.segredo"),
     linha(""),
     linha('{"valor": 5000}'),
     linha("--> END POST (15-byte body)"),
-    linha("<-- 201 https://api.exemplo.com.br/v2/credito/simulacao?canal=app (182ms)"),
+    linha("<-- 201 https://api.exemplo.com.br/v2/pedido/simulacao?canal=app (182ms)"),
     linha("content-type: application/json"),
     linha(""),
     linha('{"parcelas": 12, "token": "abc123"}'),
@@ -59,7 +59,7 @@ class TestNiveisDoInterceptor(unittest.TestCase):
         (evento,) = alimentar(novo_parser(), NIVEL_BODY)
         self.assertEqual((evento.method, evento.status_code, evento.status_text), ("POST", 201, "Created"))
         self.assertEqual(evento.host, "api.exemplo.com.br")
-        self.assertEqual(evento.path, "/v2/credito/simulacao?canal=app")
+        self.assertEqual(evento.path, "/v2/pedido/simulacao?canal=app")
         self.assertEqual(evento.duration_ms, 182.0)
         self.assertEqual(evento.time_str, "10:20:30.123")
         self.assertEqual(evento.request_body, '{"valor": 5000}')

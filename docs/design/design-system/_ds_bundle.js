@@ -2109,7 +2109,7 @@ function App() {
             id,
             method: "POST",
             status: 200,
-            host: "api.bancopraia.com.br",
+            host: "api.demoapp.test",
             path: "/v2/eventos/toque",
             size: 24,
             time: 96
@@ -2204,7 +2204,7 @@ function App() {
       label: "Salvar Page Object",
       shortcut: "⌘S",
       disabled: !steps.length,
-      onSelect: () => toast("onboarding_credito_objs.py salvo")
+      onSelect: () => toast("cadastro_demo_objs.py salvo")
     }, {
       label: "Exportar HAR…",
       shortcut: "⇧⌘E",
@@ -2484,7 +2484,7 @@ function App() {
         connected && toast("Tela capturada");
       } else if (key === "s") {
         e.preventDefault();
-        steps.length && toast("onboarding_credito_objs.py salvo");
+        steps.length && toast("cadastro_demo_objs.py salvo");
       } else if (["1", "2", "3"].includes(key)) {
         e.preventDefault();
         setSelectedStep(null);
@@ -3289,7 +3289,7 @@ function AppSidebar({
     selected: sel("analytics"),
     onSelect: () => onSection("analytics")
   })), /*#__PURE__*/React.createElement(SidebarSection, {
-    title: "Fluxo \xB7 onboarding_credito"
+    title: "Fluxo \xB7 cadastro_demo"
   }, steps.length ? /*#__PURE__*/React.createElement(StepsList, {
     steps: steps,
     selected: selectedStep,
@@ -3872,7 +3872,7 @@ function MirrorPane({
     },
     onMouseLeave: () => setHover(null),
     onClick: click
-  }, connected && !loading ? /*#__PURE__*/React.createElement(BankScreen, {
+  }, connected && !loading ? /*#__PURE__*/React.createElement(DemoAppScreen, {
     scale: (W - 14) / 208
   }) : /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3961,8 +3961,8 @@ function MirrorPane({
   }, "Correla\xE7\xE3o")))));
 }
 
-// Tela do app em teste (conteúdo do catálogo original: "Crédito pessoal").
-function BankScreen({
+// Tela do app em teste (conteúdo do catálogo original: "Novo pedido").
+function DemoAppScreen({
   scale = 1
 }) {
   const ink = "#17323F",
@@ -4003,7 +4003,7 @@ function BankScreen({
       fontSize: 10.5,
       fontWeight: 600
     }
-  }, "Cr\xE9dito pessoal"), /*#__PURE__*/React.createElement("div", {
+  }, "Novo pedido"), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       top: "9.2%",
@@ -4062,7 +4062,7 @@ function BankScreen({
       fontWeight: 700,
       lineHeight: "18px"
     }
-  }, "Simule seu cr\xE9dito", /*#__PURE__*/React.createElement("br", null), "em minutos"), /*#__PURE__*/React.createElement("div", {
+  }, "Simule seu pedido", /*#__PURE__*/React.createElement("br", null), "em minutos"), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       top: "50.5%",
@@ -4138,7 +4138,7 @@ function BankScreen({
 }
 Object.assign(window, {
   MirrorPane,
-  BankScreen
+  DemoAppScreen
 });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/macos-app/Mirror.jsx", error: String((e && e.message) || e) }); }
 
@@ -4356,7 +4356,7 @@ function highlight(line) {
 function genPages(steps) {
   const L = [];
   steps.forEach(s => {
-    const ref = "self.locators['onboarding_credito_objs']." + s.varName;
+    const ref = "self.locators['cadastro_demo_objs']." + s.varName;
     const arg = s.action === "send_keys" ? "self, texto" : "self";
     L.push({
       t: "def " + s.method + "(" + arg + "):",
@@ -4619,7 +4619,7 @@ function PageObjectsView({
       minHeight: 0
     }
   }, (split || tab === "pages") && /*#__PURE__*/React.createElement(CodeEditor, {
-    title: "onboarding_credito_objs.py",
+    title: "cadastro_demo_objs.py",
     path: "pages",
     color: "var(--syntax-function)",
     lines: pages,
@@ -4629,7 +4629,7 @@ function PageObjectsView({
   }), split && /*#__PURE__*/React.createElement("div", {
     className: "mb-splitter"
   }), (split || tab === "locators") && /*#__PURE__*/React.createElement(CodeEditor, {
-    title: "onboarding_credito_objs.py",
+    title: "cadastro_demo_objs.py",
     path: "locators",
     color: "var(--accent-text)",
     lines: locs,
@@ -5056,7 +5056,7 @@ function StructureSheet({
       margin: "0 0 12px",
       color: "var(--label-secondary)"
     }
-  }, "onboarding_credito \xB7 ", steps.length, " passos. Arraste na barra lateral para reordenar."), /*#__PURE__*/React.createElement(DataTable, {
+  }, "cadastro_demo \xB7 ", steps.length, " passos. Arraste na barra lateral para reordenar."), /*#__PURE__*/React.createElement(DataTable, {
     style: {
       height: 230,
       borderRadius: 8,
@@ -5219,7 +5219,7 @@ function FlowRunnerSheet({
       fontSize: 13,
       fontWeight: 700
     }
-  }, "Executar fluxo \xB7 onboarding_credito"), /*#__PURE__*/React.createElement(StatusIndicator, {
+  }, "Executar fluxo \xB7 cadastro_demo"), /*#__PURE__*/React.createElement(StatusIndicator, {
     status: badge[1],
     label: badge[0],
     mono: false
@@ -5874,7 +5874,7 @@ function AnalyticsView({
     width: 100,
     render: () => "iOS (Firebase)"
   }];
-  const raw = sel && "2026-10-08 " + sel.time + " BancoPraia[4821:91234] 11.3.0 - [FirebaseAnalytics][I-ACS023051] Logging event: origin, name, params: app, " + sel.name + ", {\n    " + Object.entries(sel.params).map(([k, v]) => k + ": " + v).join(", ") + "\n}";
+  const raw = sel && "2026-10-08 " + sel.time + " DemoApp[4821:91234] 11.3.0 - [FirebaseAnalytics][I-ACS023051] Logging event: origin, name, params: app, " + sel.name + ", {\n    " + Object.entries(sel.params).map(([k, v]) => k + ": " + v).join(", ") + "\n}";
   return /*#__PURE__*/React.createElement("div", {
     className: "mb-cq",
     style: {
@@ -6059,12 +6059,12 @@ window.MB_DATA = (() => {
   const nodes = [{
     id: "app",
     type: "W",
-    label: "Banco Praia",
+    label: "DemoApp",
     depth: 0,
     attrs: {
       type: "XCUIElementTypeApplication",
-      name: "Banco Praia",
-      label: "Banco Praia",
+      name: "DemoApp",
+      label: "DemoApp",
       bounds: "[0,0][1179,2556]",
       enabled: "true"
     }
@@ -6083,12 +6083,12 @@ window.MB_DATA = (() => {
   }, {
     id: "nav",
     type: "V",
-    label: "Crédito pessoal",
+    label: "Novo pedido",
     depth: 2,
     attrs: {
       type: "XCUIElementTypeNavigationBar",
-      name: "Crédito pessoal",
-      label: "Crédito pessoal",
+      name: "Novo pedido",
+      label: "Novo pedido",
       bounds: "[0,141][1179,317]",
       enabled: "true"
     }
@@ -6110,13 +6110,13 @@ window.MB_DATA = (() => {
   }, {
     id: "titulo",
     type: "T",
-    label: "Crédito pessoal",
+    label: "Novo pedido",
     depth: 3,
     box: [30, 9, 40, 5],
     attrs: {
       type: "XCUIElementTypeStaticText",
-      name: "Crédito pessoal",
-      label: "Crédito pessoal",
+      name: "Novo pedido",
+      label: "Novo pedido",
       bounds: "[420,200][760,260]",
       enabled: "true"
     }
@@ -6135,13 +6135,13 @@ window.MB_DATA = (() => {
   }, {
     id: "h1",
     type: "T",
-    label: "Simule seu crédito em minutos",
+    label: "Simule seu pedido em minutos",
     depth: 3,
     box: [8, 41, 60, 8],
     attrs: {
       type: "XCUIElementTypeStaticText",
-      name: "Simule seu crédito em minutos",
-      label: "Simule seu crédito em minutos",
+      name: "Simule seu pedido em minutos",
+      label: "Simule seu pedido em minutos",
       bounds: "[72,1020][860,1210]",
       enabled: "true"
     }
@@ -6227,11 +6227,11 @@ window.MB_DATA = (() => {
   const steps = [{
     id: "s1",
     action: "click",
-    element: "Simular crédito",
-    varName: "BOTAO_SIMULAR_CREDITO",
+    element: "Simular pedido",
+    varName: "BOTAO_SIMULAR_PEDIDO",
     strategy: "id",
-    selector: "Simular crédito",
-    method: "click_botao_simular_credito"
+    selector: "Simular pedido",
+    method: "click_botao_simular_pedido"
   }, {
     id: "s2",
     action: "send_keys",
@@ -6279,15 +6279,15 @@ window.MB_DATA = (() => {
     id: 1,
     method: "DELETE",
     status: null,
-    host: "api.bancopraia.com.br",
-    path: "/v2/credito/simulacao/sim_8f2c",
+    host: "api.demoapp.test",
+    path: "/v2/pedido/simulacao/sim_8f2c",
     size: 0,
     time: null
   }, {
     id: 2,
     method: "GET",
     status: 500,
-    host: "api.bancopraia.com.br",
+    host: "api.demoapp.test",
     path: "/v2/clientes/me/preferencias",
     size: 18,
     time: 1800
@@ -6295,17 +6295,17 @@ window.MB_DATA = (() => {
     id: 3,
     method: "POST",
     status: 422,
-    host: "api.bancopraia.com.br",
-    path: "/v2/credito/contratacao",
+    host: "api.demoapp.test",
+    path: "/v2/pedido/contratacao",
     size: 76,
     time: 266,
-    resBody: "{\n  \"erro\": \"limite_excedido\",\n  \"mensagem\": \"Valor acima do limite pré-aprovado.\"\n}"
+    resBody: "{\n  \"erro\": \"limite_excedido\",\n  \"mensagem\": \"Valor acima do limite permitido.\"\n}"
   }, {
     id: 4,
     method: "GET",
     status: 304,
-    host: "cdn.bancopraia.com.br",
-    path: "/img/onboarding/credito@3x.png",
+    host: "cdn.demoapp.test",
+    path: "/img/onboarding/pedido@3x.png",
     size: 0,
     time: 41
   }, {
@@ -6329,8 +6329,8 @@ window.MB_DATA = (() => {
     id: 7,
     method: "POST",
     status: 201,
-    host: "api.bancopraia.com.br",
-    path: "/v2/credito/simulacao",
+    host: "api.demoapp.test",
+    path: "/v2/pedido/simulacao",
     size: 116,
     time: 812,
     resBody: "{\n  \"cet_anual\": 28.399999999999,\n  \"parcelas\": 12,\n  \"primeiro_vencimento\": \"2026-11-10\",\n  \"simulacao_id\": \"sim_8f2c\",\n  \"valor_parcela\": 487.31999999999\n}"
@@ -6338,12 +6338,12 @@ window.MB_DATA = (() => {
     id: 8,
     method: "GET",
     status: 200,
-    host: "api.bancopraia.com.br",
-    path: "/v2/credito/ofertas",
+    host: "api.demoapp.test",
+    path: "/v2/pedido/ofertas",
     size: 103,
     time: 342
   }];
-  const reqHeaders = [["Accept-Language", "pt-BR"], ["Authorization", "Bearer eyJhbGciOi…"], ["Content-Type", "application/json"], ["User-Agent", "BancoPraia/5.42.0 (iPhone; iOS 18.6; Scale/3.00)"], ["X-Correlation-Id", "7c1e9f4a-2b3d-4e5f-9a8b-0c1d2e3f4a5b"]];
+  const reqHeaders = [["Accept-Language", "pt-BR"], ["Authorization", "Bearer eyJhbGciOi…"], ["Content-Type", "application/json"], ["User-Agent", "DemoApp/5.42.0 (iPhone; iOS 18.6; Scale/3.00)"], ["X-Correlation-Id", "7c1e9f4a-2b3d-4e5f-9a8b-0c1d2e3f4a5b"]];
   const events = [{
     id: 1,
     time: "13:02:19.740",
@@ -6363,7 +6363,7 @@ window.MB_DATA = (() => {
   }, {
     id: 3,
     time: "13:02:14.920",
-    name: "simulacao_credito_iniciada",
+    name: "simulacao_pedido_iniciada",
     params: {
       canal: "app_ios",
       parcelas: "12",
@@ -6376,7 +6376,7 @@ window.MB_DATA = (() => {
     name: "select_content",
     params: {
       content_type: "banner",
-      item_id: "credito"
+      item_id: "pedido"
     }
   }, {
     id: 5,
@@ -6384,8 +6384,8 @@ window.MB_DATA = (() => {
     name: "screen_view",
     params: {
       firebase_previous_screen: "home",
-      firebase_screen: "onboarding_credito",
-      firebase_screen_class: "OnboardingCreditoViewController"
+      firebase_screen: "cadastro_demo",
+      firebase_screen_class: "CadastroDemoViewController"
     }
   }, {
     id: 6,
@@ -6393,7 +6393,7 @@ window.MB_DATA = (() => {
     name: "session_start",
     params: {}
   }];
-  const log = [["11:03:20", "INFO", "Sessão Appium aberta · XCUITest · iPhone 16 (iOS 18.6)"], ["11:03:21", "INFO", "Page Object onboarding_credito_objs carregado (5 locators)"], ["11:03:22", "RUN", "passo 1 · click BOTAO_SIMULAR_CREDITO"], ["11:03:23", "PASS", "passo 1 ok"], ["11:03:24", "RUN", "passo 2 · send_keys CAMPO_CPF"], ["11:03:24", "HTTP", "POST /v2/credito/simulacao → 201 (812 ms)"], ["11:03:25", "PASS", "passo 2 ok"], ["11:03:26", "RUN", "passo 3 · send_keys CAMPO_VALOR"], ["11:03:27", "PASS", "passo 3 ok"], ["11:03:28", "RUN", "passo 4 · click BOTAO_CONTINUAR"], ["11:03:28", "FA", "clique_continuar {tela: simulacao, etapa: 2}"], ["11:03:29", "PASS", "passo 4 ok"], ["11:03:30", "RUN", "passo 5 · click BOTAO_CONFIRMAR_CONTRATACAO"], ["11:03:31", "PASS", "passo 5 ok"], ["11:03:32", "RUN", "passo 6 · click TOQUE_FECHAR"], ["11:03:33", "PASS", "passo 6 ok"]];
+  const log = [["11:03:20", "INFO", "Sessão Appium aberta · XCUITest · iPhone 16 (iOS 18.6)"], ["11:03:21", "INFO", "Page Object cadastro_demo_objs carregado (5 locators)"], ["11:03:22", "RUN", "passo 1 · click BOTAO_SIMULAR_PEDIDO"], ["11:03:23", "PASS", "passo 1 ok"], ["11:03:24", "RUN", "passo 2 · send_keys CAMPO_CPF"], ["11:03:24", "HTTP", "POST /v2/pedido/simulacao → 201 (812 ms)"], ["11:03:25", "PASS", "passo 2 ok"], ["11:03:26", "RUN", "passo 3 · send_keys CAMPO_VALOR"], ["11:03:27", "PASS", "passo 3 ok"], ["11:03:28", "RUN", "passo 4 · click BOTAO_CONTINUAR"], ["11:03:28", "FA", "clique_continuar {tela: simulacao, etapa: 2}"], ["11:03:29", "PASS", "passo 4 ok"], ["11:03:30", "RUN", "passo 5 · click BOTAO_CONFIRMAR_CONTRATACAO"], ["11:03:31", "PASS", "passo 5 ok"], ["11:03:32", "RUN", "passo 6 · click TOQUE_FECHAR"], ["11:03:33", "PASS", "passo 6 ok"]];
   const failLine = ["11:03:45", "FAIL", "NoSuchElementError: BOTAO_CONFIRMAR_CONTRATACAO não ficou visível em 15 s"];
   const devices = [{
     id: "iphone16",

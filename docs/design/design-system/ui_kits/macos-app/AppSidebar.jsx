@@ -69,7 +69,7 @@ function AppSidebar({ width, section, selectedStep, onSection, onStep, steps, co
         <SidebarItem icon="network" iconColor="var(--cat-3)" label="Rede HTTP" count={counts.requests || null} selected={sel("network")} onSelect={() => onSection("network")} />
         <SidebarItem icon="chart-line" iconColor="var(--cat-2)" label="Analytics" count={counts.events || null} selected={sel("analytics")} onSelect={() => onSection("analytics")} />
       </SidebarSection>
-      <SidebarSection title="Fluxo · onboarding_credito">
+      <SidebarSection title="Fluxo · cadastro_demo">
         {steps.length ? <StepsList steps={steps} selected={selectedStep} onSelect={onStep} onReorder={onReorder} onDelete={onDelete} onReveal={onStep} newIds={newIds} sidebarSize={sidebarSize} />
           : <div style={{ padding: "4px 8px", fontSize: 12, color: "var(--label-secondary)" }}>Nenhum passo gravado.</div>}
       </SidebarSection>

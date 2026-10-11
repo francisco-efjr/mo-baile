@@ -7,7 +7,7 @@ function StructureSheet({ open, steps, onClose, onRun }) {
     <Sheet open={open} onClose={onClose} onConfirm={onClose} width={680} ariaLabel="Estrutura do fluxo"
       footer={<><button type="button" className="mb-help" aria-label="Ajuda">?</button><span style={{ flex: 1 }} /><Button style={{ minWidth: 96 }} onClick={() => { onClose(); setTimeout(onRun, 350); }}>Rodar…</Button><Button variant="default" style={{ minWidth: 96 }} onClick={onClose}>Concluir</Button></>}>
       <h2 style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700 }}>Estrutura do fluxo</h2>
-      <p style={{ margin: "0 0 12px", color: "var(--label-secondary)" }}>onboarding_credito · {steps.length} passos. Arraste na barra lateral para reordenar.</p>
+      <p style={{ margin: "0 0 12px", color: "var(--label-secondary)" }}>cadastro_demo · {steps.length} passos. Arraste na barra lateral para reordenar.</p>
       <DataTable style={{ height: 230, borderRadius: 8, boxShadow: "inset 0 0 0 .5px var(--separator)" }} selected={sel} onSelectionChange={setSel} rowKey="id" rows={rows}
         columns={[{ key: "n", label: "#", width: 34, align: "right" }, { key: "action", label: "Ação", width: 90, mono: true }, { key: "element", label: "Elemento", width: "1fr" }, { key: "strategy", label: "Estratégia", width: 80 }, { key: "selector", label: "Coordenadas/Seletor", width: "1.3fr", mono: true }]} />
     </Sheet>
@@ -52,7 +52,7 @@ function FlowRunnerSheet({ open, steps, outcome, onClose, onToast }) {
           : <Button variant="default" style={{ minWidth: 96 }} onClick={onClose}>Concluir</Button>}
       </>}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Executar fluxo · onboarding_credito</h2>
+        <h2 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Executar fluxo · cadastro_demo</h2>
         <StatusIndicator status={badge[1]} label={badge[0]} mono={false} />
         <span style={{ flex: 1 }} />
         <StatusIndicator status="ok" label="WDA 8100" /><StatusIndicator status="ok" label="Proxy 8082" />

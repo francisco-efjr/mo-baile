@@ -1968,9 +1968,9 @@ class MobileRecorderApp:
     def _generate_contract_assertion(self):
         snippet = (
             "\n        # Asserção de contrato de API correlacionada (MITM)\n"
-            "        response = self.network_interceptor.wait_for_request('/v2/credito/simulacao', timeout=5.0)\n"
+            "        response = self.network_interceptor.wait_for_request('/v2/pedido/simulacao', timeout=5.0)\n"
             "        assert response.status_code == 201\n"
-            "        assert response.json()['status'] == 'PRE_APROVADO'\n"
+            "        assert response.json()['status'] == 'CONFIRMADO'\n"
         )
         self.actions_text.insert(tk.END, snippet)
         self.actions_text.see(tk.END)
@@ -2578,9 +2578,9 @@ class MobileRecorderApp:
 
     def _insert_initial_headers(self):
         act_hdr = (
-            "from locators.credito import objs\n"
+            "from locators.minha_tela import objs\n"
             "from base.page import BasePage\n\n\n"
-            "class OnboardingCredito(BasePage):\n"
+            "class MinhaTela(BasePage):\n"
             "    # Passos gerados automaticamente aparecerão abaixo\n"
         )
         self.actions_text.delete("1.0", tk.END)

@@ -11,7 +11,7 @@ que foi para [`arquivo-2.x/`](arquivo-2.x/) (as telas de lá não existem mais).
 - **Revisão rápida:** [`folha-de-contato.png`](folha-de-contato.png), todas as
   telas claras numa imagem só.
 - Cenário de dados: iOS, iPhone 16 (393×852 pt), Page Object
-  `onboarding_credito_objs`, seis passos gravados, seis requisições, três
+  `cadastro_demo_objs`, seis passos gravados, seis requisições, três
   eventos; Relatório com as fixtures do motor (7 validações).
 
 ## Como regenerar

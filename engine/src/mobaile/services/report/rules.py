@@ -5,8 +5,8 @@ o filtro de ruído do log_parser). Nada aqui faz I/O.
 
 Valores aceitos nos parâmetros da spec:
 
-- literal: ``app:credito:home``;
-- alternância, inteira ou em trecho: ``[0|1]``, ``app:credito:[pessoal|investimentos]:home``;
+- literal: ``app:pedido:home``;
+- alternância, inteira ou em trecho: ``[0|1]``, ``app:pedido:[pessoal|empresa]:home``;
 - ``[numero]``, ``[data]`` (dd/mm/aaaa) e ``[preenchido]`` (qualquer valor não
   vazio), inteiros ou em trecho: ``click:[numero]-parcela-com-seguro``;
 - ``re:<regex>``: expressão regular completa;
@@ -56,7 +56,7 @@ NOISE_EVENT_PATTERNS: tuple[str, ...] = (
 
 
 def clean_colon_spacing(value: Any) -> str:
-    """``app: credito: home `` vira ``app:credito:home``."""
+    """``app: pedido: home `` vira ``app:pedido:home``."""
     if not isinstance(value, str):
         return str(value)
     return re.sub(r"\s*:\s*", ":", value.strip())

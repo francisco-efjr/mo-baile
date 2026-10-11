@@ -54,17 +54,17 @@ def emitir_binario(dados):
 
 ANDROID_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
-  <node index="0" class="android.widget.FrameLayout" package="br.com.amobs" bounds="[0,0][1080,2400]" clickable="false" text="" content-desc="" resource-id="">
-    <node index="0" class="android.widget.TextView" package="br.com.amobs" bounds="[100,200][980,280]" clickable="false" text="Simulacao de credito" content-desc="" resource-id="br.com.amobs:id/titulo"/>
-    <node index="1" class="android.widget.EditText" package="br.com.amobs" bounds="[100,300][980,380]" clickable="true" text="" content-desc="Valor desejado" resource-id="br.com.amobs:id/campo_valor"/>
-    <node index="2" class="android.widget.Button" package="br.com.amobs" bounds="[100,400][980,560]" clickable="true" text="Continuar" content-desc="Continuar simulacao" resource-id="br.com.amobs:id/btn_continuar"/>
+  <node index="0" class="android.widget.FrameLayout" package="com.example.demoapp" bounds="[0,0][1080,2400]" clickable="false" text="" content-desc="" resource-id="">
+    <node index="0" class="android.widget.TextView" package="com.example.demoapp" bounds="[100,200][980,280]" clickable="false" text="Simulacao de pedido" content-desc="" resource-id="com.example.demoapp:id/titulo"/>
+    <node index="1" class="android.widget.EditText" package="com.example.demoapp" bounds="[100,300][980,380]" clickable="true" text="" content-desc="Valor desejado" resource-id="com.example.demoapp:id/campo_valor"/>
+    <node index="2" class="android.widget.Button" package="com.example.demoapp" bounds="[100,400][980,560]" clickable="true" text="Continuar" content-desc="Continuar simulacao" resource-id="com.example.demoapp:id/btn_continuar"/>
   </node>
 </hierarchy>"""
 
 IOS_XML = """<?xml version="1.0" encoding="UTF-8"?>
-<XCUIElementTypeApplication name="AMobs" label="AMobs" x="0" y="0" width="390" height="844">
+<XCUIElementTypeApplication name="DemoApp" label="DemoApp" x="0" y="0" width="390" height="844">
   <XCUIElementTypeWindow x="0" y="0" width="390" height="844">
-    <XCUIElementTypeStaticText name="titulo" label="Simulacao de credito" value="Simulacao de credito" x="24" y="80" width="342" height="30"/>
+    <XCUIElementTypeStaticText name="titulo" label="Simulacao de pedido" value="Simulacao de pedido" x="24" y="80" width="342" height="30"/>
     <XCUIElementTypeTextField name="campo_valor" label="Valor desejado" value="" x="24" y="130" width="342" height="44" accessible="true"/>
     <XCUIElementTypeButton name="btn_continuar" label="Continuar" x="24" y="200" width="342" height="50" accessible="true"/>
   </XCUIElementTypeWindow>

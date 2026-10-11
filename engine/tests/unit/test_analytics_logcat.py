@@ -18,16 +18,16 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertEqual(event.params.get("opened_from_app_list"), "1")
 
     def test_parse_logcat_line_case_b(self):
-        raw = "09-03 14:10:00.100 V/FA: Logging event: screen_view, Bundle[{ga_screen_name=app:home, flow_name=credito}]"
+        raw = "09-03 14:10:00.100 V/FA: Logging event: screen_view, Bundle[{ga_screen_name=app:home, flow_name=pedido}]"
         event = self.listener._parse_line(raw, platform="android")
         self.assertIsNotNone(event)
         self.assertEqual(event.event_name, "screen_view")
         self.assertEqual(event.tag, "FA")
-        self.assertEqual(event.params.get("flow_name"), "credito")
+        self.assertEqual(event.params.get("flow_name"), "pedido")
         self.assertEqual(event.params.get("ga_screen_name"), "app:home")
 
     def test_parse_ios_log_line(self):
-        raw = "2026-09-04 09:30:15.123456-0300 Default [FirebaseAnalytics] Logging event: origin=app, name=screen_view, params={ ga_screen = \"app:home\"; ga_screen_class = \"HomeController\"; flow_name = \"credito\"; }"
+        raw = "2026-09-04 09:30:15.123456-0300 Default [FirebaseAnalytics] Logging event: origin=app, name=screen_view, params={ ga_screen = \"app:home\"; ga_screen_class = \"HomeController\"; flow_name = \"pedido\"; }"
         event = self.listener._parse_line(raw, platform="ios")
         self.assertIsNotNone(event)
         self.assertEqual(event.event_name, "screen_view")
@@ -35,31 +35,31 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertEqual(event.platform, "ios")
         self.assertEqual(event.params.get("ga_screen"), "app:home")
         self.assertEqual(event.params.get("ga_screen_class"), "HomeController")
-        self.assertEqual(event.params.get("flow_name"), "credito")
+        self.assertEqual(event.params.get("flow_name"), "pedido")
 
     # Saida real de `log stream --style compact` para o log do Xcode com -FIRDebugEnabled.
     IOS_DEBUG_RECORD = (
         "2026-09-30 10:22:01.482 Df MeuApp[4321:1a2b3c] [com.google.utilities.logger:FirebaseAnalytics] "
         "10.22.1 - [FirebaseAnalytics][I-ACS023073] Debug mode is enabled. Marking event as debug and real-time. "
-        "Event name, parameters: interaction_credito_pessoal, {\n"
+        "Event name, parameters: interaction_pedido_pessoal, {\n"
         "    component = button;\n"
         "    detail = \"click:ir-para-o-saldo-da-conta\";\n"
-        "    flow_name = credito-pessoal;\n"
+        "    flow_name = pedido-pessoal;\n"
         "    ga_debug (_dbg) = 1;\n"
         "    ga_event_origin (_o) = app;\n"
         "    ga_realtime (_r) = 1;\n"
-        "    ga_screen (_sn) = app:creditos:pessoal:sucesso;\n"
+        "    ga_screen (_sn) = app:pedidos:pessoal:sucesso;\n"
         "    ga_screen_class (_sc) = LoginNavigationController;\n"
         "    ga_screen_id (_si) = -3365154693535786272;\n"
         "    insurance = 1;\n"
-        "    screen_name = app:credito:pessoal:sucesso;\n"
+        "    screen_name = app:pedido:pessoal:sucesso;\n"
         "}"
     )
 
     def test_parse_ios_registro_debug_mode(self):
         event = self.listener._parse_ios_record(self.IOS_DEBUG_RECORD)
         self.assertIsNotNone(event)
-        self.assertEqual(event.event_name, "interaction_credito_pessoal")
+        self.assertEqual(event.event_name, "interaction_pedido_pessoal")
         self.assertEqual(event.platform, "ios")
         self.assertEqual(event.tag, "iOS (Firebase)")
         self.assertEqual(event.time_str, "10:22:01.482")
@@ -67,7 +67,7 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertEqual(event.params["detail"], "click:ir-para-o-saldo-da-conta")
         self.assertEqual(event.params["ga_debug"], "1")
         self.assertEqual(event.params["ga_screen_id"], "-3365154693535786272")
-        self.assertEqual(event.params["screen_name"], "app:credito:pessoal:sucesso")
+        self.assertEqual(event.params["screen_name"], "app:pedido:pessoal:sucesso")
         self.assertEqual(len(event.params), 11)
 
     def test_parse_ios_nome_curto_e_parametro_aninhado(self):
@@ -140,7 +140,7 @@ class TestAnalyticsListener(unittest.TestCase):
         self.listener._stream_reader()
 
         self.assertEqual(len(recebidos), 1)
-        self.assertEqual(recebidos[0].event_name, "interaction_credito_pessoal")
+        self.assertEqual(recebidos[0].event_name, "interaction_pedido_pessoal")
         self.assertEqual(len(self.listener.events_history), 1)
 
     def test_start_ios_usa_log_stream_do_simulador(self):
@@ -171,9 +171,9 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertTrue(self.listener._device_ready.is_set())
         self.assertEqual(len(recebidos), 1)
         evento = recebidos[0]
-        self.assertEqual(evento.event_name, "interaction_credito_pessoal")
+        self.assertEqual(evento.event_name, "interaction_pedido_pessoal")
         self.assertEqual(evento.time_str, "10:22:01.482")
-        self.assertEqual(evento.params["flow_name"], "credito-pessoal")
+        self.assertEqual(evento.params["flow_name"], "pedido-pessoal")
         self.assertIn("MeuApp[321]", evento.raw_log)
 
     def _start_fisico_com_saida(self, saida: str):

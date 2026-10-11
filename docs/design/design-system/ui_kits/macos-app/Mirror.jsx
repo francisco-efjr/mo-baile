@@ -30,7 +30,7 @@ function MirrorPane({ compact, connected, loading, mode, nodes, selectedId, onSe
         <DeviceFrame width={W} height={H} screenRef={screen}
           onMouseMove={e => { if (connected && !loading) { const h = hit(e); setHover(h.node ? h.node.id : null); } }}
           onMouseLeave={() => setHover(null)} onClick={click}>
-          {connected && !loading ? <BankScreen scale={(W - 14) / 208} /> : (
+          {connected && !loading ? <DemoAppScreen scale={(W - 14) / 208} /> : (
             <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "var(--bg-device-screen)" }}>
               {loading ? <ProgressIndicator kind="spinner" size={20} /> : <span className="mb-mono" style={{ fontSize: 11, color: "var(--label-secondary)" }}>sem sinal</span>}
             </div>
@@ -57,18 +57,18 @@ function MirrorPane({ compact, connected, loading, mode, nodes, selectedId, onSe
   );
 }
 
-// Tela do app em teste (conteúdo do catálogo original: "Crédito pessoal").
-function BankScreen({ scale = 1 }) {
+// Tela do app em teste (conteúdo do catálogo original: "Novo pedido").
+function DemoAppScreen({ scale = 1 }) {
   const ink = "#17323F", blue = "#0F6E99";
   return (
     <div style={{ position: "absolute", left: 0, top: 0, width: 208, height: 450, transform: "scale(" + scale + ")", transformOrigin: "0 0", background: "#fff", color: ink, fontFamily: "var(--font-ui)", letterSpacing: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", padding: "13px 20px 0 22px", fontSize: 10.5, fontWeight: 600 }}><span>9:41</span><span style={{ opacity: .8 }}>●●● ▮</span></div>
-      <div style={{ position: "absolute", top: "9.5%", left: 0, right: 0, textAlign: "center", fontSize: 10.5, fontWeight: 600 }}>Crédito pessoal</div>
+      <div style={{ position: "absolute", top: "9.5%", left: 0, right: 0, textAlign: "center", fontSize: 10.5, fontWeight: 600 }}>Novo pedido</div>
       <div style={{ position: "absolute", top: "9.2%", left: "8%", color: blue, fontSize: 15, lineHeight: 1 }}>‹</div>
       <div style={{ position: "absolute", top: "19%", left: "50%", transform: "translateX(-50%)", width: 72, height: 72, borderRadius: 36, background: "#E3EEF3", display: "grid", placeItems: "center" }}>
         <div style={{ width: 32, height: 22, borderRadius: 4, background: blue, position: "relative" }}><div style={{ position: "absolute", left: 0, right: 0, top: 6, height: 3, background: "#fff" }} /><div style={{ position: "absolute", left: 5, bottom: 4, width: 6, height: 4, background: "#fff", borderRadius: 1 }} /></div>
       </div>
-      <div style={{ position: "absolute", top: "41.5%", left: "8%", right: "8%", fontSize: 15, fontWeight: 700, lineHeight: "18px" }}>Simule seu crédito<br />em minutos</div>
+      <div style={{ position: "absolute", top: "41.5%", left: "8%", right: "8%", fontSize: 15, fontWeight: 700, lineHeight: "18px" }}>Simule seu pedido<br />em minutos</div>
       <div style={{ position: "absolute", top: "50.5%", left: "8%", right: "8%", fontSize: 8, lineHeight: "11px", color: "#5A7C8B" }}>Sem compromisso. A taxa aparece antes de você contratar.</div>
       {[["CPF", "000.000.000-00", 55.5], ["Valor desejado", "R$ 5.000,00", 65]].map(([l, p, t]) => (
         <div key={l} style={{ position: "absolute", top: t + "%", left: "8%", right: "8%" }}>
@@ -82,4 +82,4 @@ function BankScreen({ scale = 1 }) {
     </div>
   );
 }
-Object.assign(window, { MirrorPane, BankScreen });
+Object.assign(window, { MirrorPane, DemoAppScreen });

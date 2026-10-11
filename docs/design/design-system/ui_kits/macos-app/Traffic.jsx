@@ -107,7 +107,7 @@ function AnalyticsView({ rows, listening, setListening, source, setSource, filte
     { key: "n", label: "Parâmetros", width: 84, align: "right", render: r => Object.keys(r.params).length },
     { key: "o", label: "Origem", width: 100, render: () => "iOS (Firebase)" }
   ];
-  const raw = sel && ("2026-10-08 " + sel.time + " BancoPraia[4821:91234] 11.3.0 - [FirebaseAnalytics][I-ACS023051] Logging event: origin, name, params: app, " + sel.name + ", {\n    " + Object.entries(sel.params).map(([k, v]) => k + ": " + v).join(", ") + "\n}");
+  const raw = sel && ("2026-10-08 " + sel.time + " DemoApp[4821:91234] 11.3.0 - [FirebaseAnalytics][I-ACS023051] Logging event: origin, name, params: app, " + sel.name + ", {\n    " + Object.entries(sel.params).map(([k, v]) => k + ": " + v).join(", ") + "\n}");
   return (
     <div className="mb-cq" style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, background: "var(--bg-content)" }}>
       <AccessoryBar>

@@ -269,8 +269,8 @@ def build() -> dict:
 
     traffic = NetworkEvent(
         id=7, timestamp=1757030000.5, time_str="14:32:10.123", method="POST",
-        url="https://api.exemplo.com.br/v2/credito/simulacao", host="api.exemplo.com.br",
-        path="/v2/credito/simulacao", status_code=200, status_text="OK",
+        url="https://api.exemplo.com.br/v2/pedido/simulacao", host="api.exemplo.com.br",
+        path="/v2/pedido/simulacao", status_code=200, status_text="OK",
         request_headers={"Content-Type": "application/json", "Authorization": "«redigido» (32 chars)"},
         request_body='{"valor":1000}', response_headers={"Content-Type": "application/json"},
         response_body='{"parcelas":12}', duration_ms=182.7, protocol="HTTP/1.1",
@@ -280,7 +280,7 @@ def build() -> dict:
 
     analytics = AnalyticsEvent(
         id=3, timestamp=1757030001.0, time_str="14:32:11.001", tag="FA", event_name="screen_view",
-        params={"screen_name": "onboarding_credito", "step": 2, "first_open": True},
+        params={"screen_name": "cadastro_demo", "step": 2, "first_open": True},
         raw_log="Logging event: screen_view", platform="android",
     )
     fixtures["notif_analytics.event"] = protocol.notification("analytics.event", analytics.to_dict())

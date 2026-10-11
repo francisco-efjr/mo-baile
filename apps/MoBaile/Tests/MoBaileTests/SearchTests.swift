@@ -4,7 +4,7 @@ import XCTest
 /// Busca da toolbar: qualquer dado capturado entra, não só o nome.
 ///
 /// Defeito que cobre: em Analytics a busca olhava só o nome do evento e a tag,
-/// e em Rede só host, path, método e status. Procurar "app:credito:home" (um
+/// e em Rede só host, path, método e status. Procurar "app:pedido:home" (um
 /// valor de parâmetro) ou um header não achava nada.
 @MainActor
 final class SearchTests: XCTestCase {
@@ -28,9 +28,9 @@ final class SearchTests: XCTestCase {
     private func estadoDeRede() -> AppState {
         let estado = AppState()
         estado.httpRequests = [
-            requisicao(1, metodo: "GET", url: "https://api.banco.com.br/v2/clientes/me?canal=app_ios", status: 200,
+            requisicao(1, metodo: "GET", url: "https://api.demoapp.test/v2/clientes/me?canal=app_ios", status: 200,
                        headers: ["X-Request-Id": "req-7f3a"], resposta: #"{"nome": "Ana"}"#),
-            requisicao(2, url: "https://api.banco.com.br/v2/credito/simulacao", status: 422,
+            requisicao(2, url: "https://api.demoapp.test/v2/pedido/simulacao", status: 422,
                        headers: ["Content-Type": "application/json"], corpo: #"{"valor": 5000}"#,
                        resposta: #"{"erro": "limite_excedido"}"#),
         ]
@@ -78,10 +78,10 @@ final class SearchTests: XCTestCase {
     func testAnalyticsAchaPorValorDeParametro() {
         let estado = AppState()
         estado.analyticsEvents = [
-            evento(1, "screen_view", ["ga_screen": "app:credito:home", "flow_name": "credito"]),
+            evento(1, "screen_view", ["ga_screen": "app:pedido:home", "flow_name": "pedido"]),
             evento(2, "interaction", ["detail": "click:parcelas", "component": "button"]),
         ]
-        estado.analyticsFilterText = "app:credito:home"
+        estado.analyticsFilterText = "app:pedido:home"
         XCTAssertEqual(estado.filteredAnalyticsEvents.map(\.id), [1])
         estado.analyticsFilterText = "click:parcelas"
         XCTAssertEqual(estado.filteredAnalyticsEvents.map(\.id), [2])

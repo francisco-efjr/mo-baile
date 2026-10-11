@@ -63,7 +63,7 @@ try:
     botao = next((e for e in dump["elements"] if "btn_continuar" in e["resource_id"]), None)
     check("botao do app localizado", botao is not None)
     check("bounds android convertidos", botao and botao["bounds"] == [100, 400, 980, 560], str(botao and botao["bounds"]))
-    check("package capturado", botao and botao["package"] == "br.com.amobs", str(botao and botao.get("package")))
+    check("package capturado", botao and botao["package"] == "com.example.demoapp", str(botao and botao.get("package")))
 
     argv = chamadas_adb()
     dumps = [a for a in argv if "uiautomator" in " ".join(a)]

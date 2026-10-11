@@ -34,9 +34,9 @@ class TestNormalizacaoDoOcr(unittest.TestCase):
     def test_valores(self):
         self.assertEqual(clean_value("[0/1]"), "[0|1]")
         self.assertEqual(clean_value("[011]"), "[0|1]")
-        self.assertEqual(clean_value("app:credito:[pessoal)investimentos]:sucesso"),
-                         "app:credito:[pessoal|investimentos]:sucesso")
-        self.assertEqual(clean_value("[seguro credito]"), "[seguro|credito]")
+        self.assertEqual(clean_value("app:pedido:[pessoal)empresa]:sucesso"),
+                         "app:pedido:[pessoal|empresa]:sucesso")
+        self.assertEqual(clean_value("[seguro pedido]"), "[seguro|pedido]")
         self.assertEqual(clean_value("[label do botao]"), "[label do botao]")  # descritivo, não alternância
         self.assertEqual(clean_value("[valor bruto]"), "[valor bruto]")
 
@@ -49,9 +49,9 @@ class TestNormalizacaoDoOcr(unittest.TestCase):
 class TestLeituraDeCard(unittest.TestCase):
     def test_card_com_observacao(self):
         card = read_card(CARD_INTERACTION, "a.png")
-        self.assertEqual(card.event, "interaction_credito_[pessoal|investimentos]")
-        self.assertEqual(card.params["screen_name"], "app:credito:[pessoal|investimentos]:simulacao")
-        self.assertEqual(card.params["flow_name"], "credito-[pessoal|investimentos]")
+        self.assertEqual(card.event, "interaction_pedido_[pessoal|empresa]")
+        self.assertEqual(card.params["screen_name"], "app:pedido:[pessoal|empresa]:simulacao")
+        self.assertEqual(card.params["flow_name"], "pedido-[pessoal|empresa]")
         self.assertEqual(card.bullets["component"], ["modal"])
         self.assertEqual(card.bullets["detail"], ["click:10-parcela-com-seguro", "click:fechar"])
         self.assertTrue(any("screen name" in d for d in card.doubts))
@@ -63,9 +63,9 @@ class TestLeituraDeCard(unittest.TestCase):
         self.assertIn("loan_insurance_value", card.params)
         self.assertNotIn("lue", card.params)
         self.assertEqual(card.params["insurance"], "[0|1]")
-        self.assertEqual(card.params["operation_type"], "[pessoal|investimentos]-pre-aprovado")
+        self.assertEqual(card.params["operation_type"], "[pessoal|empresa]-pre-agendado")
         self.assertEqual(card.params["items"],
-                         [{"item_id": "14063", "item_name": "credito-pessoal", "item_category": "simulacao"}])
+                         [{"item_id": "14063", "item_name": "pedido-pessoal", "item_category": "simulacao"}])
 
     def test_print_sem_texto_vira_duvida_e_nao_erro(self):
         card = read_card([], "vazio.png")
@@ -79,9 +79,9 @@ class TestSpecGerada(unittest.TestCase):
         self.spec, self.review = build_spec(cards, "Teste", "android", "/tmp/prints")
 
     def test_fluxos_e_variacoes(self):
-        self.assertEqual(list(self.spec["fluxos"]), ["pessoal", "investimentos"])
+        self.assertEqual(list(self.spec["fluxos"]), ["pessoal", "empresa"])
         card = self.spec["cards"][0]
-        self.assertEqual(card["evento"], "interaction_credito_{fluxo}")
+        self.assertEqual(card["evento"], "interaction_pedido_{fluxo}")
         self.assertEqual(card["params"]["component"], "modal")
         self.assertEqual([v["detail"] for v in card["variacoes"]],
                          ["click:[numero]-parcela-com-seguro", "click:fechar"])  # generalizado pela tabela
@@ -91,8 +91,8 @@ class TestSpecGerada(unittest.TestCase):
         self.assertEqual(params["installments"], "[numero]")
         self.assertEqual(params["due_date"], "[data]")
         self.assertEqual(params["loan_insurance_value"], "[numero]")
-        self.assertEqual(params["operation_type"], "{fluxo}-pre-aprovado")
-        self.assertEqual(params["items"][0]["item_name"], "credito-{fluxo}")
+        self.assertEqual(params["operation_type"], "{fluxo}-pre-agendado")
+        self.assertEqual(params["items"][0]["item_name"], "pedido-{fluxo}")
         self.assertEqual(params["items"][0]["item_id"], "[preenchido]")
         self.assertEqual(self.spec["cards"][1]["params_por_fluxo"], {"pessoal": {"items": [{"item_id": "14063"}]}})
 
@@ -208,11 +208,11 @@ class TestOcrReal(unittest.TestCase):
                 fonte = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 32)
             except OSError:
                 fonte = ImageFont.load_default()
-            ImageDraw.Draw(imagem).text((20, 40), "screen_name app:credito:home", fill="black", font=fonte)
+            ImageDraw.Draw(imagem).text((20, 40), "screen_name app:pedido:home", fill="black", font=fonte)
             caminho = Path(pasta) / "card.png"
             imagem.save(caminho)
             linhas = VisionOCR().read([caminho])[str(caminho)]
-            self.assertIn("app:credito:home", " ".join(ln.t for ln in linhas))
+            self.assertIn("app:pedido:home", " ".join(ln.t for ln in linhas))
 
 
 if __name__ == "__main__":

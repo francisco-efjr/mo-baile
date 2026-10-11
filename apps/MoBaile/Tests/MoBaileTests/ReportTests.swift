@@ -21,7 +21,7 @@ final class ReportContractTests: XCTestCase {
         XCTAssertEqual(spec.plataforma, .android)
         XCTAssertEqual(spec.cards, 3)
         XCTAssertEqual(spec.variants, 7)
-        XCTAssertEqual(spec.fluxos.map(\.key), ["pessoal", "investimentos"], "a ordem dos fluxos é a das colunas")
+        XCTAssertEqual(spec.fluxos.map(\.key), ["pessoal", "empresa"], "a ordem dos fluxos é a das colunas")
         XCTAssertEqual(spec.sections, ["Home", "Simulação"])
         XCTAssertEqual(spec.fileName, "spec.json")
         XCTAssertTrue(spec.printsDirExists)
@@ -48,9 +48,9 @@ final class ReportContractTests: XCTestCase {
     func testLinhaDivergenteTrazOQueCorrigir() throws {
         let relatorio = try resultado("report.audit", como: EngineDTO.ReportAuditPayload.self).toModel()
         let erro = try XCTUnwrap(relatorio.results.first {
-            $0.status == .error && $0.flow == "investimentos" && $0.variation == "click:parcelas"
+            $0.status == .error && $0.flow == "empresa" && $0.variation == "click:parcelas"
         })
-        XCTAssertEqual(erro.flowLabel, "CPAGI · credito-investimentos")
+        XCTAssertEqual(erro.flowLabel, "PDE · pedido-empresa")
         XCTAssertEqual(erro.checks.filter { !$0.ok }.map(\.field), ["component"])
         XCTAssertEqual(erro.checks.first { $0.field == "component" }?.obtained, "toggle")
         XCTAssertEqual(erro.divergences, "component: obtido toggle, esperado button")
@@ -62,7 +62,7 @@ final class ReportContractTests: XCTestCase {
         let relatorio = try resultado("report.audit", como: EngineDTO.ReportAuditPayload.self).toModel()
         let carrinho = try XCTUnwrap(relatorio.results.first { $0.event == "add_to_cart" && $0.flow == "pessoal" })
         let items = try XCTUnwrap(carrinho.matched?.params["items"])
-        XCTAssertTrue(items.contains("credito-pessoal"), items)
+        XCTAssertTrue(items.contains("pedido-pessoal"), items)
         XCTAssertEqual(carrinho.olderDivergent, 1)
     }
 
@@ -326,7 +326,7 @@ final class ReportAccessibilityTests: XCTestCase {
         estado.report = relatorio
         estado.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/log_obtido.json"))
         estado.selectedReportResultID = relatorio.results.first {
-            $0.status == .error && $0.flow == "investimentos" && $0.variation == "click:parcelas"
+            $0.status == .error && $0.flow == "empresa" && $0.variation == "click:parcelas"
         }?.id
         let sessao = EngineSession(state: estado, client: FakeEngine(respostas: [:]))
         return try AccessibilityInspector.arvore(
@@ -350,7 +350,7 @@ final class ReportAccessibilityTests: XCTestCase {
     func testLinhaDaValidacaoLeStatusEDivergencia() throws {
         let ax = try arvore(ReportView())
         let linha = ax.all.first { no in
-            no.role == "AXRow" && no.all.contains { $0.label.contains("Divergente: interaction_credito_investimentos") }
+            no.role == "AXRow" && no.all.contains { $0.label.contains("Divergente: interaction_pedido_empresa") }
         }
         XCTAssertNotNil(linha, ax.dump)
         XCTAssertEqual(linha?.isSelected, true, ax.dump)
@@ -364,8 +364,8 @@ final class ReportAccessibilityTests: XCTestCase {
         XCTAssertNotNil(ax.node(label: "Card do Figma"), ax.dump)
         // Texto estático expõe o conteúdo em `value`, que é o que o VoiceOver lê.
         let textos = ax.all.map { "\($0.label) \($0.value)" }.joined(separator: " | ")
-        XCTAssertTrue(textos.contains("interaction_credito_investimentos"), textos)
-        XCTAssertTrue(textos.contains("CPAGI · credito-investimentos"), textos)
+        XCTAssertTrue(textos.contains("interaction_pedido_empresa"), textos)
+        XCTAssertTrue(textos.contains("PDE · pedido-empresa"), textos)
         XCTAssertTrue(textos.contains("Sem print"), "falta dizer por que não há print:\n\(ax.dump)")
         XCTAssertFalse(textos.contains("Conecte um aparelho"), textos)
     }
@@ -374,7 +374,7 @@ final class ReportAccessibilityTests: XCTestCase {
     func testParametroDivergenteEAnunciado() throws {
         let ax = try arvore(ReportView())
         XCTAssertNotNil(ax.node(label: "component: diverge, obtido toggle, esperado button"), ax.dump)
-        XCTAssertNotNil(ax.node(label: "flow_name: confere, obtido credito-investimentos, esperado credito-investimentos"),
+        XCTAssertNotNil(ax.node(label: "flow_name: confere, obtido pedido-empresa, esperado pedido-empresa"),
                         ax.dump)
     }
 }

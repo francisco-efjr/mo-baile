@@ -87,10 +87,10 @@ DESCRIPTIVE_WORDS = ("valor", "numero", "número", "label", "data", "taxa", "ele
 
 def _bracket(m: re.Match[str]) -> str:
     inner = m.group(1)
-    inner = re.sub(r"(?<=[A-Za-zÀ-ú])\s*[)(/]\s*(?=[A-Za-zÀ-ú])", "|", inner)  # '[pessoal)investimentos]'
+    inner = re.sub(r"(?<=[A-Za-zÀ-ú])\s*[)(/]\s*(?=[A-Za-zÀ-ú])", "|", inner)  # '[pessoal)empresa]'
     words = [w for w in re.split(r"[\s|]+", inner.strip()) if w]
     if "|" not in inner and len(words) > 1 and not any(w.lower() in DESCRIPTIVE_WORDS for w in words):
-        inner = "|".join(words)  # '[seguro credito]' -> '[seguro|credito]' (o '|' sumiu no OCR)
+        inner = "|".join(words)  # '[seguro pedido]' -> '[seguro|pedido]' (o '|' sumiu no OCR)
     return "[" + re.sub(r"\s*\|\s*", "|", inner.strip()) + "]"
 
 

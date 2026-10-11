@@ -3,7 +3,7 @@ import Foundation
 /// Busca da toolbar em Rede, Analytics e Relatório.
 ///
 /// Procurava só no nome do evento (Analytics) ou em host, path e status (Rede).
-/// Quem depura tagueamento procura pelo valor ("app:credito:home", um
+/// Quem depura tagueamento procura pelo valor ("app:pedido:home", um
 /// `item_id`, um trecho do log); quem depura rede procura por um header, um
 /// campo do corpo ou a query da URL. Agora qualquer dado capturado entra.
 ///

@@ -55,8 +55,8 @@ Conteúdo textual do protótipo (nomes de arquivos, logs, endpoints) é exemplo 
   Analytics [4]` (badges numéricos de atividade), segundo segmented de estratégia
   `ID | XPath | Coords`, e à direita `Estrutura · 7 passos`, `Lado a lado` e botão
   `▶ Rodar Automação` (`#A6E3A1`, texto `#11111B`).
-  Abaixo, dois editores lado a lado: `pages/onboarding_credito.py` (título `#89B4FA`) e
-  `locators/onboarding_credito.py` (título `#94E2D5`), cada um com gutter de 34 px
+  Abaixo, dois editores lado a lado: `pages/cadastro_demo.py` (título `#89B4FA`) e
+  `locators/cadastro_demo.py` (título `#94E2D5`), cada um com gutter de 34 px
   (`#45475A` sobre `#181825`), corpo mono 11,5 px / line-height 1.85.
   Rodapé de 38 px com detalhes do passo gerado + `código sincronizado` em verde.
 - **Syntax highlighting**: keyword `#CBA6F7`, função `#89B4FA`, classe/tipo `#F9E2AF`,
@@ -89,7 +89,7 @@ com abas `Headers | Body` (aba ativa com underline `1.5px #89B4FA`) e JSON desta
 ### 1d — Flow Runner (diálogo de execução)
 Shell da app ao fundo dessaturado + overlay `rgba(17,17,27,.62)`. Modal 860 px de largura,
 raio 14 px, borda `#45475A`, sombra `0 32px 80px rgba(0,0,0,.6)`:
-- Header 44 px: título `Executar fluxo · onboarding_credito`, badge `EM EXECUÇÃO`
+- Header 44 px: título `Executar fluxo · cadastro_demo`, badge `EM EXECUÇÃO`
   (`rgba(166,227,161,.14)` / `#A6E3A1`), pré-condições à direita (`WDA 8100 ✓ · Proxy 8082 ✓`).
 - Barra de progresso 5 px (`#313244` / preenchimento `#A6E3A1`) + `passo 4 / 7`.
 - Esquerda (334 px): lista ordenada de passos — concluído (`✓` verde, fundo `#181825`),

@@ -40,7 +40,7 @@ try:
 
     resumo = m.ok("report.spec", {"path": str(spec_path)})
     check("spec lida com cards e variações", (resumo["cards"], resumo["variants"]) == (3, TOTAL), str(resumo))
-    check("fluxos na ordem da spec", [f["key"] for f in resumo["fluxos"]] == ["pessoal", "investimentos"])
+    check("fluxos na ordem da spec", [f["key"] for f in resumo["fluxos"]] == ["pessoal", "empresa"])
 
     # Sessão sem escuta: recusar é melhor que um relatório todo "não disparado".
     e = m.erro("report.audit", {"spec_path": str(spec_path), "source": "session"})
@@ -63,7 +63,7 @@ try:
     erro = next(r for r in rel["results"] if r["status"] == "error" and r["variation"] == "click:parcelas")
     check("divergência diz campo, obtido e esperado",
           erro["divergences"] == "component: obtido toggle, esperado button", erro["divergences"])
-    check("bloco da variação igual ao do board", erro["block"].startswith("// CPAGI · "))
+    check("bloco da variação igual ao do board", erro["block"].startswith("// PDE · "))
 
     destino = pasta / "exportado"
     exp = m.ok("report.export", {"directory": str(destino)}, timeout=60)

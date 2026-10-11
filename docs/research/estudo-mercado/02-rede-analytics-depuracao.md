@@ -689,7 +689,7 @@ o parser real alimentado com linhas no formato do logcat).
 - **`CorrelationCard` é fachada**: gera
   `self.network_interceptor.wait_for_request(...)`, função que não existe no
   código gerado, sobre "a última requisição" (não a do passo), e, sem tráfego,
-  insere o endpoint fixo `/v2/credito/simulacao`.
+  insere o endpoint fixo `/v2/pedido/simulacao`.
 - **Passo gravado não tem hora**: `AutomationStep` não carrega timestamp, então
   não há como saber quais requisições e eventos vieram depois dele.
 - **App que ignora proxy** (Flutter) aparece como "nenhum tráfego", sem aviso.

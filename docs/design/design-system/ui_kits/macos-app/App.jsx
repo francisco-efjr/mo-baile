@@ -105,7 +105,7 @@ function App() {
       toast("Toque enviado ao aparelho em x " + Math.round(pt.px * 11.79) + " · y " + Math.round(pt.py * 25.56));
       if (proxyOn && node && node.type === "B") {
         const id = Date.now();
-        setData(d => ({ ...d, requests: [...d.requests, { id, method: "POST", status: 200, host: "api.bancopraia.com.br", path: "/v2/eventos/toque", size: 24, time: 96 }] }));
+        setData(d => ({ ...d, requests: [...d.requests, { id, method: "POST", status: 200, host: "api.demoapp.test", path: "/v2/eventos/toque", size: 24, time: 96 }] }));
         setNewIds([id]); setTimeout(() => setNewIds([]), 700);
       }
     }
@@ -130,7 +130,7 @@ function App() {
   const menus = [
     { title: "Mo baile", items: [{ label: "Sobre o Mo baile" }, { separator: true }, { label: "Ajustes…", shortcut: "⌘,", onSelect: () => setSettings({ open: true, front: true }) }, { separator: true }, { label: "Ocultar Mo baile", shortcut: "⌘H" }, { label: "Sair do Mo baile", shortcut: "⌘Q" }] },
     { title: "Arquivo", items: [
-      { label: "Salvar Page Object", shortcut: "⌘S", disabled: !steps.length, onSelect: () => toast("onboarding_credito_objs.py salvo") },
+      { label: "Salvar Page Object", shortcut: "⌘S", disabled: !steps.length, onSelect: () => toast("cadastro_demo_objs.py salvo") },
       { label: "Exportar HAR…", shortcut: "⇧⌘E", disabled: !data.requests.length, onSelect: () => toast("network_traffic.har exportado") },
       { label: "Exportar JSON de Analytics…", disabled: !data.events.length, onSelect: () => toast("log_obtido.json exportado") },
       { separator: true }, { label: "Fechar Janela", shortcut: "⌘W" }] },
@@ -189,7 +189,7 @@ function App() {
       else if (key === "z" && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (key === "r" && !e.shiftKey) { e.preventDefault(); run(); }
       else if (key === "k") { e.preventDefault(); connected && toast("Tela capturada"); }
-      else if (key === "s") { e.preventDefault(); steps.length && toast("onboarding_credito_objs.py salvo"); }
+      else if (key === "s") { e.preventDefault(); steps.length && toast("cadastro_demo_objs.py salvo"); }
       else if (["1", "2", "3"].includes(key)) { e.preventDefault(); setSelectedStep(null); setSection(["pageObjects", "network", "analytics"][+key - 1]); }
     };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);

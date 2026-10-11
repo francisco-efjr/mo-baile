@@ -182,7 +182,7 @@ extension EngineContractTests {
         XCTAssertEqual(event.tag, "FA")
         XCTAssertEqual(event.platform, .android)
         // Parametro chega com string, numero e booleano no mesmo dicionario.
-        XCTAssertEqual(event.params["screen_name"], "onboarding_credito")
+        XCTAssertEqual(event.params["screen_name"], "cadastro_demo")
         XCTAssertEqual(event.params["step"], "2")
         XCTAssertEqual(event.params["first_open"], "true")
     }

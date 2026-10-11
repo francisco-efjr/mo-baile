@@ -45,7 +45,7 @@ final class LayoutSnapshotTests: XCTestCase {
         estado.workspaceTab = .report
         estado.reportSpec = relatorio.spec
         estado.report = relatorio
-        estado.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/Documents/log_obtido_android_investimentos.json"))
+        estado.reportLogSource = .file(URL(fileURLWithPath: "/Users/qa/Documents/log_obtido_android_empresa.json"))
         estado.selectedReportResultID = relatorio.results.first { $0.cardIndex == 0 }?.id
         try desenhar(
             VStack(spacing: 0) {
