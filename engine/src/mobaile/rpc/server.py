@@ -225,6 +225,14 @@ class EngineServer:
         self.platform: Platform = Platform.ANDROID
         self.device_id: str | None = None
         self.current_xml: str | None = None
+        # (serial, porta) do aparelho Android em que `proxy.start` ligou o
+        # proxy global e o `adb reverse`. O desmonte usa este registro, e nao o
+        # aparelho atual da sessao, que pode ter mudado (ARQ-1).
+        self._proxy_device: tuple[str, int] | None = None
+        # Este motor ja configurou algum aparelho? Se nao, um `proxy.stop`
+        # sem registro e a recuperacao do front depois de o motor anterior
+        # cair, e a limpeza vai para o aparelho da sessao.
+        self._proxy_configured_once = False
         self._stream: RealTimeStreamEngine | None = None
         self._watcher: DeviceWatcher | None = None
         self._flow_thread = None
@@ -450,6 +458,15 @@ class EngineServer:
             self.current_xml = None
             self._last_hierarchy_time = 0.0
             self._session_epoch += 1
+            proxy_anterior = self._proxy_device
+            if proxy_anterior and proxy_anterior[0] != device_id:
+                self._proxy_device = None
+            else:
+                proxy_anterior = None
+        if proxy_anterior:
+            # O aparelho que sai da sessao nao pode ficar com proxy apontando
+            # para ca: quando o motor parar, ele fica sem rede.
+            self._teardown_proxy_device(*proxy_anterior)
         watcher = self._watcher
         if watcher:
             watcher.set_platform(platform.value)
@@ -888,19 +905,48 @@ class EngineServer:
             self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
             self._proxy_notify_on = True
 
+    def _teardown_proxy_device(self, serial: str, port: int) -> None:
+        try:
+            self.adb.teardown_reverse_proxy(serial, port)
+        except Exception:
+            logger.exception("Falha ao desfazer o proxy no aparelho %s.", serial)
+
+    def _release_proxy_device(self, fallback: str | None) -> None:
+        """Desfaz o proxy do aparelho em que ele foi ligado.
+
+        Sem registro num motor que nunca configurou aparelho (o anterior caiu),
+        limpa o `fallback`, que e o aparelho Android da sessao: e o que a
+        recuperacao do front espera de um `proxy.stop`. Se este motor ja
+        desfez o que configurou, nao mexe em mais nenhum aparelho.
+        """
+        with self._state_lock:
+            registro, self._proxy_device = self._proxy_device, None
+            ja_configurou = self._proxy_configured_once
+        if registro:
+            self._teardown_proxy_device(*registro)
+        elif fallback and not ja_configurou:
+            self._teardown_proxy_device(fallback, self.proxy.port)
+
     def proxy_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self._ensure_proxy_notify()
         started = self.proxy.start()
         configured = False
         sessao = self._sessao()
         if started and params.get("configure_device") and sessao.platform is Platform.ANDROID and sessao.device_id:
+            with self._state_lock:
+                anterior = self._proxy_device
+            if anterior and anterior[0] != sessao.device_id:
+                self._release_proxy_device(None)
             configured = self.adb.setup_reverse_proxy(sessao.device_id, self.proxy.port)
+            if configured:
+                with self._state_lock:
+                    self._proxy_device = (sessao.device_id, self.proxy.port)
+                    self._proxy_configured_once = True
         return {"running": self.proxy.is_running(), "started": started, "device_configured": configured}
 
     def proxy_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
         sessao = self._sessao()
-        if sessao.platform is Platform.ANDROID and sessao.device_id:
-            self.adb.teardown_reverse_proxy(sessao.device_id, self.proxy.port)
+        self._release_proxy_device(sessao.device_id if sessao.platform is Platform.ANDROID else None)
         self.proxy.stop()
         return {"running": self.proxy.is_running()}
 
@@ -1639,10 +1685,13 @@ class EngineServer:
         self.devices_watch_stop({})
         sessao = self._sessao()
         try:
+            # Deixar o aparelho com proxy apontando para porta morta o deixaria
+            # sem rede depois que o app fecha. Vale o aparelho em que o proxy
+            # foi ligado, mesmo que a sessao tenha trocado de aparelho.
+            fallback = None
             if sessao.platform is Platform.ANDROID and sessao.device_id and self.proxy.is_running():
-                # Deixar o aparelho com proxy apontando para porta morta o
-                # deixaria sem rede depois que o app fecha.
-                self.adb.teardown_reverse_proxy(sessao.device_id, self.proxy.port)
+                fallback = sessao.device_id
+            self._release_proxy_device(fallback)
         except Exception:
             logger.exception("Falha ao desfazer a configuracao de proxy do dispositivo.")
         try:

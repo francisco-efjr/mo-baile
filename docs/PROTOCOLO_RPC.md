@@ -176,7 +176,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações |
 | `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos |
 | `engine.shutdown` | — | `{stopped}` na hora; o desmonte roda depois que a resposta sai. Fim do stdin e SIGTERM encerram pelo mesmo caminho, sem interromper o desmonte |
-| `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso |
+| `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele |
 | `devices.list` | `platform` | alvos conectados |
 | `devices.watch_start` | `poll_interval` | liga a detecção automática |
 | `devices.watch_stop` | — | desliga. Idempotente |
@@ -234,7 +234,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | Método | Parâmetros | Devolve |
 |---|---|---|
 | `proxy.start` | `configure_device` | estado do proxy e se o aparelho aceitou a configuração |
-| `proxy.stop` | — | desfaz também a configuração de proxy do aparelho |
+| `proxy.stop` | — | desfaz também a configuração de proxy no aparelho em que `proxy.start` a ligou, mesmo que a sessão tenha trocado de aparelho |
 | `proxy.events` | `limit` | histórico recente |
 | `proxy.clear` | — | limpa o histórico |
 | `netlog.start` | iOS: `udid` (opcional; sem ele, o primeiro iPhone confiado). Android: `device_id` (opcional; sem ele, o aparelho da sessão) | tráfego HTTPS do app em debug, sem proxy nem certificado, emitido como `proxy.event`. Escolhe pela plataforma da sessão. **iOS:** lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` (o app roda com `CFNETWORK_DIAGNOSTICS=3` no scheme; corpo normalmente indisponível). **Android:** lê do `adb logcat` o log do `HttpLoggingInterceptor` do OkHttp (o build de debug precisa do interceptor; BASIC traz a linha, HEADERS os headers, BODY os corpos), funciona com o debugger do Android Studio conectado; sem aparelho na sessão, `device_not_found`. Devolve `running`, `device_id`, `raw_log` (iOS: blocos brutos, headers sensíveis mascarados; Android: `null`) e `source` (`cfnetwork` ou `okhttp_logcat`) |
