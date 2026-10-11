@@ -20,6 +20,7 @@ Previews no arquivo:
 
 - "Parado: motor caiu de vez": a supervisão esgotou as 3 tentativas.
 - "Reiniciando": progresso, sem botão, com a tentativa em curso.
+- "Reinício pedido": progresso depois de Reiniciar Motor (faixa ou paleta), sem botão.
 - "Python inadequado (escuro)": a mensagem real de `EngineLocator.unsuitableMessage`, com dois Pythons recusados.
 
 ## Uso
@@ -51,7 +52,7 @@ Sem parâmetros. Lê `EngineSession` do ambiente.
 
 | Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `status` | `EngineStatus` | - | Estado do motor. Só `.restarting(String)` e `.stopped(String)` mostram faixa; a `String` é a mensagem exibida. |
+| `status` | `EngineStatus` | - | Estado do motor. Só `.restarting(String)`, `.restartRequested` e `.stopped(String)` mostram faixa; a `String` é a mensagem exibida. |
 | `onRestart` | `() -> Void` | - | Ação do botão Reiniciar Motor, que só existe no tom parado. |
 
 ### EngineStatusBanner.Conteudo
@@ -59,7 +60,7 @@ Sem parâmetros. Lê `EngineSession` do ambiente.
 | Prop | Type | Default | Description |
 | --- | --- | --- | --- |
 | `init?(_:)` | `EngineStatus` | - | `nil` quando o estado não merece faixa. |
-| `titulo` | `String` | - | "O motor caiu. Reiniciando…" ou "O motor está parado". |
+| `titulo` | `String` | - | "O motor caiu. Reiniciando…", "Reiniciando o motor…" ou "O motor está parado". |
 | `mensagem` | `String` | - | O motivo, como veio da sessão. |
 | `tom` | `Tom` | - | Variante visual. |
 | `reiniciando` | `Bool` | - | Atalho para `tom == .reiniciando`. |
@@ -69,7 +70,7 @@ Sem parâmetros. Lê `EngineSession` do ambiente.
 
 | Caso | Quando | Visual |
 | --- | --- | --- |
-| `.reiniciando` | A supervisão está subindo outro motor | `warningTint`, spinner pequeno, sem botão |
+| `.reiniciando` | A supervisão está subindo outro motor, ou o reinício pedido está em andamento | `warningTint`, spinner pequeno, sem botão |
 | `.parado` | Supervisão desistiu, ou o motor nem subiu | `dangerTint`, octógono em `destructive`, botão Reiniciar Motor em destaque |
 
 ### Ambiente
@@ -88,7 +89,7 @@ Sem parâmetros. Lê `EngineSession` do ambiente.
 
 - Papel: grupo com rótulo "Estado do motor". Título e mensagem formam um só elemento de leitura; o símbolo e o spinner ficam escondidos do VoiceOver. O botão é um `Button` nativo.
 - Teclado: Reiniciar Motor é alcançável por Tab com Controle Total por Teclado ligado, e Espaço aciona. A mensagem aceita seleção de texto, para copiar o comando de instalação.
-- Foco: a faixa não rouba o foco ao aparecer; quem está digitando continua onde estava.
+- Foco: a faixa não rouba o foco ao aparecer; quem está digitando continua onde estava. Ao apertar Reiniciar Motor o botão some (o tom vira reiniciando) e volta se o motor não subir.
 - VoiceOver: ao mudar para reiniciando ou parado, um anúncio lê título e mensagem, porque o VoiceOver não percebe sozinho uma view que aparece fora do foco.
 - Estado não só por cor: o tom muda o fundo, o símbolo (spinner ou octógono) e o título.
 - Movimento reduzido: sem a preferência, a faixa desliza do topo e esmaece com `Motion.smooth`. Com `accessibilityReduceMotion`, ela só esmaece, e a animação vira o crossfade linear curto do `Motion.smooth(reduceMotion: true)`.
@@ -98,9 +99,11 @@ Sem parâmetros. Lê `EngineSession` do ambiente.
 
 - A mensagem é a da sessão, sem reescrita: no Python inadequado ela já diz o que foi achado, o que instalar e que depois é só usar Reiniciar Motor.
 - Reiniciar Motor é o ciclo de vida que já existia (`disconnect()` + `connect()`), sem regra nova.
+- `restartEngine()` é idempotente: um segundo pedido (duplo clique, faixa e paleta juntas) espera o primeiro, e uma supervisão em andamento é cancelada e aguardada antes. Sobra sempre um motor só. Enquanto isso o estado é `.restartRequested`: a faixa mostra progresso sem botão e a paleta desabilita Reiniciar Motor com o motivo "O motor está reiniciando" (`EngineSession.isRestarting`).
+- O reinício limpa o cache da sonda do Python, então "instale o Pillow e use Reiniciar Motor" funciona sem reabrir o app.
 
 ## Troubleshooting
 
 ### A faixa não aparece com o motor fora do ar
 
-Na primeira subida o estado é `.starting` e quem cobre é o splash. A faixa só aparece em `.restarting` ou `.stopped`. Um erro de chamada qualquer com o motor conectado não é motor parado: `engineStatus` dá `.running` enquanto `isConnected` for verdadeiro.
+Na primeira subida o estado é `.starting` e quem cobre é o splash. A faixa só aparece em `.restarting`, `.restartRequested` ou `.stopped`. Um erro de chamada qualquer com o motor conectado não é motor parado: `engineStatus` dá `.running` enquanto `isConnected` for verdadeiro.

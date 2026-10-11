@@ -29,6 +29,8 @@ enum EngineStatus: Equatable, Sendable {
     case running
     /// A supervisão está subindo outro motor depois de uma queda.
     case restarting(String)
+    /// Reinício pedido pela pessoa (faixa ou paleta) em andamento (R-03).
+    case restartRequested
     /// O motor não está no ar e ninguém vai tentar de novo sozinho.
     case stopped(String)
 }
@@ -54,9 +56,19 @@ final class EngineSession {
     /// A supervisão está tentando subir outro motor (ver `recover`).
     private(set) var isRecovering = false
 
+    /// Reinício pedido pela pessoa em andamento (R-03).
+    private(set) var isRestartingOnRequest = false
+
+    /// Algum reinício em andamento, da supervisão ou pedido. A faixa e a
+    /// paleta usam para não oferecer outro por cima.
+    var isRestarting: Bool { isRecovering || isRestartingOnRequest }
+
     /// O que a faixa "Motor parado" mostra. Conectado vence tudo: um erro de
     /// chamada qualquer também grava `lastError` e não é motor parado.
     var engineStatus: EngineStatus {
+        // O pedido vence o "conectado": no começo do reinício o motor antigo
+        // ainda responde, mas já vai ser parado.
+        if isRestartingOnRequest { return .restartRequested }
         if isConnected { return .running }
         if isRecovering { return .restarting(state.statusMessage) }
         if let lastError { return .stopped(lastError) }
@@ -106,6 +118,15 @@ final class EngineSession {
     private var daemonTask: Task<Void, Never>?
     private var hierarchyRefreshTask: Task<Void, Never>?
     private var restartTask: Task<Void, Never>?
+    /// Única subida em voo, da abertura (`connect`) ou do reinício pedido.
+    /// Quem chega com uma em andamento espera por ela em vez de subir outro
+    /// motor (R-03: dois reinícios seguidos deixavam dois motores vivos).
+    private var connectTask: Task<Void, Never>?
+    private var manualRestartTask: Task<Void, Never>?
+    /// Muda a cada supervisão nova e a cada `disconnect()`. Uma supervisão
+    /// cancelada que termina depois só limpa `isRecovering` se ainda for a
+    /// atual.
+    private var recoveryGeneration = 0
     private var restartAttempts: [Date] = []
     private var watchingDevices = false
 
@@ -166,8 +187,25 @@ final class EngineSession {
 
     // MARK: - Ciclo de vida
 
+    /// Sobe o motor, se ainda não houver um. Idempotente: com uma subida ou uma
+    /// supervisão em andamento, espera por ela e não sobe outro.
     func connect() async {
+        if let connectTask {
+            await connectTask.value
+            return
+        }
+        if let restartTask {
+            await restartTask.value
+            return
+        }
         guard client == nil else { return }
+        let tarefa = Task { await self.performConnect() }
+        connectTask = tarefa
+        await tarefa.value
+        if connectTask == tarefa { connectTask = nil }
+    }
+
+    private func performConnect() async {
         restartAttempts.removeAll()
         do {
             let client = try await launch()
@@ -193,6 +231,7 @@ final class EngineSession {
         // ser lido como queda e disparar reinício.
         restartTask?.cancel()
         restartTask = nil
+        recoveryGeneration += 1
         isRecovering = false
         stopBackgroundWork()
         try? await client?.callIgnoringResult("devices.watch_stop")
@@ -210,8 +249,32 @@ final class EngineSession {
     /// É o mesmo ciclo de vida da janela: `disconnect()` cancela a supervisão
     /// e para o motor atual, se houver, e `connect()` sobe um novo, com a
     /// contagem de tentativas zerada. Não há um segundo caminho de subida.
+    ///
+    /// Idempotente (R-03): um segundo pedido com um reinício em andamento só
+    /// espera o primeiro. Uma subida da abertura em voo termina antes de ser
+    /// parada, e uma supervisão em voo é cancelada e aguardada, para nunca
+    /// haver dois motores subindo ao mesmo tempo.
     func restartEngine() async {
+        if let manualRestartTask {
+            await manualRestartTask.value
+            return
+        }
+        let tarefa = Task { await self.performRestart() }
+        manualRestartTask = tarefa
+        await tarefa.value
+        if manualRestartTask == tarefa { manualRestartTask = nil }
+    }
+
+    private func performRestart() async {
+        isRestartingOnRequest = true
+        defer { isRestartingOnRequest = false }
+        state.statusMessage = "Reiniciando o motor…"
+        if let connectTask { await connectTask.value }
+        let supervisao = restartTask
         await disconnect()
+        // Cancelada pelo `disconnect()`; se estava no meio de uma subida, para
+        // o motor que subiu antes de voltar.
+        await supervisao?.value
         // Quem pediu o reinício pode ter acabado de instalar o que faltava (ou
         // desinstalado algo): a sonda do Python roda de novo (R-02).
         PythonProbe.clearCache()
@@ -360,15 +423,23 @@ final class EngineSession {
         restartTask?.cancel()
         // Já marca aqui: entre a queda e o início da tarefa, a faixa diria
         // "parado" por um instante.
+        recoveryGeneration += 1
+        let geracao = recoveryGeneration
         isRecovering = true
         restartTask = Task { [weak self] in
-            await self?.recover(after: status, restoring: snapshot)
+            await self?.recover(after: status, restoring: snapshot, generation: geracao)
         }
     }
 
-    private func recover(after status: Int32, restoring snapshot: RestoreSnapshot) async {
-        isRecovering = true
-        defer { isRecovering = false }
+    private func recover(after status: Int32, restoring snapshot: RestoreSnapshot, generation: Int) async {
+        // Só a supervisão atual desmarca: uma cancelada que termina depois de
+        // outra começar não pode dizer à faixa que ninguém está reiniciando.
+        defer {
+            if recoveryGeneration == generation {
+                isRecovering = false
+                restartTask = nil
+            }
+        }
         var motivo = EngineError.processTerminated(status).localizedDescription
         while !Task.isCancelled {
             // A janela conta tentativas, com ou sem sucesso: um motor que sobe e

@@ -66,6 +66,9 @@ actor FakeEngine: EngineCalling {
     func callIgnoringResult(_ method: String, params: [String: JSONValue]) async throws {
         chamadas.append(method)
         chamadasComParametros.append((method, params))
+        if metodosRetidos.contains(method) {
+            await withCheckedContinuation { retidos[method, default: []].append($0) }
+        }
         if let erro = erros[method] {
             throw erro
         }
@@ -126,8 +129,12 @@ actor FakeEngine: EngineCalling {
 
     /// O processo morre sem ninguém ter pedido.
     func cair(status: Int32) {
+        caiu = true
         terminos.yield(status)
     }
+
+    /// O processo morreu sozinho (`cair`).
+    private(set) var caiu = false
 }
 
 extension XCTestCase {

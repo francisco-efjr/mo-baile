@@ -25,7 +25,8 @@ struct EngineStatusBanner: View {
         /// Variante visual da faixa. Fechada: um estado novo do motor que
         /// mereça faixa entra aqui, com fundo e símbolo próprios.
         enum Tom: Equatable {
-            /// A supervisão está subindo outro motor: progresso, sem botão.
+            /// Um motor novo está subindo (supervisão ou pedido): progresso, sem
+            /// botão, para não haver reinício por cima de reinício.
             case reiniciando
             /// Ninguém vai tentar de novo sozinho: mensagem e Reiniciar Motor.
             case parado
@@ -51,6 +52,10 @@ struct EngineStatusBanner: View {
                 titulo = "O motor caiu. Reiniciando…"
                 self.mensagem = mensagem
                 tom = .reiniciando
+            case .restartRequested:
+                titulo = "Reiniciando o motor…"
+                mensagem = "O motor atual foi parado e um novo está subindo."
+                tom = .reiniciando
             case .stopped(let mensagem):
                 titulo = "O motor está parado"
                 self.mensagem = mensagem
@@ -71,7 +76,8 @@ struct EngineStatusBannerView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Estado do motor a desenhar. Só `.restarting` e `.stopped` mostram faixa.
+    /// Estado do motor a desenhar. Só `.restarting`, `.restartRequested` e
+    /// `.stopped` mostram faixa.
     let status: EngineStatus
     /// Chamado pelo botão Reiniciar Motor (só no tom parado).
     let onRestart: () -> Void
@@ -167,6 +173,12 @@ struct EngineStatusBannerView: View {
     )
     .environment(ThemeManager(preview: PraiaLightTheme()))
     .frame(width: DesignMetrics.Window.minSize.width - DesignMetrics.Widths.sidebarIdeal)
+}
+
+#Preview("Reinício pedido") {
+    EngineStatusBannerView(status: .restartRequested, onRestart: {})
+        .environment(ThemeManager(preview: PraiaLightTheme()))
+        .frame(width: DesignMetrics.Window.minSize.width - DesignMetrics.Widths.sidebarIdeal)
 }
 
 #Preview("Python inadequado (escuro)") {

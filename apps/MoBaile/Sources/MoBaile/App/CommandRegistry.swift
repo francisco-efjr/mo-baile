@@ -199,7 +199,7 @@ extension CommandContext {
     static func current(_ appState: AppState, _ session: EngineSession, _ theme: ThemeManager?) -> CommandContext {
         var c = CommandContext()
         c.engineConnected = session.isConnected
-        c.engineRestarting = session.isRecovering
+        c.engineRestarting = session.isRestarting
         c.platform = appState.platform
         c.workspaceTab = appState.workspaceTab
         c.devices = appState.availableDevices.map { DeviceOption(id: $0.id, name: $0.name.isEmpty ? $0.id : $0.name) }

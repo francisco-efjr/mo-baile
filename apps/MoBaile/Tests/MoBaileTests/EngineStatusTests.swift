@@ -32,13 +32,24 @@ final class EngineStatusTests: XCTestCase {
         return FakeEngine(respostas: respostas)
     }
 
-    private func esperar(_ descricao: String, prazo: Double = 3, _ condicao: () -> Bool) async throws {
+    private func esperar(_ descricao: String, prazo: Double = 3, _ condicao: () async -> Bool) async throws {
         let limite = Date().addingTimeInterval(prazo)
         while Date() < limite {
-            if condicao() { return }
+            if await condicao() { return }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("prazo estourado esperando: \(descricao)")
+    }
+
+    /// Motores fabricados que nem foram parados nem caíram.
+    private func vivos(_ fabrica: Fabrica) async -> Int {
+        var total = 0
+        for motor in fabrica.fabricados {
+            let parado = await motor.parado
+            let caiu = await motor.caiu
+            if !parado && !caiu { total += 1 }
+        }
+        return total
     }
 
     func testConteudoDaFaixaPorEstado() {
@@ -163,6 +174,117 @@ final class EngineStatusTests: XCTestCase {
         let primeiroParado = await fabrica.fabricados[0].parado
         XCTAssertTrue(primeiroParado, "o motor antigo foi parado, não abandonado")
         XCTAssertEqual(sessao.engineStatus, .running)
+        await sessao.disconnect()
+    }
+
+    // MARK: - R-03: reinício idempotente
+
+    /// Duplo clique no botão da faixa, ou faixa e paleta juntas: um motor só.
+    func testDoisReiniciosSeguidosDeixamUmMotorVivo() async throws {
+        let fabrica = Fabrica()
+        fabrica.fila = [try novoMotor(), try novoMotor(), try novoMotor()]
+        let sessao = EngineSession(state: AppState(), restartPolicy: politicaRapida) { try fabrica.fazer() }
+        await sessao.connect()
+
+        async let primeiro: Void = sessao.restartEngine()
+        async let segundo: Void = sessao.restartEngine()
+        _ = await (primeiro, segundo)
+
+        XCTAssertEqual(fabrica.fabricados.count, 2, "o segundo reinício subiu outro motor")
+        let vivosAgora = await vivos(fabrica)
+        XCTAssertEqual(vivosAgora, 1)
+        XCTAssertEqual(sessao.engineStatus, .running)
+        await sessao.disconnect()
+    }
+
+    /// Durante o reinício manual a faixa mostra progresso e a paleta desabilita
+    /// Reiniciar Motor, com o motivo.
+    func testReinicioManualApareceComoReiniciando() async throws {
+        let estado = AppState()
+        let fabrica = Fabrica()
+        let segundo = try novoMotor()
+        fabrica.fila = [try novoMotor(), segundo]
+        let sessao = EngineSession(state: estado, restartPolicy: politicaRapida) { try fabrica.fazer() }
+        await sessao.connect()
+
+        await segundo.reter("engine.hello")
+        let reinicio = Task { await sessao.restartEngine() }
+        try await esperar("o reinício chegar ao hello") { await segundo.quantasRetidas("engine.hello") == 1 }
+
+        XCTAssertTrue(sessao.isRestarting)
+        let conteudo = try XCTUnwrap(EngineStatusBanner.Conteudo(sessao.engineStatus), "sem faixa no reinício manual")
+        XCTAssertEqual(conteudo.tom, .reiniciando, "a faixa não oferece o botão durante o reinício")
+        let contexto = CommandContext.current(estado, sessao, nil)
+        XCTAssertEqual(CommandRegistry.command(.restartEngine, in: contexto)?.disabledReason, "O motor está reiniciando")
+
+        await segundo.liberar("engine.hello")
+        await reinicio.value
+        XCTAssertFalse(sessao.isRestarting)
+        XCTAssertEqual(sessao.engineStatus, .running)
+        await sessao.disconnect()
+    }
+
+    /// Reinício pedido enquanto a supervisão sobe outro motor depois de uma
+    /// queda: o motor da supervisão é descartado e sobra um só.
+    func testReinicioDuranteARecuperacaoDeixaUmMotorVivo() async throws {
+        let fabrica = Fabrica()
+        let primeiro = try novoMotor()
+        let daSupervisao = try novoMotor()
+        fabrica.fila = [primeiro, daSupervisao, try novoMotor()]
+        let sessao = EngineSession(state: AppState(), restartPolicy: politicaRapida) { try fabrica.fazer() }
+        await sessao.connect()
+
+        await daSupervisao.reter("engine.hello")
+        await primeiro.cair(status: 9)
+        try await esperar("a supervisão chegar ao hello") { await daSupervisao.quantasRetidas("engine.hello") == 1 }
+        XCTAssertTrue(sessao.isRecovering)
+
+        let reinicio = Task { await sessao.restartEngine() }
+        try await esperar("o reinício começar") { sessao.isRestarting && !sessao.isRecovering }
+        await daSupervisao.liberar("engine.hello")
+        await reinicio.value
+
+        XCTAssertEqual(fabrica.fabricados.count, 3)
+        let vivosAgora = await vivos(fabrica)
+        XCTAssertEqual(vivosAgora, 1, "sobrou mais de um motor no ar")
+        let supervisaoParada = await daSupervisao.parado
+        XCTAssertTrue(supervisaoParada, "o motor da supervisão cancelada ficou órfão")
+        XCTAssertEqual(sessao.engineStatus, .running)
+        XCTAssertFalse(sessao.isRecovering)
+        await sessao.disconnect()
+    }
+
+    /// Uma supervisão cancelada que termina depois não apaga a marca da
+    /// supervisão nova (contador de geração).
+    func testRecuperacaoAntigaNaoApagaAMarcaDaNova() async throws {
+        let fabrica = Fabrica()
+        let primeiro = try novoMotor()
+        let segundo = try novoMotor()
+        let terceiro = try novoMotor()
+        fabrica.fila = [primeiro, segundo, terceiro]
+        let sessao = EngineSession(state: AppState(), restartPolicy: politicaRapida) { try fabrica.fazer() }
+        await sessao.connect()
+
+        // A supervisão A sobe o segundo motor e fica presa na restauração.
+        await segundo.reter("devices.watch_start")
+        await primeiro.cair(status: 9)
+        try await esperar("A restaurar") { await segundo.quantasRetidas("devices.watch_start") == 1 }
+
+        // O segundo cai durante a restauração: A é cancelada e B começa, presa no hello.
+        await terceiro.reter("engine.hello")
+        await segundo.cair(status: 9)
+        try await esperar("B chegar ao hello") { await terceiro.quantasRetidas("engine.hello") == 1 }
+
+        // A termina agora, já cancelada.
+        await segundo.liberar("devices.watch_start")
+        try await esperar("A terminar") { await segundo.quantasRetidas("devices.watch_start") == 0 }
+        await Task.yield()
+        XCTAssertTrue(sessao.isRecovering, "a supervisão antiga apagou a marca da nova")
+        if case .restarting = sessao.engineStatus {} else { XCTFail("faixa deveria seguir reiniciando: \(sessao.engineStatus)") }
+
+        await terceiro.liberar("engine.hello")
+        try await esperar("B conectar") { sessao.engineStatus == .running }
+        XCTAssertFalse(sessao.isRecovering)
         await sessao.disconnect()
     }
 }
