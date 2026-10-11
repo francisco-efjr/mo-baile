@@ -36,6 +36,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
 import re
 import subprocess
 import threading
@@ -69,6 +70,8 @@ _URL_FIELD = re.compile(r"\b(?:url|URL)\s*[=:]\s*(https?://[^,}\s]+)")
 _STATUS = re.compile(r"Status Code:\s*(\d{3})")
 _HEADER_LINE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9\-]*):\s?(.*)$")
 _DICT_PAIR = re.compile(r'^\s*"?([^"=]+?)"?\s*=\s*\(?\s*"?(.*?)"?\s*\)?\s*;?\s*$')
+# Qualquer URL dentro de uma linha do bloco bruto, para passar por `redact_url`.
+_ANY_URL = re.compile(r"https?://[^\s,}>\"]+")
 _ERROR = re.compile(r"Error Domain=(\S+)\s+Code=(-?\d+)(?:.*?\"(.*?)\")?")
 # Rotulos do proprio diagnostico que parecem header mas nao sao.
 _NOT_HEADERS = {
@@ -312,13 +315,18 @@ def _headers_from_dict(lines: list[str]) -> dict[str, str]:
 
 
 def _mask_block(lines: list[str]) -> str:
-    """Bloco bruto com valores de headers sensiveis trocados por mascara."""
+    """Bloco bruto com headers sensiveis e credenciais de URL mascarados.
+
+    O bloco vai para um arquivo em disco: token na query string ou usuario e
+    senha na URL nao podem ir junto (SEC-3).
+    """
     out = []
     for line in lines:
         m = _HEADER_LINE.match(line)
         if m and m.group(1).lower() not in _NOT_HEADERS:
             masked = redact_headers({m.group(1): m.group(2)})[m.group(1)]
             line = line[: m.start(2)] + masked
+        line = _ANY_URL.sub(lambda u: redact_url(u.group(0)), line)
         out.append(line)
     return "\n".join(out)
 
@@ -423,9 +431,13 @@ class IOSDebugNetworkCapture:
         self._running = False
 
     def _save_raw(self, block: str) -> None:
+        """Acrescenta o bloco ao log bruto, legivel so pelo dono (0600)."""
         with self._raw_lock:
-            RAW_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            RAW_LOG_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if RAW_LOG_PATH.exists() and RAW_LOG_PATH.stat().st_size > RAW_LOG_MAX_BYTES:
                 RAW_LOG_PATH.replace(RAW_LOG_PATH.with_suffix(".log.1"))
-            with RAW_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fd = os.open(RAW_LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            # Arquivo de versao anterior pode ter nascido 0644.
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as fh:
                 fh.write(block + "\n\n")

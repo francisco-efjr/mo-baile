@@ -109,3 +109,53 @@ def test_filtro_do_filho_segue_o_bloco_por_pid():
     # Bloco inteiro num registro so nao deixa o pid aberto.
     assert f.keep(3, REQUEST)
     assert not f.keep(3, "linha solta")
+
+
+# ------------------------------------------------- SEC-3: log bruto em disco
+
+TOKEN_NA_URL = """CFNetwork Diagnostics [3:50] 10:20:40.000 {
+  Protocol Enqueue: request GET https://api.exemplo.com/v1/conta?access_token=tok987&pagina=2 HTTP/1.1
+         Request:  <CFURLRequest 0x1 [0x2]> {url = https://api.exemplo.com/v1/conta?access_token=tok987&pagina=2, cs = 0x0}
+         Message: GET https://usuario:senha321@api.exemplo.com/v1/conta?access_token=tok987&pagina=2 HTTP/1.1
+          Accept: */*
+} [3:50]"""
+
+
+def test_bloco_bruto_sai_com_a_url_redigida():
+    parser, raw = _parser()
+    parser.feed(10, TOKEN_NA_URL, now=100.0)
+    [bloco] = raw
+    assert "tok987" not in bloco
+    assert "senha321" not in bloco
+    # O que nao e sensivel continua la, para o diagnostico servir.
+    assert "pagina=2" in bloco
+    assert "api.exemplo.com/v1/conta" in bloco
+
+
+def test_log_bruto_e_criado_so_para_o_dono(tmp_path, monkeypatch):
+    import stat
+
+    from mobaile.adapters import ios_cfnetwork
+
+    caminho = tmp_path / "Logs" / "MoBaile" / "cfnetwork-diagnostics.log"
+    monkeypatch.setattr(ios_cfnetwork, "RAW_LOG_PATH", caminho)
+    captura = ios_cfnetwork.IOSDebugNetworkCapture(emit=lambda _e: None, next_id=lambda: 1)
+    captura._save_raw("bloco")
+    assert stat.S_IMODE(caminho.stat().st_mode) == 0o600
+    assert stat.S_IMODE(caminho.parent.stat().st_mode) == 0o700
+    assert caminho.read_text(encoding="utf-8") == "bloco\n\n"
+
+
+def test_log_bruto_antigo_aberto_para_todos_fica_so_do_dono(tmp_path, monkeypatch):
+    import stat
+
+    from mobaile.adapters import ios_cfnetwork
+
+    caminho = tmp_path / "cfnetwork-diagnostics.log"
+    caminho.write_text("antigo\n", encoding="utf-8")
+    caminho.chmod(0o644)
+    monkeypatch.setattr(ios_cfnetwork, "RAW_LOG_PATH", caminho)
+    captura = ios_cfnetwork.IOSDebugNetworkCapture(emit=lambda _e: None, next_id=lambda: 1)
+    captura._save_raw("novo")
+    assert stat.S_IMODE(caminho.stat().st_mode) == 0o600
+    assert caminho.read_text(encoding="utf-8") == "antigo\nnovo\n\n"
