@@ -98,6 +98,43 @@ final class EngineLocatorTests: XCTestCase {
         XCTAssertEqual(PythonProbe.run(quebrado).kind, .failed("saiu com erro 3"))
     }
 
+    /// R-02: falha não fica em cache. Quem instala o Pillow e usa Reiniciar
+    /// Motor precisa que a sonda rode de novo, e uma partida a frio lenta não
+    /// pode marcar o Python como inútil até o app ser reaberto.
+    func testCacheNaoGuardaFalha() {
+        let caminho = "/teste/cache-\(UUID().uuidString)/python3"
+        var respostas: [R] = [
+            R(kind: .missingModules(["Pillow"]), version: "3.12.1"),
+            R(kind: .failed("não respondeu em 3 s"), version: nil),
+            R(kind: .usable, version: "3.12.1"),
+        ]
+        var rodadas = 0
+        let sonda: (String) -> R = { _ in rodadas += 1; return respostas.removeFirst() }
+
+        XCTAssertFalse(PythonProbe.cached(caminho, runner: sonda).isUsable)
+        XCTAssertFalse(PythonProbe.cached(caminho, runner: sonda).isUsable)
+        XCTAssertTrue(PythonProbe.cached(caminho, runner: sonda).isUsable, "depois de instalar, a sonda vê o Python bom")
+        XCTAssertEqual(rodadas, 3, "falha não vem do cache")
+
+        // O que serve fica em cache: o reinício não paga a sonda de novo.
+        XCTAssertTrue(PythonProbe.cached(caminho, runner: sonda).isUsable)
+        XCTAssertEqual(rodadas, 3)
+    }
+
+    /// R-02: `clearCache()` esquece até o Python bom. O `restartEngine()` usa
+    /// isto para o caso de alguém desinstalar uma dependência com o app aberto.
+    func testLimparCacheFazSondarDeNovo() {
+        let caminho = "/teste/limpar-\(UUID().uuidString)/python3"
+        var rodadas = 0
+        let sonda: (String) -> R = { _ in rodadas += 1; return R(kind: .usable, version: "3.12.1") }
+        _ = PythonProbe.cached(caminho, runner: sonda)
+        _ = PythonProbe.cached(caminho, runner: sonda)
+        XCTAssertEqual(rodadas, 1)
+        PythonProbe.clearCache()
+        _ = PythonProbe.cached(caminho, runner: sonda)
+        XCTAssertEqual(rodadas, 2)
+    }
+
     /// O script de verdade, no Python desta máquina, quando houver um.
     func testScriptRodaNumPythonReal() throws {
         guard let python = EngineLocator.pythonCandidates().first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {

@@ -103,6 +103,18 @@ final class EngineStatusTests: XCTestCase {
         await sessao.disconnect()
     }
 
+    /// R-02: o Reiniciar Motor faz a sonda do Python rodar de novo.
+    func testReinicioManualLimpaOCacheDaSonda() async {
+        let caminho = "/teste/reinicio-\(UUID().uuidString)/python3"
+        var rodadas = 0
+        let sonda: (String) -> PythonProbe.Result = { _ in rodadas += 1; return .init(kind: .usable, version: "3.12.1") }
+        _ = PythonProbe.cached(caminho, runner: sonda)
+        let sessao = EngineSession(state: AppState()) { throw EngineError.engineNotFound("sem motor no teste") }
+        await sessao.restartEngine()
+        _ = PythonProbe.cached(caminho, runner: sonda)
+        XCTAssertEqual(rodadas, 2, "o reinício manual não limpou o cache da sonda")
+    }
+
     func testReinicioPedidoComMotorNoArTrocaOMotor() async throws {
         let fabrica = Fabrica()
         fabrica.fila = [try novoMotor(), try novoMotor()]

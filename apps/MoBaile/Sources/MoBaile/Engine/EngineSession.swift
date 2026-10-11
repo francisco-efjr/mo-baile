@@ -203,6 +203,9 @@ final class EngineSession {
     /// contagem de tentativas zerada. Não há um segundo caminho de subida.
     func restartEngine() async {
         await disconnect()
+        // Quem pediu o reinício pode ter acabado de instalar o que faltava (ou
+        // desinstalado algo): a sonda do Python roda de novo (R-02).
+        PythonProbe.clearCache()
         lastError = nil
         state.statusMessage = "Reiniciando o motor…"
         await connect()

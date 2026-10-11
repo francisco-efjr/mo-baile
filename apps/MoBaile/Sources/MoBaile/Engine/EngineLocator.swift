@@ -46,7 +46,7 @@ enum EngineLocator {
         if let override = environment[pythonOverrideKey], isExecutable(override) {
             return URL(fileURLWithPath: override)
         }
-        return try selectPython(from: pythonCandidates(), isExecutable: isExecutable, probe: PythonProbe.cached)
+        return try selectPython(from: pythonCandidates(), isExecutable: isExecutable, probe: { PythonProbe.cached($0) })
     }
 
     /// O primeiro candidato executável que passa na sonda (PY-1).
@@ -147,8 +147,9 @@ enum EngineLocator {
 /// Testa um interpretador antes de o motor depender dele (PY-1).
 ///
 /// Roda um `python3 -c` curto que informa a versão e os módulos ausentes, com
-/// prazo de 3 s. O resultado fica em cache por caminho durante a vida do app:
-/// a sonda roda na primeira subida e o reinício não paga de novo.
+/// prazo de 3 s. O Python que serve fica em cache por caminho: a sonda roda na
+/// primeira subida e a supervisão não paga de novo. Falha não fica em cache, e
+/// o Reiniciar Motor limpa tudo (R-02).
 enum PythonProbe {
     struct Result: Equatable, Sendable {
         enum Kind: Equatable, Sendable {
@@ -211,19 +212,35 @@ enum PythonProbe {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cache: [String: Result] = [:]
 
-    /// Sonda com cache por caminho.
-    static func cached(_ path: String) -> Result {
+    /// Sonda com cache por caminho (R-02).
+    ///
+    /// Só o resultado que serve fica guardado. Falha (sem Pillow, antigo, sem
+    /// resposta no prazo) roda de novo na próxima subida: é o que deixa
+    /// "instale o Pillow e use Reiniciar Motor" funcionar sem reabrir o app, e
+    /// impede que uma partida a frio lenta descarte um Python bom para sempre.
+    /// `runner` existe para o teste trocar a sonda de verdade.
+    static func cached(_ path: String, runner: (String) -> Result = { run($0) }) -> Result {
         lock.lock()
         if let pronto = cache[path] {
             lock.unlock()
             return pronto
         }
         lock.unlock()
-        let resultado = run(path)
-        lock.lock()
-        cache[path] = resultado
-        lock.unlock()
+        let resultado = runner(path)
+        if resultado.isUsable {
+            lock.lock()
+            cache[path] = resultado
+            lock.unlock()
+        }
         return resultado
+    }
+
+    /// Esquece tudo o que a sonda guardou. O `restartEngine()` chama: quem
+    /// desinstalou uma dependência com o app aberto também é atendido.
+    static func clearCache() {
+        lock.lock()
+        cache.removeAll()
+        lock.unlock()
     }
 
     /// Roda a sonda de verdade, sem cache.
