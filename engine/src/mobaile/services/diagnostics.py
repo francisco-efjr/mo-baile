@@ -22,6 +22,10 @@ from mobaile.domain.models import DaemonState
 logger = logging.getLogger(__name__)
 
 
+def _plural(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
 @dataclass
 class Check:
     """Uma linha do cartao de diagnostico."""
@@ -76,7 +80,7 @@ class DiagnosticsService:
         if not self.ios.is_xcrun_available():
             checks.append(Check(
                 "Ferramentas do Xcode", DaemonState.ERROR,
-                "xcrun nao encontrado. Instale as Command Line Tools.",
+                "xcrun não encontrado. Instale as Command Line Tools.",
             ))
             # Sem xcrun nada mais pode ser verificado.
             checks.append(Check("Simulador instalado", DaemonState.OFF, "depende do Xcode"))
@@ -95,7 +99,7 @@ class DiagnosticsService:
         if simuladores:
             checks.append(Check(
                 "Simulador instalado", DaemonState.OK,
-                f"{len(simuladores)} disponiveis",
+                f"{len(simuladores)} disponíve{'l' if len(simuladores) == 1 else 'is'}",
             ))
         else:
             checks.append(Check(
@@ -113,7 +117,7 @@ class DiagnosticsService:
                 "Nenhum em execucao.", action="boot_simulator",
             ))
         else:
-            checks.append(Check("Simulador ligado", DaemonState.OFF, "nao ha o que ligar"))
+            checks.append(Check("Simulador ligado", DaemonState.OFF, "não há o que ligar"))
 
         if self.ios.is_wda_running():
             checks.append(Check("WebDriverAgent", DaemonState.OK, settings.wda_url))
@@ -122,7 +126,7 @@ class DiagnosticsService:
         elif self.appium is None or not self.appium.is_installed:
             checks.append(Check(
                 "WebDriverAgent", DaemonState.WARN,
-                "Sem resposta, e o Appium nao foi encontrado. Instale com: npm i -g appium",
+                "Sem resposta, e o Appium não foi encontrado. Instale com: npm i -g appium",
             ))
         else:
             # Quem sobe o WDA aqui e o Appium, entao a acao e "pedir ao Appium".
@@ -144,7 +148,7 @@ class DiagnosticsService:
         if not self.adb.is_available():
             checks.append(Check(
                 "ADB instalado", DaemonState.ERROR,
-                "adb nao encontrado. Instale o Android SDK Platform Tools.",
+                "adb não encontrado. Instale o Android SDK Platform Tools.",
             ))
             checks.append(Check("Dispositivo autorizado", DaemonState.OFF, "depende do adb"))
             checks.append(Check("Emulador disponivel", DaemonState.OFF, "depende do adb"))
@@ -159,7 +163,7 @@ class DiagnosticsService:
         if prontos:
             checks.append(Check(
                 "Dispositivo autorizado", DaemonState.OK,
-                f"{len(prontos)} conectado(s)",
+                _plural(len(prontos), "conectado", "conectados"),
             ))
         elif pendentes:
             estados = ", ".join(sorted({d[1] for d in pendentes}))
@@ -177,17 +181,17 @@ class DiagnosticsService:
         if prontos:
             checks.append(Check(
                 "Emulador disponivel", DaemonState.OK,
-                f"{len(avds)} AVD(s)" if avds else "usando aparelho fisico",
+                _plural(len(avds), "emulador", "emuladores") if avds else "usando aparelho físico",
             ))
         elif avds:
             checks.append(Check(
                 "Emulador disponivel", DaemonState.WARN,
-                f"{len(avds)} AVD(s) parados.", action="boot_avd",
+                f"{_plural(len(avds), 'emulador parado', 'emuladores parados')}.", action="boot_avd",
             ))
         else:
             checks.append(Check(
                 "Emulador disponivel", DaemonState.ERROR,
-                "Nenhum AVD criado. Crie um pelo Android Studio.",
+                "Nenhum emulador criado. Crie um pelo Android Studio.",
             ))
 
         return PlatformDiagnostics("android", "Android · ADB", checks)
