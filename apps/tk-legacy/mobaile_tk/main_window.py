@@ -1385,7 +1385,7 @@ class MobileRecorderApp:
         act_hdr = tk.Frame(self.actions_frame, bg=t["bg_panel"], height=32, padx=12)
         act_hdr.pack(fill=tk.X, side=tk.TOP)
         act_hdr.pack_propagate(False)
-        self.lbl_act_title = tk.Label(act_hdr, text="pages/onboarding_credito.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_actions"], font=("Menlo", 10, "bold"))
+        self.lbl_act_title = tk.Label(act_hdr, text="pages/minha_tela.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_actions"], font=("Menlo", 10, "bold"))
         self.lbl_act_title.pack(side=tk.LEFT)
 
         self.btn_save_act = FluidPillButton(
@@ -1450,7 +1450,7 @@ class MobileRecorderApp:
         obj_hdr = tk.Frame(self.objects_frame, bg=t["bg_panel"], height=32, padx=12)
         obj_hdr.pack(fill=tk.X, side=tk.TOP)
         obj_hdr.pack_propagate(False)
-        self.lbl_obj_title = tk.Label(obj_hdr, text="locators/onboarding_credito.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_locators"], font=("Menlo", 10, "bold"))
+        self.lbl_obj_title = tk.Label(obj_hdr, text="locators/minha_tela.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_locators"], font=("Menlo", 10, "bold"))
         self.lbl_obj_title.pack(side=tk.LEFT)
 
         self.btn_clear = FluidPillButton(

@@ -10,7 +10,7 @@
       "adb_available": true,
       "scrcpy_available": false,
       "wda_url": "http://localhost:8100",
-      "page_objects_key": "onboarding_credito_objs",
+      "page_objects_key": "minha_tela_objs",
       "proxy": {
         "host": "127.0.0.1",
         "port": 8082,
@@ -461,7 +461,7 @@
     "result": {
       "var_name": "BOTAO_CONTINUAR",
       "object_code": "    BOTAO_CONTINUAR = (AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
-      "action_code": "    def click_continuar(self):\n        self.wait_to_be_visible(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 15)\n        self.click(self.locators['onboarding_credito_objs'].BOTAO_CONTINUAR, 2)\n",
+      "action_code": "    def click_continuar(self):\n        self.wait_to_be_visible(self.locators['minha_tela_objs'].BOTAO_CONTINUAR, 15)\n        self.click(self.locators['minha_tela_objs'].BOTAO_CONTINUAR, 2)\n",
       "element": {
         "tag": "node",
         "class_name": "android.widget.Button",
@@ -584,7 +584,7 @@
           {
             "label": "Simulador instalado",
             "state": "ok",
-            "detail": "2 disponiveis",
+            "detail": "2 disponíveis",
             "action": null
           },
           {
@@ -621,7 +621,7 @@
           {
             "label": "Emulador disponivel",
             "state": "warn",
-            "detail": "2 AVD(s) parados.",
+            "detail": "2 emuladores parados.",
             "action": "boot_avd"
           }
         ]

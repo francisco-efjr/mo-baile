@@ -23,7 +23,7 @@ class AppState {
     // --- Locator & Code ---
     /// Começa no "Seletor padrão" de Ajustes › Geral.
     var locatorStrategy: LocatorStrategy = LocatorStrategy.storedDefault
-    var locatorKey: String = "onboarding_credito"
+    var locatorKey: String = "minha_tela"
     var workspaceTab: WorkspaceTab = .pageObjects
 
     /// Mostra os dois editores lado a lado, ou só o de ações.
