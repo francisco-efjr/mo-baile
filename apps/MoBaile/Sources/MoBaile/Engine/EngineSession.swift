@@ -97,7 +97,7 @@ final class EngineSession {
     }
 
     private let state: AppState
-    private let makeClient: @MainActor () throws -> any EngineCalling
+    private let makeClient: @MainActor () async throws -> any EngineCalling
     private let restartPolicy: RestartPolicy
     private var client: (any EngineCalling)?
     private var notificationTask: Task<Void, Never>?
@@ -126,9 +126,18 @@ final class EngineSession {
     private var activeProgressToken: String?
     private var progressSequence = 0
 
-    convenience init(state: AppState) {
-        self.init(state: state) {
-            EngineClient(configuration: try EngineLocator.resolve())
+    convenience init(
+        state: AppState,
+        restartPolicy: RestartPolicy = RestartPolicy(),
+        resolve: @escaping @Sendable () throws -> EngineConfiguration = { try EngineLocator.resolve() }
+    ) {
+        self.init(state: state, restartPolicy: restartPolicy) {
+            // A sonda do Python é síncrona e pode levar até 3 s por candidato:
+            // fora do MainActor, o splash e a janela seguem respondendo (R-04).
+            let configuracao = try await Task.detached(priority: .userInitiated) {
+                try resolve()
+            }.value
+            return EngineClient(configuration: configuracao)
         }
     }
 
@@ -138,7 +147,7 @@ final class EngineSession {
     init(
         state: AppState,
         restartPolicy: RestartPolicy = RestartPolicy(),
-        makeClient: @escaping @MainActor () throws -> any EngineCalling
+        makeClient: @escaping @MainActor () async throws -> any EngineCalling
     ) {
         self.state = state
         self.restartPolicy = restartPolicy
@@ -217,7 +226,7 @@ final class EngineSession {
     /// versão do protocolo é parado aqui mesmo, sem chegar a receber chamada
     /// que ele entenderia de outro jeito.
     private func launch() async throws -> any EngineCalling {
-        let client = try makeClient()
+        let client = try await makeClient()
         try await client.start()
         do {
             try await handshake(with: client)

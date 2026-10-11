@@ -115,6 +115,44 @@ final class EngineStatusTests: XCTestCase {
         XCTAssertEqual(rodadas, 2, "o reinício manual não limpou o cache da sonda")
     }
 
+    /// Anota, de outra thread, onde a sonda rodou.
+    private final class RegistroDaSonda: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _naMain: Bool?
+        var naMain: Bool? {
+            get { lock.lock(); defer { lock.unlock() }; return _naMain }
+            set { lock.lock(); _naMain = newValue; lock.unlock() }
+        }
+    }
+
+    /// R-04: a sonda do Python (até 3 s por candidato) roda fora do MainActor.
+    /// Com a sonda presa, este teste, que roda no MainActor, continua andando.
+    func testSondaLentaNaoPrendeOMainActor() async throws {
+        let liberar = DispatchSemaphore(value: 0)
+        let registro = RegistroDaSonda()
+        let comecou = expectation(description: "a sonda começou")
+        let sessao = EngineSession(state: AppState(), restartPolicy: politicaRapida, resolve: {
+            registro.naMain = Thread.isMainThread
+            comecou.fulfill()
+            // Prazo só para o teste não travar se a sonda vier para o MainActor.
+            _ = liberar.wait(timeout: .now() + 5)
+            throw EngineError.pythonUnsuitable("Python de teste sem Pillow.")
+        })
+
+        let conexao = Task { await sessao.connect() }
+        await fulfillment(of: [comecou], timeout: 3)
+        // A sonda está presa e o MainActor atende: a sessão responde na hora.
+        XCTAssertEqual(sessao.engineStatus, .starting)
+        XCTAssertEqual(registro.naMain, false, "a sonda rodou no MainActor")
+        liberar.signal()
+        await conexao.value
+
+        guard case .stopped(let mensagem) = sessao.engineStatus else {
+            return XCTFail("esperava parado, veio \(sessao.engineStatus)")
+        }
+        XCTAssertTrue(mensagem.contains("sem Pillow"), mensagem)
+    }
+
     func testReinicioPedidoComMotorNoArTrocaOMotor() async throws {
         let fabrica = Fabrica()
         fabrica.fila = [try novoMotor(), try novoMotor()]
