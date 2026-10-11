@@ -7,6 +7,7 @@ name = "mobaile-tk"
 version = "3.4.0"
 description = "Interface Tkinter do Mo baile (camada de transicao para o front SwiftUI)"
 requires-python = ">=3.10"
+license = { text = "MIT" }
 dependencies = [
     "mobaile-engine",
     "Pillow>=10.0.0",

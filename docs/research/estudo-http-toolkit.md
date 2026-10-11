@@ -1,6 +1,6 @@
 # Estudo Arquitetural: HTTP Toolkit & Guia de Desenvolvimento para o Mobile Element Recorder
 
-Este documento apresenta um estudo aprofundado sobre a ferramenta **HTTP Toolkit**, sua arquitetura modular interna e suas técnicas de interceptação de tráfego de rede (especialmente em dispositivos móveis Android e iOS). Ao final, é apresentado um guia técnico de desenvolvimento que detalha como reproduzir essa arquitetura e integrá-la diretamente ao nosso projeto [Mobile Element Recorder (`epic-fermi`)](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/README.md).
+Este documento apresenta um estudo aprofundado sobre a ferramenta **HTTP Toolkit**, sua arquitetura modular interna e suas técnicas de interceptação de tráfego de rede (especialmente em dispositivos móveis Android e iOS). Ao final, é apresentado um guia técnico de desenvolvimento que detalha como reproduzir essa arquitetura e integrá-la diretamente ao nosso projeto Mobile Element Recorder (`epic-fermi`).
 
 ---
 
@@ -10,11 +10,11 @@ Antes de analisar o HTTP Toolkit, é fundamental compreender o estágio e a arqu
 
 ### O que o `epic-fermi` faz hoje
 O **Mobile Element Recorder** é uma ferramenta desktop desenvolvida em Python/Tkinter voltada para automação de testes mobile:
-- **Espelhamento em Tempo Real:** Captura o fluxo de tela de emuladores/dispositivos Android via ADB (`exec-out screencap`) e simuladores iOS via WebDriverAgent ([`stream_engine.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/stream_engine.py)).
-- **Detecção de Dispositivos e Automação:** Gerencia conexões e comandos nativos através de subprocessos no [`adb_bridge.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/adb_bridge.py) e endpoints REST no [`ios_bridge.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/ios_bridge.py).
-- **Escuta Passiva de Eventos:** Intercepta toques físicos na tela via `getevent` no Android e Quartz no macOS ([`passive_listener.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/passive_listener.py)).
-- **Inspeção de Hierarquia de UI:** Realiza o parse de árvores XML (`uiautomator dump` e WDA XML) calculando caixas delimitadoras e elementos clicáveis ([`element_parser.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/element_parser.py)).
-- **Geração de Código Appium:** Gera classes Page Object e ações de clique (`self.click(...)`, `self.click_at_position(...)`) baseadas em estratégias de ID, XPath e coordenadas ([`codegen.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/codegen.py)).
+- **Espelhamento em Tempo Real:** Captura o fluxo de tela de emuladores/dispositivos Android via ADB (`exec-out screencap`) e simuladores iOS via WebDriverAgent (`stream_engine.py`).
+- **Detecção de Dispositivos e Automação:** Gerencia conexões e comandos nativos através de subprocessos no `adb_bridge.py` e endpoints REST no `ios_bridge.py`.
+- **Escuta Passiva de Eventos:** Intercepta toques físicos na tela via `getevent` no Android e Quartz no macOS (`passive_listener.py`).
+- **Inspeção de Hierarquia de UI:** Realiza o parse de árvores XML (`uiautomator dump` e WDA XML) calculando caixas delimitadoras e elementos clicáveis (`element_parser.py`).
+- **Geração de Código Appium:** Gera classes Page Object e ações de clique (`self.click(...)`, `self.click_at_position(...)`) baseadas em estratégias de ID, XPath e coordenadas (`codegen.py`).
 
 ### A Oportunidade: Por que estudar o HTTP Toolkit?
 No ciclo de testes de aplicações móveis, **a interface visual (UI) é apenas metade da equação**. Quando um usuário toca em um botão na tela:
@@ -122,7 +122,7 @@ graph TD
 
 ## 4. Mergulho Profundo: Como o HTTP Toolkit Intercepta o Android
 
-O mecanismo de interceptação Android do HTTP Toolkit é uma das suas maiores inovações de engenharia reversa e segurança, sendo diretamente aplicável ao nosso contexto com [`adb_bridge.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/adb_bridge.py).
+O mecanismo de interceptação Android do HTTP Toolkit é uma das suas maiores inovações de engenharia reversa e segurança, sendo diretamente aplicável ao nosso contexto com `adb_bridge.py`.
 
 ### O Desafio Histórico do Android
 - **Android 7+ (Nougat):** Aplicativos deixaram de confiar em certificados instalados pelo usuário por padrão. Eles confiam apenas no Trust Store do Sistema (`/system/etc/security/cacerts/`).
@@ -183,7 +183,7 @@ Você precisa de um servidor proxy capaz de interceptar requisições HTTP e tú
 *Em Python, podemos implementar essa camada de forma robusta e assíncrona utilizando a biblioteca `mitmproxy` (que possui APIs prontas para extensão e escuta em Python).*
 
 ### Passo 2: O Orquestrador de Dispositivos (Device Injector)
-Integrar a automação de setup de rede diretamente com o nosso [`adb_bridge.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/adb_bridge.py):
+Integrar a automação de setup de rede diretamente com o nosso `adb_bridge.py`:
 1. **Configuração de Proxy via Shell ADB:**
    ```bash
    adb shell settings put global http_proxy 127.0.0.1:8000
@@ -282,7 +282,7 @@ class MobileNetworkProxy:
             self.master.shutdown()
 ```
 
-### 2. Extensão do [`adb_bridge.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/adb_bridge.py)
+### 2. Extensão do `adb_bridge.py`
 Adicionar ao `ADBBridge` métodos para automatizar o roteamento de tráfego do dispositivo conectado:
 
 ```python
@@ -306,8 +306,8 @@ def teardown_reverse_proxy(self, device_id: str, proxy_port: int = 8082) -> None
         pass
 ```
 
-### 3. Sinergia no [`codegen.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/codegen.py): Gravação Unificada (UI + API)
-Ao escutar os toques via [`passive_listener.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/passive_listener.py), podemos correlacionar o **timestamp do clique no elemento visual** com as **requisições de rede finalizadas nos segundos subsequentes**.
+### 3. Sinergia no `codegen.py`: Gravação Unificada (UI + API)
+Ao escutar os toques via `passive_listener.py`, podemos correlacionar o **timestamp do clique no elemento visual** com as **requisições de rede finalizadas nos segundos subsequentes**.
 
 O gerador de código pode produzir não apenas o comando de clique do Appium, mas também asserções de rede ou stubs automáticos:
 
@@ -343,7 +343,7 @@ def clicar_botao_confirmar_pagamento(self):
 
 ## 8. Conclusão e Próximos Passos Recomendados
 
-O estudo da arquitetura do **HTTP Toolkit** revela que seus métodos de instrumentação de baixo nível via ADB e Frida são os mesmos blocos de construção que tornam o nosso projeto [`epic-fermi`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/README.md) eficiente na captura de telas e toques.
+O estudo da arquitetura do **HTTP Toolkit** revela que seus métodos de instrumentação de baixo nível via ADB e Frida são os mesmos blocos de construção que tornam o nosso projeto `epic-fermi` eficiente na captura de telas e toques.
 
 ### Recomendações para Evolução:
 1. **Adicionar `mitmproxy` como dependência de desenvolvimento:** Permitirá inicializar um proxy programável em background diretamente pelo Python.

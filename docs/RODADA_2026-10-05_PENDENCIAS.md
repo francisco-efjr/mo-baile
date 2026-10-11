@@ -1,7 +1,7 @@
 # Rodada de melhorias 05–06/10/2026 — entregue e pendente
 
 Rodada orquestrada a partir de dois prompts:
-[`PROMPT_MELHORIAS_DEV_UX_QA.md`](PROMPT_MELHORIAS_DEV_UX_QA.md) (Prompt A: épicos A–D)
+[`PROMPT_MELHORIAS_DEV_UX_QA.md`](historico/PROMPT_MELHORIAS_DEV_UX_QA.md) (Prompt A: épicos A–D)
 e um segundo prompt com 7 itens de privacidade, robustez e distribuição (Prompt B, PB1–PB7).
 A rodada foi encerrada a pedido antes de terminar. Os seis agentes de implementação
 pararam duas vezes: primeiro no limite de uso da API e depois por encerramento manual.
@@ -29,7 +29,7 @@ independente estavam previstos ao final, e não chegaram a acontecer.
 
 | Commit | O que muda | Evidência |
 |---|---|---|
-| `4436082` fix(qa) | Correções locais da revisão de 05/10 ([`QA_2026-10-05.md`](QA_2026-10-05.md)): redação no proxy, cancelamento cooperativo, preservação de estado no Swift, harness de QA | Linha de base verde antes da rodada |
+| `4436082` fix(qa) | Correções locais da revisão de 05/10 ([`QA_2026-10-05.md`](historico/QA_2026-10-05.md)): redação no proxy, cancelamento cooperativo, preservação de estado no Swift, harness de QA | Linha de base verde antes da rodada |
 | `3bc2d87` fix(fluxo) | **PB1.** O texto digitado não aparece mais em `flow.log`, nas notificações nem no stdout do motor; o runner registra só tamanho e campo. Foram removidos os textos inventados "Texto de Exemplo" e "Texto de Teste": um passo de digitação sem texto agora falha | `engine/tests/unit/test_flow_execucao.py` com adb falso. A sentinela chega ao aparelho e não aparece em lugar nenhum. **Falha no código anterior** (a sentinela aparece no `flow.log`) e passa no novo. Os dois testes foram conferidos pelo orquestrador num worktree em `4436082` |
 | `6281d1e` feat(a11y) | **Épico B5.** Rótulos, estados e papéis para VoiceOver na toolbar, nos controles segmentados, nas abas, nas tabelas HTTP e de analytics, nos editores, no espelho e no estado vazio | `AccessibilityTests.swift` lê a árvore de acessibilidade real do macOS |
 | — docs | Este documento e o relatório do pesquisador | — |

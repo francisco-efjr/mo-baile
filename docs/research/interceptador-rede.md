@@ -11,7 +11,7 @@
 
 ## 1. O que é e por que foi criado?
 
-Inspirado na arquitetura do **HTTP Toolkit** (estudo completo documentado em [`estrutua_httptoolkit.md`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/estrutua_httptoolkit.md)), este módulo permite que o usuário capture, inspecione e gere testes a partir do **tráfego de rede (HTTP/HTTPS)** emitido por dispositivos móveis (Android e emuladores), sem a necessidade de ferramentas externas pesadas.
+Inspirado na arquitetura do **HTTP Toolkit** (estudo completo documentado em `estrutua_httptoolkit.md`), este módulo permite que o usuário capture, inspecione e gere testes a partir do **tráfego de rede (HTTP/HTTPS)** emitido por dispositivos móveis (Android e emuladores), sem a necessidade de ferramentas externas pesadas.
 
 ---
 
@@ -29,7 +29,7 @@ self.btn_view_http = tk.Button(
 )
 ```
 
-Ao ser clicado, ele abre a janela independente **`HTTPViewerWindow`** definida em [`recorder/http_viewer.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/http_viewer.py).
+Ao ser clicado, ele abre a janela independente **`HTTPViewerWindow`** definida em `recorder/http_viewer.py`.
 
 ---
 
@@ -37,12 +37,12 @@ Ao ser clicado, ele abre a janela independente **`HTTPViewerWindow`** definida e
 
 | Arquivo | Descrição | Impacto no Projeto Oficial |
 | :--- | :--- | :--- |
-| [`recorder/network_interceptor.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/network_interceptor.py) | Servidor proxy local em background (`MobileNetworkProxy`) rodando por padrão na porta `8082`. Trata requisições HTTP e túneis HTTPS `CONNECT`. Despacha eventos `NetworkEvent` para fila de threads segura (`queue.Queue`). | **Zero.** Opera como thread independente. |
-| [`recorder/analytics_listener.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/analytics_listener.py) | Captura contínua em streaming de eventos de Firebase Analytics (`FA` e `FA-SVC`) via ADB logcat. Parseia Bundles de parâmetros e exporta em TSV/JSON para auditoria da skill `/tagueamento`. | **Zero.** Subprocesso isolado do ADB. |
-| [`recorder/http_viewer.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/http_viewer.py) | Janela gráfica com abas duplas: **Tráfego HTTP/HTTPS** e **Tagueamento Analytics**. Controles para `adb reverse`, `setprop VERBOSE`, `adb logcat -c`, exportação TSV/JSON e filtros em tempo real. | **Zero.** Aberta apenas sob demanda. |
-| [`recorder/adb_bridge.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/adb_bridge.py) | Adicionados os métodos auxiliares `setup_reverse_proxy()`, `teardown_reverse_proxy()` e `is_proxy_configured()`. | **Aditivo apenas.** Não altera nenhum método existente de gravação ou captura de tela. |
-| [`recorder/ui.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/ui.py) | Inserção do botão minimalista `self.btn_view_http` no canto superior direito e do método `_open_http_viewer()`. | **Mínimo.** Não modifica a lógica de streaming ou de canvas. |
-| [`tests/test_network_interceptor.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/tests/test_network_interceptor.py) | Testes unitários cobrindo o ciclo de vida do proxy, captura de requisições e geração de código. | Testes adicionais isolados. |
+| `recorder/network_interceptor.py` | Servidor proxy local em background (`MobileNetworkProxy`) rodando por padrão na porta `8082`. Trata requisições HTTP e túneis HTTPS `CONNECT`. Despacha eventos `NetworkEvent` para fila de threads segura (`queue.Queue`). | **Zero.** Opera como thread independente. |
+| `recorder/analytics_listener.py` | Captura contínua em streaming de eventos de Firebase Analytics (`FA` e `FA-SVC`) via ADB logcat. Parseia Bundles de parâmetros e exporta em TSV/JSON para auditoria da skill `/tagueamento`. | **Zero.** Subprocesso isolado do ADB. |
+| `recorder/http_viewer.py` | Janela gráfica com abas duplas: **Tráfego HTTP/HTTPS** e **Tagueamento Analytics**. Controles para `adb reverse`, `setprop VERBOSE`, `adb logcat -c`, exportação TSV/JSON e filtros em tempo real. | **Zero.** Aberta apenas sob demanda. |
+| `recorder/adb_bridge.py` | Adicionados os métodos auxiliares `setup_reverse_proxy()`, `teardown_reverse_proxy()` e `is_proxy_configured()`. | **Aditivo apenas.** Não altera nenhum método existente de gravação ou captura de tela. |
+| `recorder/ui.py` | Inserção do botão minimalista `self.btn_view_http` no canto superior direito e do método `_open_http_viewer()`. | **Mínimo.** Não modifica a lógica de streaming ou de canvas. |
+| `tests/test_network_interceptor.py` | Testes unitários cobrindo o ciclo de vida do proxy, captura de requisições e geração de código. | Testes adicionais isolados. |
 
 ---
 
@@ -57,5 +57,5 @@ Ao ser clicado, ele abre a janela independente **`HTTPViewerWindow`** definida e
 ## 5. Próximos Passos e Oportunidades de Evolução
 
 Se um futuro agente ou usuário desejar unificar a gravação de tela com o tráfego de rede:
-- Correlacione o `timestamp` do toque capturado pelo [`passive_listener.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/passive_listener.py) com os `NetworkEvent` registrados no mesmo intervalo de tempo.
-- Adicione uma opção no [`codegen.py`](file:///Users/francisco.junior/Documents/antigravity/epic-fermi/recorder/codegen.py) para que, ao clicar em um elemento, o gerador também crie a asserção da requisição de backend correspondente.
+- Correlacione o `timestamp` do toque capturado pelo `passive_listener.py` com os `NetworkEvent` registrados no mesmo intervalo de tempo.
+- Adicione uma opção no `codegen.py` para que, ao clicar em um elemento, o gerador também crie a asserção da requisição de backend correspondente.

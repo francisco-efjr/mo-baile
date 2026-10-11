@@ -106,6 +106,32 @@ if ! diff -rq -x "__pycache__" "$REPO_ROOT/engine/src" "$ENGINE_SRC" >/dev/null;
     falha "o motor embutido difere de engine/src."
 fi
 
+# --- Rastreabilidade do build e assinatura (REL-3) ----------------------------
+# Bloco separado da escolha do Python, de proposito. O diff acima prova o motor;
+# isto prova o resto do bundle: o binario Swift saiu do commit atual
+# (MoBaileGitCommit, gravado pelo package_macos_app.sh) e a assinatura e valida.
+conferir_build_e_assinatura() {
+    local gravado head saida
+    gravado="$(/usr/libexec/PlistBuddy -c "Print :MoBaileGitCommit" "$APP_DIR/Contents/Info.plist" 2>/dev/null || true)"
+    [ -n "$gravado" ] || falha "o Info.plist nao tem MoBaileGitCommit (app empacotado por uma versao antiga do script)."
+    head="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$head" ] || falha "nao consegui ler o HEAD de $REPO_ROOT."
+    [ "${gravado%-dirty}" = "$head" ] \
+        || falha "o app foi empacotado do commit $gravado, o repositorio esta em $head."
+    if [ "$gravado" != "$head" ]; then
+        echo "aviso: o app foi empacotado com mudancas nao commitadas ($gravado)."
+    fi
+    if ! git -C "$REPO_ROOT" diff --quiet HEAD -- 2>/dev/null; then
+        echo "aviso: ha mudancas rastreadas nao commitadas; o app pode nao refleti-las."
+    fi
+    if ! saida="$(codesign --verify --deep --strict "$APP_DIR" 2>&1)"; then
+        echo "$saida"
+        falha "assinatura invalida (codesign --verify --deep --strict)."
+    fi
+    echo "build: commit $gravado, assinatura valida."
+}
+conferir_build_e_assinatura
+
 python="$(escolher_python)" || exit 1
 
 resposta="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"engine.hello","params":{"protocol_version":2}}' \
