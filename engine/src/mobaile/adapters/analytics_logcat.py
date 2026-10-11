@@ -156,7 +156,9 @@ class FirebaseAnalyticsListener:
 
     def __init__(self, adb_bridge: ADBBridge | None = None):
         self.adb = adb_bridge or ADBBridge()
-        self.event_queue: queue.Queue = queue.Queue()
+        # Com limite, como a do proxy: so o Tk drena esta fila, e no app nativo
+        # ninguem le. Cheia, perde o evento mais antigo (COD-1).
+        self.event_queue: queue.Queue = queue.Queue(maxsize=MAX_HISTORY * 2)
         self.events_history: deque[AnalyticsEvent] = deque(maxlen=MAX_HISTORY)
         self._proc: subprocess.Popen | None = None
         self._thread: threading.Thread | None = None
@@ -429,12 +431,24 @@ class FirebaseAnalyticsListener:
             return
         with self._lock:
             self.events_history.append(event)
-        self.event_queue.put(event)
+        self._enqueue(event)
         for cb in self._callbacks:
             try:
                 cb(event)
             except Exception:
                 logger.exception("Callback de analytics falhou.")
+
+    def _enqueue(self, event: AnalyticsEvent) -> None:
+        """Poe na fila sem bloquear; cheia, descarta o mais antigo."""
+        while True:
+            try:
+                self.event_queue.put_nowait(event)
+                return
+            except queue.Full:
+                try:
+                    self.event_queue.get_nowait()
+                except queue.Empty:
+                    pass
 
     def _parse_ios_record(self, record: str) -> AnalyticsEvent | None:
         """Extrai o evento de um registro (ja remontado) do Firebase iOS.

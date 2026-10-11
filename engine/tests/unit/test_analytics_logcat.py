@@ -274,7 +274,28 @@ class TestAnalyticsListener(unittest.TestCase):
             self.assertTrue(any("log.tag.FirebaseAnalytics VERBOSE" in cmd for cmd in executed_cmds))
 
 
-LIMPEZA_FIREBASE = ["shell", "setprop", "debug.firebase.analytics.app", ".none."]
+class TestFilaDeEventosLimitada(unittest.TestCase):
+    """COD-1: sem consumidor (caso do app nativo), a fila nao cresce sem fim."""
+
+    def _evento(self, n: int) -> AnalyticsEvent:
+        return AnalyticsEvent(id=n, timestamp=0.0, time_str="", tag="FA", event_name=f"e{n}")
+
+    def test_fila_tem_limite_e_descarta_o_mais_antigo(self):
+        from mobaile.adapters.analytics_logcat import MAX_HISTORY
+
+        listener = FirebaseAnalyticsListener()
+        limite = listener.event_queue.maxsize
+        self.assertGreater(limite, 0, "fila de eventos sem limite")
+        self.assertLessEqual(limite, MAX_HISTORY * 2)
+        for n in range(limite + 10):
+            listener._emit(self._evento(n))
+        self.assertEqual(listener.event_queue.qsize(), limite)
+        self.assertEqual(listener.event_queue.get_nowait().id, 10)
+        # O historico (o que o RPC le) nao depende da fila.
+        self.assertEqual(listener.events_history[-1].id, limite + 9)
+
+
+LIMPEZA_FIREBASE =["shell", "setprop", "debug.firebase.analytics.app", ".none."]
 
 
 class TestAnalyticsDesfazDebugDoFirebase(unittest.TestCase):
