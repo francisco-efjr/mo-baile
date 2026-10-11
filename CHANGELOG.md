@@ -39,6 +39,12 @@ source. Detalhes da paleta em [docs/design/FLUIDEZ_3.5.md](docs/design/FLUIDEZ_3
 - Chave padrão do Page Object passa a `minha_tela_objs`.
 - App Tk congelado ([ADR 0005](docs/adr/0005-app-tk-congelado.md)); docs
   históricos em `docs/historico/`.
+- Componentes novos da 3.5 (paleta, faixa do motor, cartão de próximo passo)
+  seguem o contrato de componente: `#Preview`, variantes em enum, tokens,
+  Reduzir movimento e doc com Acessibilidade em
+  [docs/design/componentes/](docs/design/componentes/README.md).
+- Dados de exemplo neutros: app de teste "DemoApp" (`com.example.demoapp`),
+  `cadastro_demo` e UDID sintético nos testes.
 
 ### Corrigido
 
@@ -51,6 +57,10 @@ source. Detalhes da paleta em [docs/design/FLUIDEZ_3.5.md](docs/design/FLUIDEZ_3
 - Log bruto do iPhone com URL redigida e arquivos só com o dono.
 - Cursor da divisória não fica preso; buscar na hierarquia não age com o
   inspector fora da janela.
+- Paleta: teclas só agem na janela dela e sem modal; foco preso na paleta e
+  devolvido ao fechar; linhas executam pelo VoiceOver.
+- Reiniciar Motor duas vezes não deixa motor órfão; a escolha do Python roda
+  fora da thread principal, não guarda falha em cache e mata a sonda que trava.
 
 ### Removido
 
