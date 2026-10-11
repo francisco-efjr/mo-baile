@@ -172,6 +172,8 @@ struct DetailColumn: View {
     var body: some View {
         let theme = themeManager.current
         VStack(spacing: 0) {
+            EngineStatusBanner()
+
             Group {
                 if !appState.workspaceTab.needsDevice {
                     // Relatório ocupa a coluna inteira: o espelho não ajuda a
