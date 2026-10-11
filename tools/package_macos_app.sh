@@ -44,6 +44,15 @@ python3 "$REPO_ROOT/tools/version.py" check || { echo "ABORTADO: versao inconsis
 
 command -v swift >/dev/null || { echo "erro: swift nao encontrado. Instale as Command Line Tools do Xcode."; exit 1; }
 
+# Rastreabilidade: o commit vai para o Info.plist (MoBaileGitCommit) e o
+# verify_native_app.sh confere contra o HEAD. "-dirty" marca build feito com
+# mudancas rastreadas ainda nao commitadas.
+GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo desconhecido)"
+if [ "$GIT_COMMIT" != "desconhecido" ] && ! git -C "$REPO_ROOT" diff --quiet HEAD -- 2>/dev/null; then
+    GIT_COMMIT="$GIT_COMMIT-dirty"
+    echo "aviso: arvore com mudancas nao commitadas; o app sai marcado como $GIT_COMMIT."
+fi
+
 # pgrep -f usa regex: "Mo baile (nativo)" sem escape casaria "Mo baile nativo"
 # e nunca acharia o app. Escapa o caminho do executavel e procura por ele.
 regex_literal() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|/]/\\&/g'; }
@@ -166,6 +175,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
     <string>$VERSION</string>
+    <key>MoBaileGitCommit</key>
+    <string>$GIT_COMMIT</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>pt-BR</string>
     <key>LSApplicationCategoryType</key>
@@ -211,4 +222,4 @@ if [ "$DEST_DIR" = "/Applications" ]; then
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" || true
 fi
 
-echo "OK: $APP_DIR (versao $VERSION)"
+echo "OK: $APP_DIR (versao $VERSION, commit $GIT_COMMIT)"
