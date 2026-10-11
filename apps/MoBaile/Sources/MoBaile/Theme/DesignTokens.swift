@@ -262,6 +262,64 @@ enum DesignMetrics {
 
     static let typeChip: CGFloat = 15
     static let treeIndent: CGFloat = 14
+    /// Linha divisória de 1 pt (separador sob o campo, borda inferior de faixa).
+    static let hairline: CGFloat = 1
+
+    /// Sombra de painel flutuante (paleta de comandos).
+    enum Shadow {
+        static let floatingRadius: CGFloat = 24
+        static let floatingY: CGFloat = 10
+    }
+
+    // MARK: Tokens de componente
+    //
+    // Terceira camada do design system: medidas específicas de um componente,
+    // que não cabem na grade geral. Ficam aqui, e não espalhadas na view, para
+    // a auditoria achar tudo num lugar (contrato de componente, C-13).
+
+    /// Paleta de comandos (FLU-1, `CommandPaletteView`).
+    enum CommandPalette {
+        /// Largura fixa do painel (D3 da `FLUIDEZ_3.5.md`).
+        static let width: CGFloat = 560
+        /// Distância do topo da janela até o painel: abaixo da toolbar.
+        static let topOffset: CGFloat = 56
+        static let fieldHeight: CGFloat = 48
+        static let footerHeight: CGFloat = 28
+        static let listMaxHeight: CGFloat = 380
+        /// Coluna do símbolo de cada linha, para os títulos alinharem.
+        static let rowIconWidth: CGFloat = 18
+        /// Espaço entre símbolo e texto, no campo e nas linhas.
+        static let gap: CGFloat = 10
+        /// Título e motivo de indisponibilidade quase colados.
+        static let titleReasonGap: CGFloat = 1
+    }
+
+    /// Faixa do motor (FLU-2, `EngineStatusBannerView`).
+    enum EngineBanner {
+        static let iconWidth: CGFloat = 18
+        static let gap: CGFloat = 10
+        static let verticalPadding: CGFloat = 10
+    }
+
+    /// Cartão de diagnóstico do estado sem aparelho (FLU-3, `DiagnosticCard`).
+    enum DiagnosticCard {
+        /// Altura mínima externa: os dois cartões lado a lado ficam iguais.
+        static let minHeight: CGFloat = 236
+        static let platformDot: CGFloat = 8
+        static let checkIconWidth: CGFloat = 14
+        /// Aro do cartão "Próximo passo".
+        static let recommendedStroke: CGFloat = 1.5
+        static let detailGap: CGFloat = 1
+    }
+}
+
+extension ThemeTokens {
+    /// Véu atrás de painel flutuante. Mais leve que `scrim` (que é de sheet):
+    /// a janela continua legível por trás da paleta.
+    var floatingScrim: Color { Color.black.opacity(isDark ? 0.18 : 0.06) }
+
+    /// Cor da sombra de painel flutuante, igual nas duas aparências.
+    var floatingShadow: Color { Color.black.opacity(0.22) }
 }
 
 /// Molas no estilo WWDC23 ("Animate with springs").
@@ -296,6 +354,18 @@ enum DSFont {
     static let subheadline = Font.system(size: 11)
     static let subheadlineSemibold = Font.system(size: 11, weight: .semibold)
     static let footnote = Font.system(size: 10)
+
+    /// Símbolos SF ao lado de texto. O tamanho acompanha o texto vizinho.
+    enum Symbol {
+        /// Ao lado de campo grande (⌘ do campo da paleta).
+        static let field = Font.system(size: 15, weight: .medium)
+        /// Ao lado de título de faixa ou alerta.
+        static let banner = Font.system(size: 15, weight: .semibold)
+        /// Ao lado de texto do corpo (linhas da paleta).
+        static let body = Font.system(size: 13)
+        /// Ao lado de texto pequeno (checagens do diagnóstico).
+        static let small = Font.system(size: 12, weight: .semibold)
+    }
 
     static func mono(_ size: CGFloat = 12, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
