@@ -461,8 +461,17 @@ class TestScrcpy(ContractBase):
         self.assertIn("running", status)
 
     def test_scrcpy_start_exige_dispositivo(self):
-        erro = self.erro("scrcpy.start")
+        # Com o binario presente, o que falta e o aparelho. Sem o patch o teste
+        # dependia de o scrcpy estar instalado na maquina (no CI nao esta).
+        with patch.object(self.server.scrcpy, "is_available", return_value=True):
+            erro = self.erro("scrcpy.start")
         self.assertEqual(erro["data"]["code"], "invalid_input")
+
+    def test_scrcpy_start_sem_binario_explica_como_instalar(self):
+        with patch.object(self.server.scrcpy, "is_available", return_value=False):
+            erro = self.erro("scrcpy.start")
+        self.assertEqual(erro["data"]["code"], "engine_error")
+        self.assertIn("brew install scrcpy", erro["message"] + json.dumps(erro.get("data", {})))
 
     def test_scrcpy_stop_e_idempotente(self):
         resultado = self.ok("scrcpy.stop")

@@ -110,18 +110,16 @@ jobs:
       # As fixtures consumidas pela suite Swift são geradas pelo motor. Se
       # alguém mudar um campo do contrato e esquecer de regerar, o front quebra
       # em execução; aqui quebra no PR.
-      - name: Regerar fixtures e conferir se houve mudança
-        run: |
-          python tools/generate_fixtures.py
-          if ! git diff --quiet -- apps/MoBaile/Tests/MoBaileTests/Fixtures; then
-            echo "::error::As fixtures do contrato estão desatualizadas. Rode 'make fixtures' e faça o commit."
-            git diff -- apps/MoBaile/Tests/MoBaileTests/Fixtures
-            exit 1
-          fi
+      # --check compara o PNG das fixtures pelos pixels, nao pelos bytes: a
+      # compressao muda com a versao do Pillow/zlib e dava falso "desatualizado".
+      - name: Conferir se as fixtures batem com o motor
+        run: python tools/generate_fixtures.py --check
 
   front:
     name: Front nativo (macOS)
-    runs-on: macos-14
+    # O codigo usa Swift 6.2 (@Previewable, isolamento de concorrencia): o
+    # macos-14 traz Swift 5.10 e nao compila. macos-26 tem o Xcode 26.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

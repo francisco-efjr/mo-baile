@@ -55,6 +55,33 @@ class TestModoCheck(unittest.TestCase):
         self.assertIn("make fixtures", saida)
         self.assertIn("proxy_status", saida)
 
+    def _png(self, cor, nivel):
+        import base64
+
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (30, 60), cor).save(buf, format="PNG", compress_level=nivel)
+        return base64.b64encode(buf.getvalue()).decode()
+
+    def test_png_igual_com_outra_compressao_passa(self):
+        # Pillow/zlib de outra maquina comprime diferente; a imagem e a mesma.
+        a, b = self._png((10, 20, 30), 1), self._png((10, 20, 30), 9)
+        self.assertNotEqual(a, b)
+        with patch.object(gerador, "build", lambda: {"shot": {"png_base64": a}}):
+            self.rodar()
+        with patch.object(gerador, "build", lambda: {"shot": {"png_base64": b}}):
+            codigo, saida = self.rodar("--check")
+        self.assertEqual(codigo, 0, saida)
+
+    def test_png_com_pixel_diferente_falha(self):
+        with patch.object(gerador, "build", lambda: {"shot": {"png_base64": self._png((10, 20, 30), 6)}}):
+            self.rodar()
+        with patch.object(gerador, "build", lambda: {"shot": {"png_base64": self._png((10, 20, 31), 6)}}):
+            codigo, saida = self.rodar("--check")
+        self.assertNotEqual(codigo, 0)
+        self.assertIn("shot", saida)
+
     def test_fixture_ausente_falha(self):
         codigo, saida = self.rodar("--check")
         self.assertNotEqual(codigo, 0)

@@ -303,6 +303,35 @@ def _nome(caminho: pathlib.Path) -> str:
         return str(caminho)
 
 
+def _pixels(valor: str) -> str:
+    """Identidade do PNG pelo conteudo: tamanho, modo e pixels.
+
+    Os bytes do PNG mudam com a versao do Pillow/zlib (compressao), sem mudar
+    a imagem; comparar bytes dava "desatualizado" so por trocar de maquina.
+    """
+    import base64
+    import hashlib
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(base64.b64decode(valor))) as img:
+        img.load()
+        digest = hashlib.sha256(img.tobytes()).hexdigest()
+        return f"png:{img.size[0]}x{img.size[1]}:{img.mode}:{digest}"
+
+
+def _normalizar(valor):
+    if isinstance(valor, dict):
+        return {
+            k: _pixels(v) if k.endswith("png_base64") and isinstance(v, str) and v else _normalizar(v)
+            for k, v in valor.items()
+        }
+    if isinstance(valor, list):
+        return [_normalizar(v) for v in valor]
+    return valor
+
+
 def check(destination: pathlib.Path) -> int:
     """0 se o arquivo e igual ao que o motor gera agora; 1 se nao."""
     gerado = build()
@@ -312,6 +341,7 @@ def check(destination: pathlib.Path) -> int:
         print(f"fixtures ausentes ou ilegiveis em {_nome(destination)}: {exc}", file=sys.stderr)
         print("Rode 'make fixtures' e faca o commit.", file=sys.stderr)
         return 1
+    atual, gerado = _normalizar(atual), _normalizar(gerado)
     if _render(atual) == _render(gerado):
         print(f"fixtures em dia: {_nome(destination)}")
         return 0
