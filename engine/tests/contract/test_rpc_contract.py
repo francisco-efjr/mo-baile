@@ -141,6 +141,7 @@ class TestSuperficie(ContractBase):
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",
         "scrcpy.start", "scrcpy.stop", "scrcpy.status",
         "proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+        "netlog.start", "netlog.stop",
         "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
         "codegen.record", "codegen.steps", "codegen.reset",
     }
@@ -258,7 +259,10 @@ class TestFluxoDeInspecao(ContractBase):
         self.assertEqual(gravado["element"]["text"], "pos_900_1600")
         self.assertEqual(gravado["element"]["bounds"], [900, 1600, 900, 1600])
         self.assertTrue(gravado["element"]["clickable"])
-        self.assertIn("900", gravado["action_code"] + gravado["object_code"])
+        # A coordenada fica no passo, que e o que a execucao repete; o codigo
+        # exibido segue o padrao do Page Object e nao a carrega.
+        passos = self.ok("codegen.steps")["steps"]
+        self.assertEqual(passos[-1]["coords"], [900, 1600])
 
     def test_elemento_sintetico_usa_a_classe_da_plataforma_ativa(self):
         """iOS e Android nomeiam o no generico de formas diferentes, e o codigo
@@ -457,8 +461,17 @@ class TestScrcpy(ContractBase):
         self.assertIn("running", status)
 
     def test_scrcpy_start_exige_dispositivo(self):
-        erro = self.erro("scrcpy.start")
+        # Com o binario presente, o que falta e o aparelho. Sem o patch o teste
+        # dependia de o scrcpy estar instalado na maquina (no CI nao esta).
+        with patch.object(self.server.scrcpy, "is_available", return_value=True):
+            erro = self.erro("scrcpy.start")
         self.assertEqual(erro["data"]["code"], "invalid_input")
+
+    def test_scrcpy_start_sem_binario_explica_como_instalar(self):
+        with patch.object(self.server.scrcpy, "is_available", return_value=False):
+            erro = self.erro("scrcpy.start")
+        self.assertEqual(erro["data"]["code"], "engine_error")
+        self.assertIn("brew install scrcpy", erro["message"] + json.dumps(erro.get("data", {})))
 
     def test_scrcpy_stop_e_idempotente(self):
         resultado = self.ok("scrcpy.stop")
@@ -473,7 +486,7 @@ if __name__ == "__main__":
 class TestAnalyticsIOSFisico(ContractBase):
     """De onde vem o tagueamento no iOS: simulador da sessao ou iPhone por cabo."""
 
-    UDID = "00008020-001549180128402E"
+    UDID = "00008020-000000000000001A"
     IPHONE: ClassVar[dict] = {"udid": UDID, "name": "iPhone", "ios_version": "18.7", "connection": "USB"}
 
     def setUp(self):

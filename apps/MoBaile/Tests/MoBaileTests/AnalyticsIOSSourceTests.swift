@@ -7,7 +7,7 @@ final class AnalyticsIOSSourceTests: XCTestCase {
 
     private let iphone = Data(#"""
     {"available": true, "devices": [
-        {"udid": "00008020-001549180128402E", "name": "iPhone XR", "ios_version": "18.7", "connection": "USB"},
+        {"udid": "00008020-000000000000001A", "name": "iPhone XR", "ios_version": "18.7", "connection": "USB"},
         {"udid": "00008030-AAAA", "name": "iPhone bloqueado", "ios_version": "17.0", "connection": "USB",
          "problem": "Desbloqueie o iPhone e tente de novo."}
     ]}
@@ -51,13 +51,13 @@ final class AnalyticsIOSSourceTests: XCTestCase {
     func testIniciarNoIOSMandaAOrigemEscolhida() async {
         let estado = AppState()
         estado.platform = .ios
-        estado.analyticsIOSSource = .device(udid: "00008020-001549180128402E")
+        estado.analyticsIOSSource = .device(udid: "00008020-000000000000001A")
         let (sessao, motor) = sessao(estado)
 
         await sessao.toggleAnalytics()
 
         let params = await motor.parametros(de: "analytics.start")
-        XCTAssertEqual(params?["ios_source"], .string("00008020-001549180128402E"))
+        XCTAssertEqual(params?["ios_source"], .string("00008020-000000000000001A"))
         XCTAssertTrue(estado.analyticsListenerActive)
     }
 

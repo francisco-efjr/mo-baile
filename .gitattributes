@@ -11,6 +11,19 @@
 *.json text eol=lf
 *.xml text eol=lf
 *.example text eol=lf
+*.swift text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.plist text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.svg text eol=lf
+VERSION text eol=lf
+Makefile text eol=lf
+.githooks/* text eol=lf
 
 # Binary files
 *.png binary
@@ -18,3 +31,18 @@
 *.jpeg binary
 *.gif binary
 *.ico binary
+*.icns binary
+*.pdf binary
+*.mp4 binary
+*.car binary
+*.zip binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# Estatisticas de linguagem do GitHub: o prototipo do design system (JS/TS/HTML)
+# e documentacao, nao codigo do produto.
+docs/** linguist-documentation
+# Fixtures geradas pelo motor (make fixtures): diff recolhido no PR.
+apps/MoBaile/Tests/MoBaileTests/Fixtures/*.json linguist-generated

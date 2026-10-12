@@ -1,0 +1,10 @@
+# Dono padrão de todo o repositório. A revisão vira obrigatória quando a
+# proteção de branch exigir aprovação de code owner.
+* @francisco-efjr
+
+# Áreas sensíveis, listadas à parte para ficar explícito.
+/.github/                     @francisco-efjr
+/tools/package_macos_app.sh   @francisco-efjr
+/tools/verify_native_app.sh   @francisco-efjr
+/engine/src/mobaile/security/ @francisco-efjr
+/SECURITY.md                  @francisco-efjr

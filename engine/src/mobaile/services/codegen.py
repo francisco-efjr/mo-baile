@@ -15,6 +15,53 @@ from mobaile.domain.models import AutomationStep, LocatorStrategy, UIElement
 
 __all__ = ["AutomationStep", "CodeGenerator", "LocatorStrategy", "UIElement"]
 
+# Padrao do Page Object da casa: toda acao espera o elemento aparecer antes, e
+# o clique ja sai com tentativas.
+WAIT_TIMEOUT = 15
+CLICK_ATTEMPTS = 2
+
+# Nome de classe que pode ir para o XPath sem escape: o que Android e iOS usam
+# de verdade (`android.widget.Button`, `XCUIElementTypeButton`).
+_XPATH_TAG = re.compile(r"[A-Za-z_][\w.\-]*")
+
+
+def _py_str(valor: str) -> str:
+    """Literal Python com aspas duplas, seguro para qualquer texto.
+
+    Todo valor que vem da tela (texto, resource-id, content-desc) passa por
+    aqui ou por `repr()`: assim ele entra no codigo gerado so como string, e
+    nunca como codigo (SEC-2). Sem caractere especial, a saida e a de sempre,
+    `"valor"`.
+    """
+    literal = repr(valor)
+    if '"' in valor or literal.startswith('"'):
+        return literal
+    return f'"{literal[1:-1]}"'
+
+
+def _xpath_str(valor: str) -> str:
+    """Literal de string XPath 1.0, que nao tem escape: troca de aspas ou concat()."""
+    if '"' not in valor:
+        return f'"{valor}"'
+    if "'" not in valor:
+        return f"'{valor}'"
+    pedacos: list[str] = []
+    for i, parte in enumerate(valor.split('"')):
+        if i:
+            pedacos.append("'\"'")
+        if parte:
+            pedacos.append(f'"{parte}"')
+    return "concat(" + ", ".join(pedacos) + ")"
+
+
+def _xpath_tag(class_name: str) -> str:
+    return class_name if class_name and _XPATH_TAG.fullmatch(class_name) else "*"
+
+
+def _identificador(nome: str) -> str:
+    """Descarta o que `\\w` aceita mas um identificador Python nao aceita."""
+    return "".join(c for c in nome if c == "_" or f"a{c}".isidentifier())
+
 
 class CodeGenerator:
     def __init__(
@@ -57,7 +104,7 @@ class CodeGenerator:
         nfkd = unicodedata.normalize("NFKD", text)
         clean = "".join([c for c in nfkd if not unicodedata.combining(c)])
         stripped = re.sub(r"[^\w\s]", " ", clean)
-        words = stripped.strip().split()[:7]
+        words = [w for w in (_identificador(w) for w in stripped.strip().split()) if w][:7]
         return "_".join(words).upper()
 
     @staticmethod
@@ -65,7 +112,7 @@ class CodeGenerator:
         nfkd = unicodedata.normalize("NFKD", text)
         clean = "".join([c for c in nfkd if not unicodedata.combining(c)])
         stripped = re.sub(r"[^\w\s]", " ", clean)
-        words = stripped.strip().split()[:6]
+        words = [w for w in (_identificador(w) for w in stripped.strip().split()) if w][:6]
         return "_".join(words).lower()
 
     @staticmethod
@@ -155,20 +202,20 @@ class CodeGenerator:
         if element.content_desc:
             candidatos.append({
                 "strategy": "accessibility_id",
-                "value": f'(AppiumBy.ACCESSIBILITY_ID, "{element.content_desc}")',
+                "value": f"(AppiumBy.ACCESSIBILITY_ID, {_py_str(element.content_desc)})",
                 "matches": quantos_com("content_desc", element.content_desc),
                 "why": "rotulo de acessibilidade, estavel e legivel",
             })
         if element.text:
             candidatos.append({
                 "strategy": "text",
-                "value": f'(AppiumBy.XPATH, \'{self._generate_xpath(element)}\')',
+                "value": f"(AppiumBy.XPATH, {self._generate_xpath(element)!r})",
                 "matches": quantos_com("text", element.text),
                 "why": "texto visivel; muda com idioma e com conteudo dinamico",
             })
         candidatos.append({
             "strategy": "xpath",
-            "value": f'(AppiumBy.XPATH, \'{self._generate_xpath(element)}\')',
+            "value": f"(AppiumBy.XPATH, {self._generate_xpath(element)!r})",
             "matches": 1,
             "why": "caminho na arvore; quebra se o layout mudar",
         })
@@ -193,34 +240,34 @@ class CodeGenerator:
             if element.platform == "ios":
                 id_val = element.resource_id or element.content_desc or element.text
                 if id_val:
-                    return f'(AppiumBy.ACCESSIBILITY_ID, "{id_val}")'
+                    return f"(AppiumBy.ACCESSIBILITY_ID, {_py_str(id_val)})"
             else:
                 if element.resource_id:
-                    return f'(AppiumBy.ID, "{element.resource_id}")'
+                    return f"(AppiumBy.ID, {_py_str(element.resource_id)})"
                 elif element.content_desc:
-                    return f'(AppiumBy.ACCESSIBILITY_ID, "{element.content_desc}")'
+                    return f"(AppiumBy.ACCESSIBILITY_ID, {_py_str(element.content_desc)})"
 
         xpath = self._generate_xpath(element)
-        return f"(AppiumBy.XPATH, '{xpath}')"
+        return f"(AppiumBy.XPATH, {xpath!r})"
 
     @staticmethod
     def _generate_xpath(element: UIElement) -> str:
-        tag = element.class_name
+        tag = _xpath_tag(element.class_name)
         if element.platform == "ios":
             if element.resource_id:
-                return f'//{tag}[@name="{element.resource_id}"]'
+                return f"//{tag}[@name={_xpath_str(element.resource_id)}]"
             elif element.content_desc:
-                return f'//{tag}[@label="{element.content_desc}"]'
+                return f"//{tag}[@label={_xpath_str(element.content_desc)}]"
             elif element.text:
-                return f'//{tag}[@value="{element.text}"]'
+                return f"//{tag}[@value={_xpath_str(element.text)}]"
             return f"//{tag}"
         else:
             if element.resource_id:
-                return f'//{tag}[@resource-id="{element.resource_id}"]'
+                return f"//{tag}[@resource-id={_xpath_str(element.resource_id)}]"
             elif element.text:
-                return f'//{tag}[@text="{element.text}"]'
+                return f"//{tag}[@text={_xpath_str(element.text)}]"
             elif element.content_desc:
-                return f'//{tag}[@content-desc="{element.content_desc}"]'
+                return f"//{tag}[@content-desc={_xpath_str(element.content_desc)}]"
             return f"//{tag}"
 
     def generate_entry(
@@ -238,30 +285,23 @@ class CodeGenerator:
 
         is_input = "CAMPO" in var_name or "SEARCH" in element.class_name.upper()
 
-        if active_strat == LocatorStrategy.POSITION:
-            pos_x, pos_y = click_coord if click_coord else element.center
-            if is_input:
-                action_block = (
-                    f"    def preencher_{slug}(self, texto):\n"
-                    f"        self.click_at_position(self.locators['{self.page_objects_key}'].{var_name}, {pos_x}, {pos_y})\n"
-                    f"        self.send_keys(self.locators['{self.page_objects_key}'].{var_name}, texto)\n"
-                )
-            else:
-                action_block = (
-                    f"    def click_{slug}(self):\n"
-                    f"        self.click_at_position(self.locators['{self.page_objects_key}'].{var_name}, {pos_x}, {pos_y})\n"
-                )
+        # O codigo exibido e o que a pessoa cola no proprio Page Object, entao
+        # segue o padrao da casa e nao carrega coordenada: o clique por posicao
+        # fica guardado no passo (`coords`), que e o que a execucao repete.
+        ref = f"self.locators[{self.page_objects_key!r}].{var_name}"
+        espera = f"        self.wait_to_be_visible({ref}, {WAIT_TIMEOUT})\n"
+        if is_input:
+            action_block = (
+                f"    def preencher_{slug}(self, texto):\n"
+                f"{espera}"
+                f"        self.send_keys({ref}, texto)\n"
+            )
         else:
-            if is_input:
-                action_block = (
-                    f"    def preencher_{slug}(self, texto):\n"
-                    f"        self.send_keys(self.locators['{self.page_objects_key}'].{var_name}, texto)\n"
-                )
-            else:
-                action_block = (
-                    f"    def click_{slug}(self):\n"
-                    f"        self.click(self.locators['{self.page_objects_key}'].{var_name})\n"
-                )
+            action_block = (
+                f"    def click_{slug}(self):\n"
+                f"{espera}"
+                f"        self.click({ref}, {CLICK_ATTEMPTS})\n"
+            )
 
         self.declared_actions[var_name] = action_block
 

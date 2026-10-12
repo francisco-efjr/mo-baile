@@ -1,0 +1,34 @@
+/* Espaçamento — grade de 4 pt e métricas de layout do macOS. */
+:root{
+  --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 12px;
+  --space-6: 14px; --space-7: 16px; --space-8: 20px; --space-9: 24px; --space-10: 32px;
+
+  --margin-window: 20px;          /* laterais e base de janelas e formulários */
+  --gap-toolbar-content: 14px;    /* toolbar → primeiro controle fora de grupo */
+  --gap-stacked-controls: 6px;
+  --gap-separator: 12px;
+  --gap-group-min: 12px; --gap-group-max: 24px;
+  --padding-group-box: 16px;
+  --gap-footer-buttons: 12px;
+  --gap-label-control: 6px;
+
+  --toolbar-height: 52px;
+  --accessory-bar-height: 36px;
+  --bottom-bar-large: 32px;
+  --bottom-bar-small: 22px;
+  --status-bar-height: 22px;
+
+  --sidebar-min: 232px; --sidebar-default: 240px; --sidebar-max: 360px;
+  --inspector-min: 260px; --inspector-default: 280px; --inspector-max: 380px;
+  --window-min-width: 980px; --window-min-height: 600px;
+
+  --control-height-regular: 24px;
+  --control-height-small: 20px;
+  --control-height-mini: 16px;
+  --control-height-large: 28px;
+  --toolbar-item-size: 32px;
+  --hit-min: 20px;
+
+  --sidebar-row-small: 24px; --sidebar-row-medium: 28px; --sidebar-row-large: 32px;
+  --table-row: 24px;
+}

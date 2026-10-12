@@ -12,11 +12,14 @@ contratos sem herdar nada, então a adoção é incremental.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from PIL import Image
 
 from mobaile.domain.models import AnalyticsEvent, Device, NetworkEvent
+from mobaile.domain.report import OcrLine
 
 
 @runtime_checkable
@@ -79,3 +82,10 @@ class AnalyticsSource(Protocol):
 
     @property
     def events_history(self) -> list[AnalyticsEvent]: ...
+
+
+@runtime_checkable
+class TextRecognizer(Protocol):
+    """OCR de imagens: lê os prints dos cards do Figma na aba Relatório."""
+
+    def read(self, paths: Sequence[str | Path]) -> dict[str, list[OcrLine]]: ...

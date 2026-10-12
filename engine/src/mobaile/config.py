@@ -60,7 +60,7 @@ class Settings:
         return cls(
             wda_url=(os.getenv("WDA_URL") or "http://localhost:8100").rstrip("/"),
             adb_path=os.getenv("ADB_PATH") or None,
-            page_objects_key=os.getenv("PAGE_OBJECTS_KEY") or "onboarding_credito_objs",
+            page_objects_key=os.getenv("PAGE_OBJECTS_KEY") or "minha_tela_objs",
             default_strategy=_env_choice("DEFAULT_STRATEGY", "position", ("position", "xpath", "id")),
             # Acima de 60 fps não há ganho: a captura via adb não acompanha.
             stream_fps=_env_float("STREAM_FPS", 3.5, minimum=0.2, maximum=60.0),

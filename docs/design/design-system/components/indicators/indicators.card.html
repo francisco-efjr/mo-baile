@@ -1,0 +1,19 @@
+<!-- @dsCard group="Components" viewport="700x170" name="Indicadores" subtitle="Ícones, contadores, estado de serviço, tipos de nó, progresso" -->
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Indicadores</title><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;background:#fff}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.lab{font-size:10px;color:var(--label-tertiary);font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin:0 0 6px}</style></head>
+<body><div id="r" data-mb-portal></div><script type="text/babel">
+const NS = window.MoBaileDesignSystem_ce6669;
+function Pane({dark, children, style}){return <div className="mb-root" data-theme={dark?"dark":undefined} style={{background:"var(--bg-content)",color:"var(--label-primary)",padding:16,display:"flex",flexDirection:"column",gap:14,...style}}>{children}</div>;}
+
+const {Icon,CountBadge,StatusIndicator,TypeChip,ProgressIndicator}=NS;
+function Demo({dark}){return <Pane dark={dark} style={{gap:12}}>
+<div className="row" style={{gap:14}}>{["smartphone","list-tree","file-code","network","chart-line","play","hand","refresh-cw","share","panel-left","panel-right","search","settings","terminal"].map(n=><Icon key={n} name={n} size={16}/>)}<span style={{flex:1}}/><CountBadge value={12}/><CountBadge value={6} variant="pill"/></div>
+<div className="row" style={{gap:14}}><StatusIndicator status="ok" label="WDA 8100"/><StatusIndicator status="busy" label="ADB server"/><StatusIndicator status="warn" label="Proxy MITM 8082"/><StatusIndicator status="error" label="FA listener"/><StatusIndicator status="off" label="scrcpy"/><span style={{flex:1}}/>{["W","V","T","I","B"].map(t=><TypeChip key={t} type={t}/>)}</div>
+<div className="row" style={{gap:14}}><div style={{width:200}}><ProgressIndicator value={4/7}/></div><div style={{width:160}}><ProgressIndicator/></div><ProgressIndicator kind="spinner"/></div>
+</Pane>;}
+function App(){return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}><Demo/><Demo dark/></div>;}
+ReactDOM.createRoot(document.getElementById("r")).render(<App/>);</script></body></html>

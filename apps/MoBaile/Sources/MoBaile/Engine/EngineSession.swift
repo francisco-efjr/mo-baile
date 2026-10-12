@@ -17,6 +17,24 @@ import Observation
 /// Regra de disciplina: as telas falam com esta classe, nunca com o
 /// `EngineClient`. Assim o dia em que o transporte mudar (socket unix para os
 /// quadros, por exemplo) nenhuma tela precisa saber.
+/// Fases da abertura do app (ver `EngineSession.launchPhase`).
+enum LaunchPhase: Equatable, Sendable {
+    case startingEngine, scanning, ready, failed
+}
+
+/// Saúde do motor, como a faixa global da janela mostra (FLU-2).
+enum EngineStatus: Equatable, Sendable {
+    /// Primeira subida, ainda sem resposta. O splash cobre esta fase.
+    case starting
+    case running
+    /// A supervisão está subindo outro motor depois de uma queda.
+    case restarting(String)
+    /// Reinício pedido pela pessoa (faixa ou paleta) em andamento (R-03).
+    case restartRequested
+    /// O motor não está no ar e ninguém vai tentar de novo sozinho.
+    case stopped(String)
+}
+
 @MainActor
 @Observable
 final class EngineSession {
@@ -34,6 +52,39 @@ final class EngineSession {
 
     /// Resultado do handshake: versão do motor e tabela de métodos.
     private(set) var hello: EngineDTO.Hello?
+
+    /// A supervisão está tentando subir outro motor (ver `recover`).
+    private(set) var isRecovering = false
+
+    /// Reinício pedido pela pessoa em andamento (R-03).
+    private(set) var isRestartingOnRequest = false
+
+    /// Algum reinício em andamento, da supervisão ou pedido. A faixa e a
+    /// paleta usam para não oferecer outro por cima.
+    var isRestarting: Bool { isRecovering || isRestartingOnRequest }
+
+    /// O que a faixa "Motor parado" mostra. Conectado vence tudo: um erro de
+    /// chamada qualquer também grava `lastError` e não é motor parado.
+    var engineStatus: EngineStatus {
+        // O pedido vence o "conectado": no começo do reinício o motor antigo
+        // ainda responde, mas já vai ser parado.
+        if isRestartingOnRequest { return .restartRequested }
+        if isConnected { return .running }
+        if isRecovering { return .restarting(state.statusMessage) }
+        if let lastError { return .stopped(lastError) }
+        return .starting
+    }
+
+    /// Em que ponto da abertura o app está. O splash acompanha isto e só sai
+    /// quando o motor respondeu e a primeira varredura de aparelhos e do
+    /// ambiente terminou (ou quando a subida falhou, para o erro aparecer na
+    /// janela).
+    var launchPhase: LaunchPhase {
+        if lastScan != nil { return .ready }
+        if isConnected { return .scanning }
+        if lastError != nil { return .failed }
+        return .startingEngine
+    }
 
     /// Versão do contrato que esta interface fala (ver `docs/PROTOCOLO_RPC.md`).
     nonisolated static let protocolVersion = 2
@@ -58,7 +109,7 @@ final class EngineSession {
     }
 
     private let state: AppState
-    private let makeClient: @MainActor () throws -> any EngineCalling
+    private let makeClient: @MainActor () async throws -> any EngineCalling
     private let restartPolicy: RestartPolicy
     private var client: (any EngineCalling)?
     private var notificationTask: Task<Void, Never>?
@@ -67,6 +118,15 @@ final class EngineSession {
     private var daemonTask: Task<Void, Never>?
     private var hierarchyRefreshTask: Task<Void, Never>?
     private var restartTask: Task<Void, Never>?
+    /// Única subida em voo, da abertura (`connect`) ou do reinício pedido.
+    /// Quem chega com uma em andamento espera por ela em vez de subir outro
+    /// motor (R-03: dois reinícios seguidos deixavam dois motores vivos).
+    private var connectTask: Task<Void, Never>?
+    private var manualRestartTask: Task<Void, Never>?
+    /// Muda a cada supervisão nova e a cada `disconnect()`. Uma supervisão
+    /// cancelada que termina depois só limpa `isRecovering` se ainda for a
+    /// atual.
+    private var recoveryGeneration = 0
     private var restartAttempts: [Date] = []
     private var watchingDevices = false
 
@@ -87,9 +147,18 @@ final class EngineSession {
     private var activeProgressToken: String?
     private var progressSequence = 0
 
-    convenience init(state: AppState) {
-        self.init(state: state) {
-            EngineClient(configuration: try EngineLocator.resolve())
+    convenience init(
+        state: AppState,
+        restartPolicy: RestartPolicy = RestartPolicy(),
+        resolve: @escaping @Sendable () throws -> EngineConfiguration = { try EngineLocator.resolve() }
+    ) {
+        self.init(state: state, restartPolicy: restartPolicy) {
+            // A sonda do Python é síncrona e pode levar até 3 s por candidato:
+            // fora do MainActor, o splash e a janela seguem respondendo (R-04).
+            let configuracao = try await Task.detached(priority: .userInitiated) {
+                try resolve()
+            }.value
+            return EngineClient(configuration: configuracao)
         }
     }
 
@@ -99,7 +168,7 @@ final class EngineSession {
     init(
         state: AppState,
         restartPolicy: RestartPolicy = RestartPolicy(),
-        makeClient: @escaping @MainActor () throws -> any EngineCalling
+        makeClient: @escaping @MainActor () async throws -> any EngineCalling
     ) {
         self.state = state
         self.restartPolicy = restartPolicy
@@ -118,8 +187,25 @@ final class EngineSession {
 
     // MARK: - Ciclo de vida
 
+    /// Sobe o motor, se ainda não houver um. Idempotente: com uma subida ou uma
+    /// supervisão em andamento, espera por ela e não sobe outro.
     func connect() async {
+        if let connectTask {
+            await connectTask.value
+            return
+        }
+        if let restartTask {
+            await restartTask.value
+            return
+        }
         guard client == nil else { return }
+        let tarefa = Task { await self.performConnect() }
+        connectTask = tarefa
+        await tarefa.value
+        if connectTask == tarefa { connectTask = nil }
+    }
+
+    private func performConnect() async {
         restartAttempts.removeAll()
         do {
             let client = try await launch()
@@ -145,6 +231,8 @@ final class EngineSession {
         // ser lido como queda e disparar reinício.
         restartTask?.cancel()
         restartTask = nil
+        recoveryGeneration += 1
+        isRecovering = false
         stopBackgroundWork()
         try? await client?.callIgnoringResult("devices.watch_stop")
         await client?.stop()
@@ -156,13 +244,52 @@ final class EngineSession {
         state.analyticsListenerActive = false
     }
 
+    /// Reinício pedido pela pessoa, pela faixa "Motor parado" ou pela paleta.
+    ///
+    /// É o mesmo ciclo de vida da janela: `disconnect()` cancela a supervisão
+    /// e para o motor atual, se houver, e `connect()` sobe um novo, com a
+    /// contagem de tentativas zerada. Não há um segundo caminho de subida.
+    ///
+    /// Idempotente (R-03): um segundo pedido com um reinício em andamento só
+    /// espera o primeiro. Uma subida da abertura em voo termina antes de ser
+    /// parada, e uma supervisão em voo é cancelada e aguardada, para nunca
+    /// haver dois motores subindo ao mesmo tempo.
+    func restartEngine() async {
+        if let manualRestartTask {
+            await manualRestartTask.value
+            return
+        }
+        let tarefa = Task { await self.performRestart() }
+        manualRestartTask = tarefa
+        await tarefa.value
+        if manualRestartTask == tarefa { manualRestartTask = nil }
+    }
+
+    private func performRestart() async {
+        isRestartingOnRequest = true
+        defer { isRestartingOnRequest = false }
+        state.statusMessage = "Reiniciando o motor…"
+        if let connectTask { await connectTask.value }
+        let supervisao = restartTask
+        await disconnect()
+        // Cancelada pelo `disconnect()`; se estava no meio de uma subida, para
+        // o motor que subiu antes de voltar.
+        await supervisao?.value
+        // Quem pediu o reinício pode ter acabado de instalar o que faltava (ou
+        // desinstalado algo): a sonda do Python roda de novo (R-02).
+        PythonProbe.clearCache()
+        lastError = nil
+        state.statusMessage = "Reiniciando o motor…"
+        await connect()
+    }
+
     /// Sobe um motor novo e faz o handshake antes de qualquer outra chamada.
     ///
     /// O cliente só é devolvido depois do `engine.hello`: um motor de outra
     /// versão do protocolo é parado aqui mesmo, sem chegar a receber chamada
     /// que ele entenderia de outro jeito.
     private func launch() async throws -> any EngineCalling {
-        let client = try makeClient()
+        let client = try await makeClient()
         try await client.start()
         do {
             try await handshake(with: client)
@@ -294,12 +421,25 @@ final class EngineSession {
         if state.runState == .running { state.runState = .failed }
 
         restartTask?.cancel()
+        // Já marca aqui: entre a queda e o início da tarefa, a faixa diria
+        // "parado" por um instante.
+        recoveryGeneration += 1
+        let geracao = recoveryGeneration
+        isRecovering = true
         restartTask = Task { [weak self] in
-            await self?.recover(after: status, restoring: snapshot)
+            await self?.recover(after: status, restoring: snapshot, generation: geracao)
         }
     }
 
-    private func recover(after status: Int32, restoring snapshot: RestoreSnapshot) async {
+    private func recover(after status: Int32, restoring snapshot: RestoreSnapshot, generation: Int) async {
+        // Só a supervisão atual desmarca: uma cancelada que termina depois de
+        // outra começar não pode dizer à faixa que ninguém está reiniciando.
+        defer {
+            if recoveryGeneration == generation {
+                isRecovering = false
+                restartTask = nil
+            }
+        }
         var motivo = EngineError.processTerminated(status).localizedDescription
         while !Task.isCancelled {
             // A janela conta tentativas, com ou sem sucesso: um motor que sobe e
@@ -309,7 +449,7 @@ final class EngineSession {
             restartAttempts.removeAll { agora.timeIntervalSince($0) > restartPolicy.window }
             guard restartAttempts.count < restartPolicy.maxAttempts else {
                 let mensagem = "O motor caiu e não voltou depois de \(restartPolicy.maxAttempts) tentativas "
-                    + "de reinício. \(motivo) Feche e abra o Mo baile para tentar de novo."
+                    + "de reinício. \(motivo) Use Reiniciar Motor para tentar de novo."
                 lastError = mensagem
                 state.statusMessage = mensagem
                 return
@@ -328,6 +468,11 @@ final class EngineSession {
                 novo = try await launch()
             } catch EngineError.incompatibleProtocol(let mensagem) {
                 // Tentar de novo não muda a versão do motor no disco.
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            } catch EngineError.pythonUnsuitable(let mensagem) {
+                // Nem instala o Python que falta.
                 lastError = mensagem
                 state.statusMessage = mensagem
                 return
@@ -604,7 +749,10 @@ final class EngineSession {
         await refreshDeviceSize()
         await refreshFrame()
         await refreshHierarchy()
-        await startStream()
+        // Ajustes › Geral › "Iniciar o espelho automaticamente".
+        if state.autoStartStream {
+            await startStream()
+        }
     }
 
     func switchPlatform(to platform: Platform) async {
@@ -1044,6 +1192,32 @@ final class EngineSession {
         }
     }
 
+    /// Tráfego HTTPS do app em debug, sem proxy nem certificado. O motor lê o
+    /// log da plataforma da sessão e entrega cada requisição como `proxy.event`:
+    /// no iPhone, o `CFNETWORK_DIAGNOSTICS` pelo cabo; no Android, o log do
+    /// `HttpLoggingInterceptor` do OkHttp pelo logcat, que convive com o
+    /// debugger do Android Studio.
+    func toggleDebugNet() async {
+        guard let client else { return }
+        do {
+            if state.debugNetActive {
+                let result: EngineDTO.NetlogState = try await client.call("netlog.stop")
+                state.debugNetActive = result.running
+            } else {
+                let result: EngineDTO.NetlogState = try await client.call("netlog.start")
+                state.debugNetActive = result.running
+                if result.running {
+                    state.statusMessage = result.source == "okhttp_logcat"
+                        ? "Lendo o tráfego do app pelo logcat. O build de debug precisa do HttpLoggingInterceptor do OkHttp."
+                        : "Lendo o tráfego do iPhone. O app precisa rodar com CFNETWORK_DIAGNOSTICS=3."
+                }
+            }
+        } catch {
+            state.debugNetActive = false
+            report(error)
+        }
+    }
+
     func clearTraffic() async {
         guard let client else { return }
         do {
@@ -1105,6 +1279,138 @@ final class EngineSession {
         } catch {
             report(error)
         }
+    }
+
+    // MARK: - Relatório
+
+    /// Abre a spec-modelo e mostra o resumo, sem auditar ainda. Trocar de spec
+    /// descarta o relatório da anterior: os números eram de outra spec.
+    func openReportSpec(at url: URL) async {
+        guard let client, state.reportOperation == nil else { return }
+        state.reportOperation = .loadingSpec
+        state.reportError = nil
+        defer { state.reportOperation = nil }
+        do {
+            let payload: EngineDTO.ReportSpecPayload = try await client.call(
+                "report.spec", params: ["path": .string(url.path)]
+            )
+            let spec = payload.toModel()
+            if state.reportSpec?.path != spec.path {
+                state.report = nil
+                state.selectedReportResultID = nil
+                state.selectedReportExtraID = nil
+                state.reportLastExport = nil
+                state.reportPlatform = nil
+            }
+            state.reportSpec = spec
+            state.statusMessage = "Spec \(spec.fileName) aberta: \(spec.variants) validações"
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Audita a spec contra o log escolhido: os eventos que a escuta capturou
+    /// ou um arquivo exportado. O motor relê a spec do disco a cada auditoria.
+    func runReport() async {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return }
+        var params: [String: JSONValue] = [
+            "spec_path": .string(spec.path),
+            "source": .string(state.reportLogSource.rpcValue),
+            "progress_token": beginProgress(for: "report.audit"),
+        ]
+        if case .file(let url) = state.reportLogSource {
+            params["log_path"] = .string(url.path)
+        }
+        if let plataforma = state.reportPlatform {
+            params["platform"] = .string(plataforma.rawValue)
+        }
+        state.reportOperation = .auditing
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportAuditPayload = try await client.call("report.audit", params: params)
+            let relatorio = payload.toModel()
+            state.report = relatorio
+            state.reportSpec = relatorio.spec
+            state.reportLastExport = nil
+            if let id = state.selectedReportResultID, !relatorio.results.contains(where: { $0.id == id }) {
+                state.selectedReportResultID = nil
+            }
+            state.selectedReportExtraID = nil
+            let taxa = relatorio.summary.complianceRate.formatted(.number.precision(.fractionLength(1)))
+            state.statusMessage = "Auditoria concluída: \(relatorio.summary.ok) de \(relatorio.summary.total) OK (\(taxa)%)"
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Grava o board Excalidraw, o HTML, o Markdown e o TSV do último
+    /// relatório. Sem pasta, o motor usa `~/Documents/Mo baile/Relatórios`.
+    @discardableResult
+    func exportReport(to directory: URL?) async -> ReportExport? {
+        guard let client, state.report != nil, state.reportOperation == nil else { return nil }
+        var params: [String: JSONValue] = ["progress_token": beginProgress(for: "report.export")]
+        if let directory {
+            params["directory"] = .string(directory.path)
+        }
+        state.reportOperation = .exporting
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportExportPayload = try await client.call("report.export", params: params)
+            let exportado = payload.toModel()
+            state.reportLastExport = exportado
+            state.statusMessage = "Relatório exportado em \((exportado.directory as NSString).lastPathComponent)"
+            return exportado
+        } catch {
+            reportFailure(error)
+            return nil
+        }
+    }
+
+    /// OCR dos prints dos cards do Figma. O rascunho da spec é gravado e aberto
+    /// na sheet de revisão; ele só vira a spec da aba quando a pessoa escolhe.
+    func importReportPrints(from folder: URL, projeto: String?, platform: Platform) async {
+        guard let client, state.reportOperation == nil else { return }
+        var params: [String: JSONValue] = [
+            "prints_dir": .string(folder.path),
+            "platform": .string(platform.rawValue),
+            "progress_token": beginProgress(for: "report.import"),
+        ]
+        if let projeto, !projeto.trimmingCharacters(in: .whitespaces).isEmpty {
+            params["projeto"] = .string(projeto)
+        }
+        state.reportOperation = .importing
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportImportPayload = try await client.call("report.import", params: params)
+            let importado = payload.toModel()
+            state.reportImport = importado
+            let duvidas = importado.doubtsTotal == 1 ? "1 ponto" : "\(importado.doubtsTotal) pontos"
+            state.statusMessage = "Rascunho da spec gravado: \(duvidas) para conferir"
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Usa o rascunho importado como a spec da aba.
+    func useImportedSpec() async {
+        guard let importado = state.reportImport else { return }
+        state.reportImport = nil
+        await openReportSpec(at: URL(fileURLWithPath: importado.specPath))
+    }
+
+    private func endReportOperation() {
+        state.reportOperation = nil
+        state.reportProgressMessage = nil
+    }
+
+    /// Erro da aba fica em linha, perto de onde aconteceu, e na barra de status.
+    private func reportFailure(_ error: Error) {
+        if let engineError = error as? EngineError, engineError == .cancelled { return }
+        report(error)
+        state.reportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
     // MARK: - Notificacoes do motor
@@ -1216,6 +1522,9 @@ final class EngineSession {
                 state.statusMessage = "\(progresso.message) (\(Int(percent.rounded()))%)"
             } else {
                 state.statusMessage = progresso.message
+            }
+            if ativo.hasPrefix("report.") {
+                state.reportProgressMessage = progresso.message
             }
 
         case "stream.settled":

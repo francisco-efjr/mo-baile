@@ -61,7 +61,7 @@ README promete. Os principais foram conferidos por mim no código nesta data:
 | Modo debug do Firebase fica ligado no aparelho depois de parar (entra no BigQuery do cliente) | `adapters/analytics_logcat.py` | sim, `stop` não faz `setprop .none.` |
 | Resposta `chunked` corrompida, `gzip` ilegível, `items` de e-commerce quebrado, parâmetros sem tipo | `adapters/proxy.py`, `analytics_logcat.py` | reproduzido pelo agente da frente 2 |
 | Ligar a escuta de novo duplica callbacks e linhas na tela | `rpc/server.py` | leitura do agente da frente 2 |
-| `CorrelationCard` e interface Tk inserem `/v2/credito/simulacao` fixo e `wait_for_request` inexistente | Swift e `tk-legacy` | sim, `main_window.py:1971` |
+| `CorrelationCard` e interface Tk inserem `/v2/pedido/simulacao` fixo e `wait_for_request` inexistente | Swift e `tk-legacy` | sim, `main_window.py:1971` |
 | Proxy não decifra HTTPS; para app moderno a aba Rede é lista de hosts | `adapters/proxy.py` | leitura dos agentes |
 | Bundle do app depende do Python do sistema e é assinado ad-hoc; não roda em Mac limpo | `tools/`, `Makefile` | leitura do agente da frente 3 |
 

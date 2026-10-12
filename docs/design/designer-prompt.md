@@ -79,7 +79,7 @@ A interface deve ser composta por 4 grandes regiões funcionais:
 |   ESPELHO EM TEMPO REAL      |   HIERARQUIA DE ELEMENTOS    |    GERADOR DE CÓDIGO PAGE OBJECT   |
 |                              |                              |                                    |
 |   +----------------------+   |  🔍 [Buscar ID, texto, xpath] |  Estratégia: [Posição / ID / Path] |
-|   |                      |   |                              |  Chave: [onboarding_credito_objs]  |
+|   |                      |   |                              |  Chave: [cadastro_demo_objs]  |
 |   |   Tela do Mobile     |   |  ▼ View                      |                                    |
 |   |   (com overlay de    |   |    ▼ Button (id: btn_login)  |  ```python                         |
 |   |    bounding box      |   |    ► Text ("Continuar")      |  def get_botao_continuar(self):    |

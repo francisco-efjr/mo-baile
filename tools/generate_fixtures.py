@@ -5,6 +5,12 @@ Rode sempre que o formato de uma resposta do motor mudar:
 
     make fixtures
 
+Para so conferir, sem escrever (o `make check` faz isto, alvo
+`fixtures-check`): gera em memoria, compara com o arquivo e sai com erro se
+houver diferenca.
+
+    python tools/generate_fixtures.py --check
+
 As fixtures nao sao escritas a mao: saem do proprio motor, com os mesmos
 serializadores que rodam em producao. E o que torna o contrato entre Python e
 Swift verificavel dos dois lados.
@@ -12,22 +18,34 @@ Swift verificavel dos dois lados.
 
 from __future__ import annotations
 
+import argparse
+import base64
 import contextlib
 import io
 import json
 import pathlib
 import sys
+import tempfile
 import threading
+from typing import Any
 from unittest.mock import patch
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "engine" / "src"))
+# Cenario sintetico da aba Relatorio: o mesmo dos testes do motor, para a
+# fixture e a suite Python falarem do mesmo relatorio.
+sys.path.insert(0, str(REPO_ROOT / "engine" / "tests" / "unit"))
 
 from PIL import Image  # noqa: E402
+from relatorio_dados import SPEC, gravar  # noqa: E402
+from relatorio_ocr import CARD_CHECKOUT, CARD_INTERACTION  # noqa: E402
 
 from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
 from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
+from mobaile.services.report import ReportService  # noqa: E402
+
+FIXTURE_PATH = REPO_ROOT / "apps/MoBaile/Tests/MoBaileTests/Fixtures/engine_payloads.json"
 
 HIERARCHY_XML = (
     '<hierarchy rotation="0">'
@@ -125,6 +143,61 @@ def cancelamento() -> dict:
     return resposta
 
 
+# Onde os arquivos do relatorio "moram" na fixture. O motor grava de verdade
+# numa pasta temporaria; o caminho dela muda a cada execucao e de maquina para
+# maquina, entao sai da fixture trocado por este.
+PASTA_RELATORIO = "/Users/qa/Documents/Mo baile/Demanda"
+PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+
+class _OcrFalso:
+    """OCR com as linhas sinteticas dos testes: o Vision so existe no macOS."""
+
+    def read(self, paths):
+        cards = [CARD_INTERACTION, CARD_CHECKOUT]
+        return {str(p): cards[i % 2] for i, p in enumerate(paths)}
+
+
+def _trocar_caminhos(valor: Any, de: tuple[str, ...], para: str) -> Any:
+    if isinstance(valor, str):
+        for origem in de:
+            valor = valor.replace(origem, para)
+        return valor
+    if isinstance(valor, list):
+        return [_trocar_caminhos(v, de, para) for v in valor]
+    if isinstance(valor, dict):
+        return {k: _trocar_caminhos(v, de, para) for k, v in valor.items()}
+    return valor
+
+
+def relatorio(server: EngineServer, call) -> dict:
+    """`report.*` pelo servidor de verdade, sobre arquivos de verdade."""
+    with tempfile.TemporaryDirectory() as tmp:
+        pasta = pathlib.Path(tmp).resolve()
+        server.report = ReportService(ocr=_OcrFalso(), documents_dir=pasta / "Mo baile")
+        prints = pasta / "prints"
+        prints.mkdir()
+        # Bytes fixos, e nao `Image.save`: o encoder do Pillow muda entre
+        # versoes, e o tamanho do board exportado entra na fixture.
+        (prints / "home.png").write_bytes(base64.b64decode(PNG_1X1))
+        (prints / "simulacao.png").write_bytes(b"nao e imagem")
+        cards = [dict(SPEC["cards"][0], print="home.png"), *SPEC["cards"][1:]]
+        spec_path, log_path = gravar(pasta, spec={**SPEC, "prints_dir": "prints", "cards": cards})
+
+        saida = {
+            "report.spec": call("report.spec", {"path": str(spec_path)}),
+            "report.audit": call("report.audit", {
+                "spec_path": str(spec_path), "source": "file", "log_path": str(log_path),
+            }),
+            "report.export": call("report.export", {"directory": str(pasta / "saida")}),
+            "report.import": call("report.import", {
+                "prints_dir": str(prints), "projeto": "Demanda", "platform": "android",
+            }),
+            "erro_report_sessao_vazia": call("report.audit", {"spec_path": str(spec_path), "source": "session"}),
+        }
+        return _trocar_caminhos(saida, (str(pasta), tmp), PASTA_RELATORIO)
+
+
 def build() -> dict:
     out = io.StringIO()
     server = EngineServer(out=out)
@@ -196,8 +269,8 @@ def build() -> dict:
 
     traffic = NetworkEvent(
         id=7, timestamp=1757030000.5, time_str="14:32:10.123", method="POST",
-        url="https://api.exemplo.com.br/v2/credito/simulacao", host="api.exemplo.com.br",
-        path="/v2/credito/simulacao", status_code=200, status_text="OK",
+        url="https://api.exemplo.com.br/v2/pedido/simulacao", host="api.exemplo.com.br",
+        path="/v2/pedido/simulacao", status_code=200, status_text="OK",
         request_headers={"Content-Type": "application/json", "Authorization": "«redigido» (32 chars)"},
         request_body='{"valor":1000}', response_headers={"Content-Type": "application/json"},
         response_body='{"parcelas":12}', duration_ms=182.7, protocol="HTTP/1.1",
@@ -207,22 +280,90 @@ def build() -> dict:
 
     analytics = AnalyticsEvent(
         id=3, timestamp=1757030001.0, time_str="14:32:11.001", tag="FA", event_name="screen_view",
-        params={"screen_name": "onboarding_credito", "step": 2, "first_open": True},
+        params={"screen_name": "cadastro_demo", "step": 2, "first_open": True},
         raw_log="Logging event: screen_view", platform="android",
     )
     fixtures["notif_analytics.event"] = protocol.notification("analytics.event", analytics.to_dict())
+
+    fixtures.update(relatorio(server, call))
 
     server.shutdown()
     fixtures["erro_request_cancelled"] = cancelamento()
     return fixtures
 
 
-def main() -> None:
-    destination = REPO_ROOT / "apps/MoBaile/Tests/MoBaileTests/Fixtures/engine_payloads.json"
+def _render(fixtures: dict) -> str:
+    return json.dumps(fixtures, ensure_ascii=False, indent=2) + "\n"
+
+
+def _nome(caminho: pathlib.Path) -> str:
+    try:
+        return str(caminho.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(caminho)
+
+
+def _pixels(valor: str) -> str:
+    """Identidade do PNG pelo conteudo: tamanho, modo e pixels.
+
+    Os bytes do PNG mudam com a versao do Pillow/zlib (compressao), sem mudar
+    a imagem; comparar bytes dava "desatualizado" so por trocar de maquina.
+    """
+    import base64
+    import hashlib
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(base64.b64decode(valor))) as img:
+        img.load()
+        digest = hashlib.sha256(img.tobytes()).hexdigest()
+        return f"png:{img.size[0]}x{img.size[1]}:{img.mode}:{digest}"
+
+
+def _normalizar(valor):
+    if isinstance(valor, dict):
+        return {
+            k: _pixels(v) if k.endswith("png_base64") and isinstance(v, str) and v else _normalizar(v)
+            for k, v in valor.items()
+        }
+    if isinstance(valor, list):
+        return [_normalizar(v) for v in valor]
+    return valor
+
+
+def check(destination: pathlib.Path) -> int:
+    """0 se o arquivo e igual ao que o motor gera agora; 1 se nao."""
+    gerado = build()
+    try:
+        atual = json.loads(destination.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"fixtures ausentes ou ilegiveis em {_nome(destination)}: {exc}", file=sys.stderr)
+        print("Rode 'make fixtures' e faca o commit.", file=sys.stderr)
+        return 1
+    atual, gerado = _normalizar(atual), _normalizar(gerado)
+    if _render(atual) == _render(gerado):
+        print(f"fixtures em dia: {_nome(destination)}")
+        return 0
+    mudaram = sorted(k for k in atual.keys() | gerado.keys() if atual.get(k) != gerado.get(k))
+    print(f"As fixtures do contrato estao desatualizadas em {_nome(destination)}.", file=sys.stderr)
+    print(f"Chaves diferentes: {', '.join(mudaram)}", file=sys.stderr)
+    print("Rode 'make fixtures' e faca o commit.", file=sys.stderr)
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true", help="so confere; nao escreve")
+    args = parser.parse_args(argv)
+    destination = FIXTURE_PATH
+    if args.check:
+        return check(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(build(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"fixtures gravadas em {destination.relative_to(REPO_ROOT)}")
+    destination.write_text(_render(build()), encoding="utf-8")
+    print(f"fixtures gravadas em {_nome(destination)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

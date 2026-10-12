@@ -86,8 +86,9 @@ em tempo de execução.
 | `engine/src/mobaile/services` | Casos de uso que compõem adapters. |
 | `engine/src/mobaile/security` | Validação de entrada, escaping de shell, redação, XML seguro. |
 | `engine/src/mobaile/rpc` | Fronteira. Única porta de entrada do motor. |
+| `engine/src/mobaile/services/report` | Aba Relatório: auditoria de tagueamento contra a spec do Figma, com o `tag_audit` como núcleo ([ADR 0003](adr/0003-relatorio-tagueamento.md)). |
 | `apps/MoBaile/Sources/MoBaile/Engine` | Cliente do motor, DTOs e o coordenador de sessão. |
-| `apps/MoBaile/Sources/MoBaile/Views` | Telas. Falam com a sessão, nunca com o transporte. |
+| `apps/MoBaile/Sources/MoBaile/Views` | Telas. Falam com a sessão, nunca com o transporte. `Views/Report` é a aba Relatório. |
 | `apps/tk-legacy` | Interface Tkinter atual, em transição. |
 
 ## A regra de disciplina

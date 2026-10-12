@@ -18,16 +18,16 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertEqual(event.params.get("opened_from_app_list"), "1")
 
     def test_parse_logcat_line_case_b(self):
-        raw = "09-03 14:10:00.100 V/FA: Logging event: screen_view, Bundle[{ga_screen_name=app:home, flow_name=credito}]"
+        raw = "09-03 14:10:00.100 V/FA: Logging event: screen_view, Bundle[{ga_screen_name=app:home, flow_name=pedido}]"
         event = self.listener._parse_line(raw, platform="android")
         self.assertIsNotNone(event)
         self.assertEqual(event.event_name, "screen_view")
         self.assertEqual(event.tag, "FA")
-        self.assertEqual(event.params.get("flow_name"), "credito")
+        self.assertEqual(event.params.get("flow_name"), "pedido")
         self.assertEqual(event.params.get("ga_screen_name"), "app:home")
 
     def test_parse_ios_log_line(self):
-        raw = "2026-09-04 09:30:15.123456-0300 Default [FirebaseAnalytics] Logging event: origin=app, name=screen_view, params={ ga_screen = \"app:home\"; ga_screen_class = \"HomeController\"; flow_name = \"credito\"; }"
+        raw = "2026-09-04 09:30:15.123456-0300 Default [FirebaseAnalytics] Logging event: origin=app, name=screen_view, params={ ga_screen = \"app:home\"; ga_screen_class = \"HomeController\"; flow_name = \"pedido\"; }"
         event = self.listener._parse_line(raw, platform="ios")
         self.assertIsNotNone(event)
         self.assertEqual(event.event_name, "screen_view")
@@ -35,31 +35,31 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertEqual(event.platform, "ios")
         self.assertEqual(event.params.get("ga_screen"), "app:home")
         self.assertEqual(event.params.get("ga_screen_class"), "HomeController")
-        self.assertEqual(event.params.get("flow_name"), "credito")
+        self.assertEqual(event.params.get("flow_name"), "pedido")
 
     # Saida real de `log stream --style compact` para o log do Xcode com -FIRDebugEnabled.
     IOS_DEBUG_RECORD = (
         "2026-09-30 10:22:01.482 Df MeuApp[4321:1a2b3c] [com.google.utilities.logger:FirebaseAnalytics] "
         "10.22.1 - [FirebaseAnalytics][I-ACS023073] Debug mode is enabled. Marking event as debug and real-time. "
-        "Event name, parameters: interaction_credito_pessoal, {\n"
+        "Event name, parameters: interaction_pedido_pessoal, {\n"
         "    component = button;\n"
         "    detail = \"click:ir-para-o-saldo-da-conta\";\n"
-        "    flow_name = credito-pessoal;\n"
+        "    flow_name = pedido-pessoal;\n"
         "    ga_debug (_dbg) = 1;\n"
         "    ga_event_origin (_o) = app;\n"
         "    ga_realtime (_r) = 1;\n"
-        "    ga_screen (_sn) = app:creditos:pessoal:sucesso;\n"
+        "    ga_screen (_sn) = app:pedidos:pessoal:sucesso;\n"
         "    ga_screen_class (_sc) = LoginNavigationController;\n"
         "    ga_screen_id (_si) = -3365154693535786272;\n"
         "    insurance = 1;\n"
-        "    screen_name = app:credito:pessoal:sucesso;\n"
+        "    screen_name = app:pedido:pessoal:sucesso;\n"
         "}"
     )
 
     def test_parse_ios_registro_debug_mode(self):
         event = self.listener._parse_ios_record(self.IOS_DEBUG_RECORD)
         self.assertIsNotNone(event)
-        self.assertEqual(event.event_name, "interaction_credito_pessoal")
+        self.assertEqual(event.event_name, "interaction_pedido_pessoal")
         self.assertEqual(event.platform, "ios")
         self.assertEqual(event.tag, "iOS (Firebase)")
         self.assertEqual(event.time_str, "10:22:01.482")
@@ -67,7 +67,7 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertEqual(event.params["detail"], "click:ir-para-o-saldo-da-conta")
         self.assertEqual(event.params["ga_debug"], "1")
         self.assertEqual(event.params["ga_screen_id"], "-3365154693535786272")
-        self.assertEqual(event.params["screen_name"], "app:credito:pessoal:sucesso")
+        self.assertEqual(event.params["screen_name"], "app:pedido:pessoal:sucesso")
         self.assertEqual(len(event.params), 11)
 
     def test_parse_ios_nome_curto_e_parametro_aninhado(self):
@@ -140,7 +140,7 @@ class TestAnalyticsListener(unittest.TestCase):
         self.listener._stream_reader()
 
         self.assertEqual(len(recebidos), 1)
-        self.assertEqual(recebidos[0].event_name, "interaction_credito_pessoal")
+        self.assertEqual(recebidos[0].event_name, "interaction_pedido_pessoal")
         self.assertEqual(len(self.listener.events_history), 1)
 
     def test_start_ios_usa_log_stream_do_simulador(self):
@@ -171,9 +171,9 @@ class TestAnalyticsListener(unittest.TestCase):
         self.assertTrue(self.listener._device_ready.is_set())
         self.assertEqual(len(recebidos), 1)
         evento = recebidos[0]
-        self.assertEqual(evento.event_name, "interaction_credito_pessoal")
+        self.assertEqual(evento.event_name, "interaction_pedido_pessoal")
         self.assertEqual(evento.time_str, "10:22:01.482")
-        self.assertEqual(evento.params["flow_name"], "credito-pessoal")
+        self.assertEqual(evento.params["flow_name"], "pedido-pessoal")
         self.assertIn("MeuApp[321]", evento.raw_log)
 
     def _start_fisico_com_saida(self, saida: str):
@@ -184,14 +184,14 @@ class TestAnalyticsListener(unittest.TestCase):
         proc.stdout = io.StringIO(saida)
         with patch("subprocess.Popen", return_value=proc) as popen, \
              patch("mobaile.adapters.ios_device_log.is_available", return_value=True):
-            resultado = self.listener.start(platform="ios", device_id="00008020-001549180128402E", ios_physical=True)
+            resultado = self.listener.start(platform="ios", device_id="00008020-000000000000001A", ios_physical=True)
         return resultado, popen
 
     def test_start_iphone_fisico_roda_o_filho_e_espera_ficar_pronto(self):
         resultado, popen = self._start_fisico_com_saida('{"status": "ready"}\n')
         self.assertTrue(resultado)
         cmd = popen.call_args[0][0]
-        self.assertEqual(cmd[1:5], ["-m", "mobaile.adapters.ios_device_log", "stream", "00008020-001549180128402E"])
+        self.assertEqual(cmd[1:5], ["-m", "mobaile.adapters.ios_device_log", "stream", "00008020-000000000000001A"])
         self.assertIn("PYTHONPATH", popen.call_args[1]["env"])
         self.assertEqual(self.listener.active_source, "ios_device")
         self.listener.stop()
@@ -221,7 +221,7 @@ class TestAnalyticsListener(unittest.TestCase):
 
         with patch("mobaile.adapters.ios_device_log.is_available", return_value=False), \
              self.assertRaises(AdapterError) as ctx:
-            self.listener.start(platform="ios", device_id="00008020-001549180128402E", ios_physical=True)
+            self.listener.start(platform="ios", device_id="00008020-000000000000001A", ios_physical=True)
         self.assertIn("pip install pymobiledevice3", ctx.exception.detail)
 
     def test_export_tsv_and_json(self):
@@ -272,6 +272,86 @@ class TestAnalyticsListener(unittest.TestCase):
             self.assertTrue(any("debug.firebase.analytics.app com.exemplo.app" in cmd for cmd in executed_cmds))
             self.assertTrue(any("logcat -G 8M" in cmd for cmd in executed_cmds))
             self.assertTrue(any("log.tag.FirebaseAnalytics VERBOSE" in cmd for cmd in executed_cmds))
+
+
+class TestFilaDeEventosLimitada(unittest.TestCase):
+    """COD-1: sem consumidor (caso do app nativo), a fila nao cresce sem fim."""
+
+    def _evento(self, n: int) -> AnalyticsEvent:
+        return AnalyticsEvent(id=n, timestamp=0.0, time_str="", tag="FA", event_name=f"e{n}")
+
+    def test_fila_tem_limite_e_descarta_o_mais_antigo(self):
+        from mobaile.adapters.analytics_logcat import MAX_HISTORY
+
+        listener = FirebaseAnalyticsListener()
+        limite = listener.event_queue.maxsize
+        self.assertGreater(limite, 0, "fila de eventos sem limite")
+        self.assertLessEqual(limite, MAX_HISTORY * 2)
+        for n in range(limite + 10):
+            listener._emit(self._evento(n))
+        self.assertEqual(listener.event_queue.qsize(), limite)
+        self.assertEqual(listener.event_queue.get_nowait().id, 10)
+        # O historico (o que o RPC le) nao depende da fila.
+        self.assertEqual(listener.events_history[-1].id, limite + 9)
+
+
+LIMPEZA_FIREBASE =["shell", "setprop", "debug.firebase.analytics.app", ".none."]
+
+
+class TestAnalyticsDesfazDebugDoFirebase(unittest.TestCase):
+    """COD-2: o `stop` desfaz o `debug.firebase.analytics.app` no aparelho em que foi ligado."""
+
+    LIMPEZA = LIMPEZA_FIREBASE
+
+    def setUp(self):
+        self.listener = FirebaseAnalyticsListener()
+        self.listener.adb.adb_path = "/falso/adb"
+
+    def _limpezas(self, mock_run) -> list[list[str]]:
+        return [c[0][0] for c in mock_run.call_args_list if c[0][0][-4:] == self.LIMPEZA]
+
+    def test_stop_desfaz_no_aparelho_em_que_ligou(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.stop()
+        self.assertEqual(self._limpezas(mock_run), [["/falso/adb", "-s", "emulator-5554", *self.LIMPEZA]])
+
+    def test_segundo_stop_nao_repete(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.stop()
+            self.listener.stop()
+        self.assertEqual(len(self._limpezas(mock_run)), 1)
+
+    def test_ligar_em_outro_aparelho_desliga_no_anterior(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.setup_props("R58M123", package_name="com.exemplo.app")
+            self.listener.stop()
+        self.assertEqual(
+            self._limpezas(mock_run),
+            [["/falso/adb", "-s", "emulator-5554", *self.LIMPEZA], ["/falso/adb", "-s", "R58M123", *self.LIMPEZA]],
+        )
+
+    def test_sem_app_em_debug_nao_mexe_no_aparelho(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.adb.get_current_package = lambda _dev: None
+            self.listener.setup_props("emulator-5554")
+            self.listener.stop()
+        self.assertEqual(self._limpezas(mock_run), [])
+
+    def test_falha_do_adb_na_limpeza_nao_quebra_o_stop(self):
+        import subprocess
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            mock_run.side_effect = subprocess.TimeoutExpired("adb", 5)
+            self.listener.stop()
+        self.assertFalse(self.listener.is_running())
 
 
 if __name__ == "__main__":

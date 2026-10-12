@@ -331,7 +331,7 @@ class AutomationExecutionDialog:
         self.runner_process = None
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Executar fluxo · " + (steps[0].package if steps and steps[0].package else "onboarding_credito"))
+        self.window.title("Executar fluxo · " + (steps[0].package if steps and steps[0].package else "minha_tela"))
         self.window.geometry("860x540")
         self.window.minsize(780, 480)
         self.window.configure(bg=self.theme.get("bg_window", self.theme.get("bg_color", "#1E1E2E")))
@@ -366,7 +366,7 @@ class AutomationExecutionDialog:
         header = tk.Frame(self.window, bg=bg_bar, height=44, padx=16, pady=10)
         header.pack(fill=tk.X, side=tk.TOP)
 
-        title_text = "Executar fluxo · " + (self.steps[0].package if self.steps and self.steps[0].package else "onboarding_credito")
+        title_text = "Executar fluxo · " + (self.steps[0].package if self.steps and self.steps[0].package else "minha_tela")
         self.lbl_header_title = tk.Label(
             header,
             text=title_text,

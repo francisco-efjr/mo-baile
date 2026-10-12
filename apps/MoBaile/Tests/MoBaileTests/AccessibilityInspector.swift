@@ -50,22 +50,51 @@ struct AXNode {
 @MainActor
 enum AccessibilityInspector {
     private static func texto(_ objeto: NSObject, _ seletor: String) -> String {
-        guard objeto.responds(to: Selector(seletor)),
-              let valor = objeto.perform(Selector(seletor))?.takeUnretainedValue() else { return "" }
+        if objeto.responds(to: Selector(seletor)),
+           let valor = objeto.perform(Selector(seletor))?.takeUnretainedValue() {
+            if let s = valor as? String { return s }
+            if let n = valor as? NSNumber { return n.stringValue }
+            // `accessibilityRole` devolve um NSAccessibility.Role, que é um NSString.
+            return "\(valor)"
+        }
+        return legado(objeto, seletor).map(descrever) ?? ""
+    }
+
+    /// Linhas de `Table` e de `List` chegam como elementos do protocolo antigo
+    /// do AppKit (`accessibilityAttributeValue:`), sem os métodos novos. O
+    /// VoiceOver lê pelos dois caminhos; o inspetor também precisa.
+    private static let atributosLegados: [String: String] = [
+        "accessibilityRole": "AXRole",
+        "accessibilityLabel": "AXDescription",
+        "accessibilityValue": "AXValue",
+        "accessibilityHelp": "AXHelp",
+        "accessibilityChildren": "AXChildren",
+        "accessibilityTitle": "AXTitle",
+        "accessibilitySelected": "AXSelected",
+    ]
+
+    static func legado(_ objeto: NSObject, _ seletor: String) -> Any? {
+        guard let nome = atributosLegados[seletor] else { return nil }
+        let nomes = objeto.accessibilityAttributeNames()
+        guard nomes.contains(NSAccessibility.Attribute(rawValue: nome)) else { return nil }
+        return objeto.accessibilityAttributeValue(NSAccessibility.Attribute(rawValue: nome))
+    }
+
+    private static func descrever(_ valor: Any) -> String {
         if let s = valor as? String { return s }
         if let n = valor as? NSNumber { return n.stringValue }
-        // `accessibilityRole` devolve um NSAccessibility.Role, que é um NSString.
         return "\(valor)"
     }
 
     private static func no(_ objeto: NSObject, nivel: Int) -> AXNode {
-        let filhos: [AXNode]
-        if nivel < 40,
-           objeto.responds(to: Selector("accessibilityChildren")),
-           let lista = objeto.perform(Selector("accessibilityChildren"))?.takeUnretainedValue() as? [Any] {
-            filhos = lista.compactMap { ($0 as? NSObject).map { no($0, nivel: nivel + 1) } }
-        } else {
-            filhos = []
+        var filhos: [AXNode] = []
+        if nivel < 40 {
+            if objeto.responds(to: Selector("accessibilityChildren")),
+               let lista = objeto.perform(Selector("accessibilityChildren"))?.takeUnretainedValue() as? [Any] {
+                filhos = lista.compactMap { ($0 as? NSObject).map { no($0, nivel: nivel + 1) } }
+            } else if let lista = legado(objeto, "accessibilityChildren") as? [Any] {
+                filhos = lista.compactMap { ($0 as? NSObject).map { no($0, nivel: nivel + 1) } }
+            }
         }
         var selecionado = false
         if objeto.responds(to: Selector("isAccessibilitySelected")) {
@@ -73,10 +102,14 @@ enum AccessibilityInspector {
             // `NSObject` não oferece leitura segura de escalar, então se
             // consulta pelo atributo, que devolve NSNumber.
             selecionado = (objeto.value(forKey: "accessibilitySelected") as? Bool) ?? false
+        } else if let valor = legado(objeto, "accessibilitySelected") as? Bool {
+            selecionado = valor
         }
+        var rotulo = texto(objeto, "accessibilityLabel")
+        if rotulo.isEmpty { rotulo = legado(objeto, "accessibilityTitle").map(descrever) ?? "" }
         return AXNode(
             role: texto(objeto, "accessibilityRole"),
-            label: texto(objeto, "accessibilityLabel"),
+            label: rotulo,
             value: texto(objeto, "accessibilityValue"),
             help: texto(objeto, "accessibilityHelp"),
             isSelected: selecionado,

@@ -1,0 +1,48 @@
+name: Sugerir recurso
+description: Uma ideia para o Mo baile fazer algo novo ou fazer melhor.
+title: "[ideia] "
+labels: ["melhoria", "triagem"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Recursos novos entram no app nativo. O app Tk legado está congelado
+        ([ADR 0005](https://github.com/francisco-efjr/mo-baile/blob/main/docs/adr/0005-app-tk-congelado.md)).
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qual problema isso resolve
+      description: Conte a situação de uso. "Quando eu ..., eu preciso ..., porque ..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta
+      description: Como você imagina a solução.
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Outras ferramentas ou contornos que você usa hoje.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      multiple: true
+      options:
+        - Espelho e toque
+        - Hierarquia e Page Objects
+        - Rede (proxy, HTTPS)
+        - Analytics (tagueamento)
+        - Relatório (tag_audit)
+        - Instalação e empacotamento
+        - Outra
+  - type: checkboxes
+    id: contribuir
+    attributes:
+      label: Contribuição
+      options:
+        - label: Posso ajudar a implementar (veja CONTRIBUTING.md).

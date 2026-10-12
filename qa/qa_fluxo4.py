@@ -23,7 +23,7 @@ def porta_livre():
         s.bind(("127.0.0.1", 0)); return s.getsockname()[1]
 
 # ---------------------------------------------------------------- origem TLS
-class AppAmobs(http.server.BaseHTTPRequestHandler):
+class AppDemo(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def _responder(self, corpo, ctype="application/json", status=200):
         self.send_response(status)
@@ -38,14 +38,14 @@ class AppAmobs(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/grande"):
             return self._responder(b"x" * (MAX_BODY_CAPTURE + 9000), "text/plain")
         self._responder(json.dumps({
-            "status": "PRE_APROVADO", "parcelas": 12,
+            "status": "CONFIRMADO", "parcelas": 12,
             "token": "eyJhbGciOiJIUzI1NiJ9.credencial.real",
             "cpf": "000.000.000-00",
         }).encode())
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0) or 0)
         self.rfile.read(n)
-        self._responder(json.dumps({"status": "PRE_APROVADO"}).encode(), status=201)
+        self._responder(json.dumps({"status": "CONFIRMADO"}).encode(), status=201)
     def log_message(self, *_a): pass
 
 def _garantir_certificado():
@@ -56,7 +56,7 @@ def _garantir_certificado():
     if not (cert.exists() and chave.exists()):
         subprocess.run(
             ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", str(chave),
-             "-out", str(cert), "-days", "2", "-nodes", "-subj", "/CN=api.amobs.local"],
+             "-out", str(cert), "-days", "2", "-nodes", "-subj", "/CN=api.demoapp.test"],
             capture_output=True, check=True,
         )
     return str(cert), str(chave)
@@ -65,17 +65,17 @@ def _garantir_certificado():
 _cert, _chave = _garantir_certificado()
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 ctx.load_cert_chain(_cert, _chave)
-origem_https = http.server.HTTPServer(("127.0.0.1", 0), AppAmobs)
+origem_https = http.server.HTTPServer(("127.0.0.1", 0), AppDemo)
 origem_https.socket = ctx.wrap_socket(origem_https.socket, server_side=True)
 PORTA_HTTPS = origem_https.server_address[1]
 threading.Thread(target=origem_https.serve_forever, daemon=True).start()
 
-origem_http = http.server.HTTPServer(("127.0.0.1", 0), AppAmobs)
+origem_http = http.server.HTTPServer(("127.0.0.1", 0), AppDemo)
 PORTA_HTTP = origem_http.server_address[1]
 threading.Thread(target=origem_http.serve_forever, daemon=True).start()
 
 print("=" * 78)
-print("FLUXO 4 — HTTPS (app amobs)")
+print("FLUXO 4 — HTTPS (app DemoApp)")
 print("=" * 78)
 print(f"  origem HTTPS em :{PORTA_HTTPS} · origem HTTP em :{PORTA_HTTP}\n")
 
@@ -104,9 +104,9 @@ try:
     resposta = bruto.recv(4096)
     check("proxy aceita CONNECT", b"200" in resposta, resposta[:60].decode(errors="replace"))
 
-    tls = cliente_ctx.wrap_socket(bruto, server_hostname="api.amobs.local")
+    tls = cliente_ctx.wrap_socket(bruto, server_hostname="api.demoapp.test")
     tls.sendall(
-        "GET /v2/credito/simulacao HTTP/1.1\r\nHost: api.amobs.local\r\n"
+        "GET /v2/pedido/simulacao HTTP/1.1\r\nHost: api.demoapp.test\r\n"
         "Authorization: Bearer token-de-producao-do-cliente\r\nConnection: close\r\n\r\n".encode())
     corpo = b""
     tls.settimeout(6)
@@ -119,7 +119,7 @@ try:
         corpo += pedaco
     tls.close()
 
-    check("handshake TLS completa atraves do tunel", b"PRE_APROVADO" in corpo,
+    check("handshake TLS completa atraves do tunel", b"CONFIRMADO" in corpo,
           corpo[:80].decode(errors="replace"))
 
     ev = ultimo_evento()
@@ -132,7 +132,7 @@ try:
 
     # LIMITE HONESTO: o tunel nao decifra, entao corpo e headers ficam opacos.
     check("corpo do HTTPS NAO e inspecionavel (limitacao conhecida)",
-          "PRE_APROVADO" not in ev.response_body and ev.request_body == "",
+          "CONFIRMADO" not in ev.response_body and ev.request_body == "",
           "o proxy estaria decifrando TLS sem CA, o que nao e o caso")
     check("credencial do app nao aparece no evento do tunel",
           "token-de-producao" not in json.dumps(ev.to_dict()))
@@ -151,19 +151,19 @@ try:
                 saida += p
             return saida
 
-    req = (f"GET http://127.0.0.1:{PORTA_HTTP}/v2/credito/simulacao HTTP/1.1\r\n"
+    req = (f"GET http://127.0.0.1:{PORTA_HTTP}/v2/pedido/simulacao HTTP/1.1\r\n"
            f"Host: 127.0.0.1:{PORTA_HTTP}\r\n"
            f"Authorization: Bearer token-de-producao-do-cliente\r\n"
            f"Cookie: sessao=abc123secreto\r\n"
-           f"User-Agent: amobs/3.2.1 (Android)\r\nConnection: close\r\n\r\n").encode()
+           f"User-Agent: demoapp/1.0.0 (Android)\r\nConnection: close\r\n\r\n").encode()
     resp = via_proxy(req)
-    check("resposta em claro chega ao cliente", b"PRE_APROVADO" in resp)
+    check("resposta em claro chega ao cliente", b"CONFIRMADO" in resp)
 
     ev = ultimo_evento()
     check("requisicao registrada", ev.method == "GET" and ev.status_code == 200, f"{ev.method} {ev.status_code}")
-    check("path preservado", "/v2/credito/simulacao" in ev.path, ev.path)
-    check("corpo da resposta inspecionavel", "PRE_APROVADO" in ev.response_body)
-    check("User-Agent do app preservado", "amobs" in ev.request_headers.get("User-Agent", ""))
+    check("path preservado", "/v2/pedido/simulacao" in ev.path, ev.path)
+    check("corpo da resposta inspecionavel", "CONFIRMADO" in ev.response_body)
+    check("User-Agent do app preservado", "demoapp" in ev.request_headers.get("User-Agent", ""))
 
     auth = ev.request_headers.get("Authorization", "")
     check("Authorization redigido", "token-de-producao" not in auth and "redigido" in auth, auth)
@@ -178,7 +178,7 @@ try:
     print(f"       corpo capturado: {ev.response_body[:100]}")
 
     corpo_post = '{"valor":1500,"senha":"minhasenha","cpf":"111.222.333-44"}'
-    req = (f"POST http://127.0.0.1:{PORTA_HTTP}/v2/credito/simulacao HTTP/1.1\r\n"
+    req = (f"POST http://127.0.0.1:{PORTA_HTTP}/v2/pedido/simulacao HTTP/1.1\r\n"
            f"Host: 127.0.0.1:{PORTA_HTTP}\r\nContent-Type: application/json\r\n"
            f"Content-Length: {len(corpo_post)}\r\nConnection: close\r\n\r\n{corpo_post}").encode()
     via_proxy(req)

@@ -4,18 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mobaile-engine"
-version = "2.1.1"
+version = "3.5.1"
 description = "Motor headless de inspecao, automacao e interceptacao mobile do Mo baile"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Proprietary" }
-authors = [{ name = "QA Automation Team" }]
+license = { text = "MIT" }
+authors = [{ name = "Francisco Edson Ferreira Junior" }]
 classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
+    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "Pillow>=10.0.0",

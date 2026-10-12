@@ -1,0 +1,3 @@
+/* SF Pro é a fonte do sistema no macOS. Estas regras apontam para a cópia instalada (local()); não há arquivo distribuído. */
+@font-face{font-family:"SF Pro Text";src:local("SF Pro Text"),local("SFProText-Regular"),local(".SFNSText");font-weight:100 900;font-style:normal}
+@font-face{font-family:"SF Pro Display";src:local("SF Pro Display"),local("SFProDisplay-Regular"),local(".SFNSDisplay");font-weight:100 900;font-style:normal}

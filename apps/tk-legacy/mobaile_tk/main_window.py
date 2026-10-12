@@ -1385,7 +1385,7 @@ class MobileRecorderApp:
         act_hdr = tk.Frame(self.actions_frame, bg=t["bg_panel"], height=32, padx=12)
         act_hdr.pack(fill=tk.X, side=tk.TOP)
         act_hdr.pack_propagate(False)
-        self.lbl_act_title = tk.Label(act_hdr, text="pages/onboarding_credito.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_actions"], font=("Menlo", 10, "bold"))
+        self.lbl_act_title = tk.Label(act_hdr, text="pages/minha_tela.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_actions"], font=("Menlo", 10, "bold"))
         self.lbl_act_title.pack(side=tk.LEFT)
 
         self.btn_save_act = FluidPillButton(
@@ -1450,7 +1450,7 @@ class MobileRecorderApp:
         obj_hdr = tk.Frame(self.objects_frame, bg=t["bg_panel"], height=32, padx=12)
         obj_hdr.pack(fill=tk.X, side=tk.TOP)
         obj_hdr.pack_propagate(False)
-        self.lbl_obj_title = tk.Label(obj_hdr, text="locators/onboarding_credito.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_locators"], font=("Menlo", 10, "bold"))
+        self.lbl_obj_title = tk.Label(obj_hdr, text="locators/minha_tela.py", bg=t["bg_panel"], fg=t["syntax"]["file_title_locators"], font=("Menlo", 10, "bold"))
         self.lbl_obj_title.pack(side=tk.LEFT)
 
         self.btn_clear = FluidPillButton(
@@ -1968,9 +1968,9 @@ class MobileRecorderApp:
     def _generate_contract_assertion(self):
         snippet = (
             "\n        # Asserção de contrato de API correlacionada (MITM)\n"
-            "        response = self.network_interceptor.wait_for_request('/v2/credito/simulacao', timeout=5.0)\n"
+            "        response = self.network_interceptor.wait_for_request('/v2/pedido/simulacao', timeout=5.0)\n"
             "        assert response.status_code == 201\n"
-            "        assert response.json()['status'] == 'PRE_APROVADO'\n"
+            "        assert response.json()['status'] == 'CONFIRMADO'\n"
         )
         self.actions_text.insert(tk.END, snippet)
         self.actions_text.see(tk.END)
@@ -2578,9 +2578,9 @@ class MobileRecorderApp:
 
     def _insert_initial_headers(self):
         act_hdr = (
-            "from locators.credito import objs\n"
+            "from locators.minha_tela import objs\n"
             "from base.page import BasePage\n\n\n"
-            "class OnboardingCredito(BasePage):\n"
+            "class MinhaTela(BasePage):\n"
             "    # Passos gerados automaticamente aparecerão abaixo\n"
         )
         self.actions_text.delete("1.0", tk.END)

@@ -737,7 +737,7 @@ sucesso é "o adb devolveu 0".
 
 **D6. Padrão de fábrica é `position`.** `DEFAULT_STRATEGY` cai em `"position"`
 (`config.py`), a pior estratégia pela própria régua do código. E
-`PAGE_OBJECTS_KEY` padrão é `onboarding_credito_objs`, nome de um projeto
+`PAGE_OBJECTS_KEY` padrão é o nome do dicionário de um projeto
 específico vazando para o produto.
 
 **D7. Page Object gerado depende de uma base que não existe.** O código emite

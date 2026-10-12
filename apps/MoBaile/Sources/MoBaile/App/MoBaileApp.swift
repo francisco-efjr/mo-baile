@@ -19,7 +19,7 @@ struct MoBaileApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        Window("Mo baile", id: "main") {
             ContentView()
                 .environment(appState)
                 .environment(session)
@@ -32,10 +32,18 @@ struct MoBaileApp: App {
                 .onAppear { delegate.session = session }
         }
         .defaultSize(DesignMetrics.Window.defaultSize)
-        .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowToolbarStyle(.unified)
         .commands {
-            MoBaileCommands(appState: appState, session: session)
+            MoBaileCommands(appState: appState, session: session, themeManager: themeManager)
+        }
+
+        Settings {
+            SettingsView()
+                .environment(appState)
+                .environment(session)
+                .environment(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+                .tint(themeManager.current.accent)
         }
     }
 }
@@ -44,49 +52,136 @@ struct MoBaileApp: App {
 ///
 /// Atalho de aplicativo Mac vive no menu, e nao em `Button` invisivel dentro da
 /// hierarquia de views: no menu ele aparece descoberto pelo usuario, funciona
-/// com foco em qualquer painel e e lido por tecnologia assistiva.
+/// com foco em qualquer painel e e lido por tecnologia assistiva. Toda acao da
+/// toolbar tambem aparece aqui.
+///
+/// Título, atalho e disponibilidade de cada item vêm do `CommandRegistry`, o
+/// mesmo que a paleta de comandos lê (FLU-1), e a execução passa pelo
+/// `CommandPerformer`. Ficam como `Toggle` próprios só os itens com marca de
+/// seleção (área, modo do clique, 60 FPS).
 struct MoBaileCommands: Commands {
     let appState: AppState
     let session: EngineSession
+    let themeManager: ThemeManager
+
+    private var contexto: CommandContext { .current(appState, session, themeManager) }
+    private var performer: CommandPerformer {
+        CommandPerformer(appState: appState, session: session, themeManager: themeManager)
+    }
 
     var body: some Commands {
-        CommandGroup(after: .toolbar) {
-            Button("Espelho") { appState.mirrorVisible.toggle() }
-                .keyboardShortcut("1", modifiers: .option)
-            Button("Workspace") { appState.workspaceVisible.toggle() }
-                .keyboardShortcut("2", modifiers: .option)
+        let c = contexto
+        SidebarCommands()
+
+        // MARK: Arquivo
+        CommandGroup(replacing: .newItem) {}
+        CommandGroup(replacing: .saveItem) {
+            item(.save, c)
+        }
+        CommandGroup(replacing: .importExport) {
+            item(.openSpec, c)
+            item(.importPrints, c)
+            item(.exportReport, c)
             Divider()
-            Button("Mostrar todos os paineis") { appState.restoreAllPanels() }
-                .keyboardShortcut("f", modifiers: [.command, .option])
-            Button(appState.zenMode ? "Sair do modo Zen" : "Modo Zen") { appState.toggleZenMode() }
-                .keyboardShortcut("z", modifiers: [.command, .shift])
+            item(.exportHAR, c)
+            item(.exportAnalytics, c)
         }
 
-        CommandMenu("Dispositivo") {
-            Button("Atualizar lista") {
-                Task { await session.refreshDevices() }
-            }
-            .keyboardShortcut("r", modifiers: [.command, .shift])
+        // MARK: Editar
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            item(.search, c)
+            Divider()
+            item(.clearTraffic, c)
+            item(.clearAnalytics, c)
+        }
 
-            Button("Atualizar tela") {
-                Task { await session.captureNow() }
+        // MARK: Visualizar
+        CommandGroup(after: .sidebar) {
+            item(.palette, c)
+            Divider()
+            item(.inspector, c)
+            item(.mirror, c)
+            item(.workspace, c)
+            item(.allPanels, c)
+            item(.zen, c)
+            Divider()
+            ForEach(WorkspaceTab.allCases, id: \.self) { area in
+                let atalho = CommandRegistry.command(.area(area), in: c)?.shortcut
+                Toggle(area.displayName, isOn: Binding(
+                    get: { appState.workspaceTab == area && appState.selectedStepID == nil },
+                    set: { _ in performer.perform(.area(area)) }
+                ))
+                .keyboardShortcut(atalho?.keyEquivalent ?? KeyEquivalent(" "), modifiers: atalho?.modifiers ?? [])
             }
-            .keyboardShortcut("k", modifiers: .command)
-            .disabled(!appState.isDeviceConnected)
+        }
+
+        // MARK: Dispositivo
+        CommandMenu("Dispositivo") {
+            item(.refreshDevices, c)
+            item(.captureNow, c)
+            item(.stream, c)
 
             Divider()
 
-            Button(appState.streamActive ? "Parar espelho" : "Iniciar espelho") {
-                Task {
-                    if appState.streamActive {
-                        await session.stopStream()
-                    } else {
-                        await session.startStream()
-                    }
-                }
+            ForEach(InteractionMode.allCases) { modo in
+                Toggle(modo.menuTitle, isOn: Binding(
+                    get: { appState.interactionMode == modo },
+                    set: { if $0 { performer.perform(.interaction(modo)) } }
+                ))
+                .disabled(!c.deviceConnected)
             }
-            .keyboardShortcut("e", modifiers: .command)
-            .disabled(!appState.isDeviceConnected)
+
+            Divider()
+
+            item(.passive, c)
+            item(.screenRecording, c)
+            Toggle("Espelho 60 FPS (scrcpy)", isOn: Binding(
+                get: { appState.scrcpyRunning },
+                set: { _ in performer.perform(.scrcpy) }
+            ))
+            .disabled(!(CommandRegistry.command(.scrcpy, in: c)?.isEnabled ?? false))
+
+            Divider()
+            item(.restartEngine, c)
+        }
+
+        // MARK: Automação
+        CommandMenu("Automação") {
+            item(.structure, c)
+            item(.run, c)
+            Divider()
+            item(.clearSteps, c)
+        }
+
+        // MARK: Janela
+        CommandGroup(after: .windowArrangement) {
+            Divider()
+            Button("Mostrar Splash") { SplashController.shared.show() }
+        }
+    }
+
+    /// Item de menu lido do registro: título, atalho e disponibilidade.
+    @ViewBuilder
+    private func item(_ id: CommandID, _ c: CommandContext) -> some View {
+        if let comando = CommandRegistry.command(id, in: c) {
+            let botao = Button(comando.title) { performer.perform(id) }
+                .disabled(!comando.isEnabled)
+            if let atalho = comando.shortcut {
+                botao.keyboardShortcut(atalho.keyEquivalent, modifiers: atalho.modifiers)
+            } else {
+                botao
+            }
+        }
+    }
+}
+
+extension InteractionMode {
+    /// Título no menu Dispositivo, com maiúscula em cada palavra principal.
+    var menuTitle: String {
+        switch self {
+        case .forward: return "Repassar Toque"
+        case .record: return "Gravar Passo"
         }
     }
 }

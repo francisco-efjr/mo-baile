@@ -17,6 +17,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Customize main menu
         configureMainMenu()
+
+        // Splash de abertura: fica até o motor responder e a primeira varredura
+        // de aparelhos e do ambiente terminar (com mínimo e teto de tempo). A
+        // sessão chega pela cena, um instante depois; até lá, "iniciando".
+        SplashController.shared.show(phase: { [weak self] in
+            self?.session?.launchPhase ?? .startingEngine
+        })
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

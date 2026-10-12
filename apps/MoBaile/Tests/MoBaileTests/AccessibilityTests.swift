@@ -70,70 +70,40 @@ final class AccessibilityTests: XCTestCase {
 
     // MARK: - Segmentos
 
-    /// Defeito: o `.accessibilityLabel("Plataforma")` aplicado ao seletor
-    /// segmentado era herdado por cada segmento. O leitor anunciava "Plataforma,
-    /// botão" duas vezes e a pessoa não tinha como saber qual era iOS e qual
-    /// era Android. O mesmo valia para aba do workspace, estratégia e modo do clique.
-    func testSegmentosDoSeletorTemNomeProprio() throws {
-        let (estado, sessao, tema) = ambiente()
-        var indice = 0
-        let seletor = SegmentedControl(items: ["iOS", "Android"], selectedIndex: Binding(get: { indice }, set: { indice = $0 }))
-            .accessibilityLabel("Plataforma")
-            .environment(estado).environment(sessao).environment(tema)
-        let ax = try AccessibilityInspector.arvore(de: seletor, largura: 300, altura: 60)
-
-        let rotulos = ax.buttons.map(\.label)
-        XCTAssertTrue(rotulos.contains("iOS"), "segmento iOS sem nome próprio: \(rotulos)")
-        XCTAssertTrue(rotulos.contains("Android"), "segmento Android sem nome próprio: \(rotulos)")
-        XCTAssertNotNil(ax.node(label: "Plataforma"), "o grupo perdeu o nome do seletor\n\(ax.dump)")
-    }
-
-    /// Defeito: o segmento escolhido só era distinguido pela cor/sombra.
-    func testSegmentoEscolhidoEExpostoComoSelecionado() throws {
-        let (estado, sessao, tema) = ambiente()
-        var indice = 1
-        let seletor = SegmentedControl(items: ["iOS", "Android"], selectedIndex: Binding(get: { indice }, set: { indice = $0 }))
-            .environment(estado).environment(sessao).environment(tema)
-        let ax = try AccessibilityInspector.arvore(de: seletor, largura: 300, altura: 60)
-
-        XCTAssertEqual(ax.node(label: "Android")?.isSelected, true, ax.dump)
-        XCTAssertEqual(ax.node(label: "iOS")?.isSelected, false, ax.dump)
-    }
-
-    func testBarraSuperiorNomeiaPlataformaEModoDoClique() throws {
-        let ax = try arvore(UnifiedToolbar(), largura: 1500, altura: 60)
-        let rotulos = ax.buttons.map(\.label)
-        for esperado in ["iOS", "Android", "Repassar toque", "Gravar passo"] {
-            XCTAssertTrue(rotulos.contains(esperado), "falta '\(esperado)' na barra: \(rotulos)")
+    /// Defeito: o nome aplicado ao seletor segmentado era herdado por cada
+    /// segmento, e o leitor anunciava o nome do grupo várias vezes sem dizer
+    /// qual era qual. Vale para a estratégia de seletor e o modo do clique.
+    func testSegmentosDaEstrategiaTemNomeProprio() throws {
+        let ax = try arvore(PageObjectsView(), largura: 900, altura: 400)
+        let rotulos = ax.all.map(\.label)
+        for esperado in ["Auto", "ID", "XPath", "Coords"] {
+            XCTAssertTrue(rotulos.contains(esperado), "segmento \(esperado) sem nome próprio: \(rotulos)")
         }
-        // O nome do grupo do modo de clique ficava sem acento.
-        XCTAssertNotNil(ax.node(label: "Ação do clique no espelho"), ax.dump)
+        XCTAssertNotNil(ax.node(label: "Estratégia de seletor"), "o grupo perdeu o nome\n\(ax.dump)")
     }
 
     // MARK: - Botões só com ícone
 
     /// Defeito: na coluna estreita os botões da barra do workspace perdiam o
     /// texto. O leitor anunciava o nome do símbolo ("rectangle.split.2x1"), um
-    /// número solto ("0") e o nome padrão do play ("Reproduzir").
+    /// número solto ("0") e o nome padrão do ícone.
     func testBarraDoWorkspaceEstreitaNaoAnunciaNomeDeSimbolo() throws {
-        let ax = try arvore(WorkspaceTabBar(), largura: 440, altura: 120)
+        let ax = try arvore(PageObjectsView(), largura: 440, altura: 300)
         let rotulos = ax.buttons.map(\.label)
 
         XCTAssertFalse(rotulos.contains("rectangle.split.2x1"), "nome de símbolo vazou: \(rotulos)")
         XCTAssertFalse(rotulos.contains("0"), "contador sem contexto: \(rotulos)")
-        XCTAssertFalse(rotulos.contains("Reproduzir"), "rótulo genérico do ícone: \(rotulos)")
-        XCTAssertTrue(rotulos.contains(where: { $0.hasPrefix("Estrutura") }), "falta Estrutura: \(rotulos)")
-        XCTAssertTrue(rotulos.contains("Dividir editores"), "falta Dividir editores: \(rotulos)")
-        XCTAssertTrue(rotulos.contains("Rodar fluxo"), "falta Rodar fluxo: \(rotulos)")
+        XCTAssertTrue(rotulos.contains("Estrutura do fluxo"), "falta Estrutura: \(rotulos)")
+        XCTAssertTrue(rotulos.contains("Lado a lado"), "falta Lado a lado: \(rotulos)")
     }
 
     /// Defeito: "Split" é um interruptor, mas o leitor não dizia se estava ligado.
-    func testBotaoDividirEditoresInformaEstado() throws {
-        let ligado = try arvore(WorkspaceTabBar(), largura: 1100, altura: 60) { $0.splitEditors = true }
-        let desligado = try arvore(WorkspaceTabBar(), largura: 1100, altura: 60) { $0.splitEditors = false }
+    func testBotaoLadoALadoInformaEstado() throws {
+        let ligado = try arvore(PageObjectsView(), largura: 1100, altura: 300) { $0.splitEditors = true }
+        let desligado = try arvore(PageObjectsView(), largura: 1100, altura: 300) { $0.splitEditors = false }
 
-        XCTAssertEqual(ligado.node(label: "Dividir editores")?.value, "ligado", ligado.dump)
-        XCTAssertEqual(desligado.node(label: "Dividir editores")?.value, "desligado", desligado.dump)
+        XCTAssertEqual(ligado.node(label: "Lado a lado")?.value, "ligado", ligado.dump)
+        XCTAssertEqual(desligado.node(label: "Lado a lado")?.value, "desligado", desligado.dump)
     }
 
     // MARK: - Editores
@@ -142,7 +112,7 @@ final class AccessibilityTests: XCTestCase {
     /// Incorporado, feature.py" (descrições automáticas dos ícones), e os
     /// botões Copiar/Salvar/Limpar eram idênticos nos dois lados.
     func testEditoresTemCabecalhoLegivelEBotoesDistintos() throws {
-        let ax = try arvore(DualEditorPane())
+        let ax = try arvore(DualEditorPane()) { $0.splitEditors = true }
 
         XCTAssertNil(ax.node(label: "Mover"), "ícone decorativo anunciado como 'Mover'\n\(ax.dump)")
         XCTAssertNil(ax.node(label: "Código Incorporado"), "ícone decorativo anunciado\n\(ax.dump)")
@@ -158,7 +128,7 @@ final class AccessibilityTests: XCTestCase {
     /// Defeito: as duas áreas de código eram anunciadas apenas como "área de
     /// texto", sem dizer qual era qual.
     func testAreasDeCodigoTemNome() throws {
-        let ax = try arvore(DualEditorPane())
+        let ax = try arvore(DualEditorPane()) { $0.splitEditors = true }
         let areas = ax.all.filter { $0.role == "AXTextArea" }
 
         XCTAssertEqual(areas.count, 2, ax.dump)
@@ -168,41 +138,53 @@ final class AccessibilityTests: XCTestCase {
 
     // MARK: - Tabelas e filtros
 
+    /// Todo o texto que o leitor encontra dentro de um nó (linha da tabela).
+    private func texto(_ no: AXNode) -> String {
+        no.all.map { "\($0.label) \($0.value)" }.joined(separator: " ")
+    }
+
     /// Defeito: cada célula da tabela HTTP era um texto solto ("GET", "200",
-    /// "a.com"...) e a linha selecionada só se distinguia pela cor.
+    /// "a.com"...) e a linha selecionada só se distinguia pela cor. A tabela
+    /// agora é a do sistema: cada requisição é uma linha (AXRow) com estado de
+    /// seleção, e a primeira célula lê a requisição inteira.
     func testLinhaDaTabelaHTTPEUmElementoComEstadoDeSelecao() throws {
         let ax = try arvore(HTTPTableView(), largura: 900, altura: 300)
-        let linha = ax.all.first { $0.label.contains("GET") && $0.label.contains("a.com") }
+        let linhas = ax.all.filter { $0.role == "AXRow" }
+        let linha = linhas.first { texto($0).contains("GET") && texto($0).contains("a.com") }
 
-        XCTAssertNotNil(linha, "linha da requisição não virou um elemento único\n\(ax.dump)")
+        XCTAssertNotNil(linha, "linha da requisição não virou uma linha da tabela\n\(ax.dump)")
         XCTAssertEqual(linha?.isSelected, true, ax.dump)
-        let outra = ax.all.first { $0.label.contains("POST") && $0.label.contains("a.com") }
+        let outra = linhas.first { texto($0).contains("POST") }
         XCTAssertEqual(outra?.isSelected, false, ax.dump)
-        XCTAssertTrue(linha?.label.contains("200") == true, "falta o status: \(linha?.label ?? "-")")
+        XCTAssertTrue(linha.map(texto)?.contains("status 200") == true, "falta o status: \(linha.map(texto) ?? "-")")
     }
 
     func testLinhaDeAnalyticsEUmElementoComEstadoDeSelecao() throws {
         let ax = try arvore(AnalyticsInspectorView(), largura: 1100, altura: 700)
-        let linha = ax.all.first { $0.label.contains("screen_view") }
+        let linha = ax.all.first { $0.role == "AXRow" && texto($0).contains("screen_view") }
 
         XCTAssertNotNil(linha, ax.dump)
         XCTAssertEqual(linha?.isSelected, true, ax.dump)
     }
 
-    /// Defeito: os campos de filtro de rede e analytics não tinham nome (só o
-    /// texto-sugestão, que some ao digitar) e a lupa/filtro eram anunciados
-    /// como imagem "Filtro".
-    func testCamposDeFiltroTemNome() throws {
-        for (nome, view) in [
-            ("rede", AnyView(HTTPInspectorView())),
-            ("analytics", AnyView(AnalyticsInspectorView())),
-        ] {
-            let ax = try arvore(view, largura: 1100, altura: 700)
-            let campos = ax.all.filter { $0.role == "AXTextField" }
-            XCTAssertFalse(campos.isEmpty, "\(nome): sem campo\n\(ax.dump)")
-            XCTAssertFalse(campos.contains { $0.label.isEmpty }, "\(nome): campo de filtro sem nome\n\(ax.dump)")
-            XCTAssertNil(ax.node(label: "Filtro"), "\(nome): ícone decorativo anunciado\n\(ax.dump)")
-        }
+    /// Defeito: os campos de busca não tinham nome (só o texto-sugestão, que
+    /// some ao digitar) e a lupa era anunciada como imagem. O filtro de Rede e
+    /// Analytics virou a busca nativa da toolbar; o campo que sobra no conteúdo
+    /// é o da hierarquia.
+    func testCampoDeBuscaDaHierarquiaTemNome() throws {
+        let ax = try arvore(InspectorPane(), largura: 300, altura: 700)
+        let campos = ax.all.filter { $0.role == "AXTextField" }
+        XCTAssertFalse(campos.isEmpty, "sem campo\n\(ax.dump)")
+        XCTAssertTrue(campos.contains { $0.label == "Buscar na hierarquia" }, "campo de busca sem nome\n\(ax.dump)")
+        XCTAssertNil(ax.node(label: "Lupa"), "ícone decorativo anunciado\n\(ax.dump)")
+    }
+
+    /// Defeito: o "Copiar tudo" dos atributos não fazia nada. Agora copia, e
+    /// os chips de tipo dizem o que são.
+    func testInspectorNomeiaChipsEAtributos() throws {
+        let ax = try arvore(InspectorPane(), largura: 300, altura: 700)
+        XCTAssertNotNil(ax.node(label: "Copiar Tudo"), ax.dump)
+        XCTAssertTrue(ax.all.contains { $0.label.contains("Botão") }, "chip de tipo sem nome\n\(ax.dump)")
     }
 
     /// Defeito: os botões "Copiar" de Request e Response eram idênticos.

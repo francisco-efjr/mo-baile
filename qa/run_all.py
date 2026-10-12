@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Roda os quatro fluxos de QA e resume o resultado.
+"""Roda os fluxos de QA e resume o resultado.
 
     python3 qa/run_all.py
 
@@ -20,6 +20,7 @@ FLUXOS = [
     ("2 · só iOS", "qa_fluxo2.py"),
     ("3 · só Android", "qa_fluxo3.py"),
     ("4 · HTTPS", "qa_fluxo4.py"),
+    ("5 · relatório", "qa_fluxo5.py"),
 ]
 TIMEOUT_FLUXO = 120
 RESULTADO = re.compile(r"^\s*RESULTADO: (\d+) passaram, (\d+) falharam\s*$", re.MULTILINE)

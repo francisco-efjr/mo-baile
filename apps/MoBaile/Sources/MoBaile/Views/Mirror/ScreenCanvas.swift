@@ -43,35 +43,51 @@ struct ScreenCanvas: View {
                         // O espelho e conteudo decorativo repetido da arvore de
                         // acessibilidade, que ja e navegavel por leitor de tela.
                         .accessibilityHidden(true)
+                } else if appState.isDeviceConnected {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityHidden(true)
+                } else {
+                    Text("sem sinal")
+                        .font(DSFont.mono(11))
+                        .foregroundStyle(theme.labelSecondary)
+                        .accessibilityHidden(true)
                 }
 
-                if let hovered = hoveredElement, isHovering {
-                    let rect = projection.toView(hovered.bounds)
+                // Sob o cursor, o elemento apontado; fora dele, o escolhido na
+                // árvore, para a árvore e o espelho contarem a mesma história.
+                if appState.currentFrame != nil,
+                   let alvo = (isHovering ? hoveredElement : nil) ?? appState.selectedElement {
+                    let rect = projection.toView(alvo.bounds)
 
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(theme.accent.opacity(0.2), lineWidth: 4)
-                        .frame(width: rect.width, height: rect.height)
-                        .position(x: rect.midX, y: rect.midY)
-
-                    RoundedRectangle(cornerRadius: 14)
+                    // Borda de 2 pt no destaque e um anel de 4 pt na tinta.
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(theme.accent, lineWidth: 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(theme.accentTint, lineWidth: 4)
+                                .padding(-3)
+                        )
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
-                        .animation(.easeInOut(duration: 0.12), value: hovered.bounds)
+                        .animation(.easeOut(duration: 0.12), value: alvo.bounds)
+                        .allowsHitTesting(false)
 
-                    Text(overlayLabel(for: hovered, rect: rect))
-                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(theme.accentPressed)
-                        .cornerRadius(4)
-                        .position(x: rect.midX, y: max(10, rect.minY - 12))
+                    Text(overlayLabel(for: alvo, rect: rect))
+                        .font(DSFont.mono(9.5))
+                        .foregroundColor(theme.onAccent)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(theme.accent, in: RoundedRectangle(cornerRadius: 4))
+                        .fixedSize()
+                        .position(x: rect.midX, y: max(10, rect.minY - 10))
+                        .allowsHitTesting(false)
                 }
 
                 if let location = clickLocation, clickOpacity > 0 {
                     Circle()
                         .stroke(Color.white, lineWidth: 2)
+                        .overlay(Circle().stroke(Color.black.opacity(0.2), lineWidth: 1).padding(-1))
                         .frame(width: 26, height: 26)
                         .scaleEffect(clickPhase)
                         .opacity(clickOpacity)
@@ -121,7 +137,7 @@ struct ScreenCanvas: View {
         clickPhase = 0.6
         clickOpacity = 1.0
         withAnimation(.easeOut(duration: 0.3)) {
-            clickPhase = 1.0
+            clickPhase = 1.6
             clickOpacity = 0.0
         }
 

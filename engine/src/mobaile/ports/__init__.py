@@ -6,6 +6,7 @@ from mobaile.ports.protocols import (
     FrameSource,
     HierarchySource,
     InputSink,
+    TextRecognizer,
     TrafficSource,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "FrameSource",
     "HierarchySource",
     "InputSink",
+    "TextRecognizer",
     "TrafficSource",
 ]

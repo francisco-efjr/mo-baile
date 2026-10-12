@@ -227,16 +227,7 @@ enum EngineDTO {
 
         /// Parametro de analytics chega com tipo livre; a tabela exibe texto.
         private static func describe(_ value: JSONValue) -> String {
-            switch value {
-            case .string(let text): return text
-            case .int(let number): return String(number)
-            case .double(let number): return String(number)
-            case .bool(let flag): return flag ? "true" : "false"
-            case .null: return ""
-            case .array, .object:
-                guard let data = try? JSONEncoder().encode(value) else { return "" }
-                return String(decoding: data, as: UTF8.self)
-            }
+            value.displayText
         }
 
         func toModel() -> AnalyticsEvent {
@@ -586,6 +577,22 @@ enum EngineDTO {
         enum CodingKeys: String, CodingKey {
             case running, started
             case deviceConfigured = "device_configured"
+        }
+    }
+
+    /// `netlog.start` / `netlog.stop`.
+    struct NetlogState: Decodable {
+        let running: Bool
+        let deviceId: String?
+        let rawLog: String?
+        /// `cfnetwork` (iPhone) ou `okhttp_logcat` (Android). Opcional: o motor
+        /// anterior à 3.3 não mandava.
+        let source: String?
+
+        enum CodingKeys: String, CodingKey {
+            case running, source
+            case deviceId = "device_id"
+            case rawLog = "raw_log"
         }
     }
 

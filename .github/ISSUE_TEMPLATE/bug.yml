@@ -1,0 +1,100 @@
+name: Relatar defeito
+description: Algo não funciona como deveria no Mo baile.
+title: "[bug] "
+labels: ["bug", "triagem"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por relatar. **Falha de segurança não vai aqui**: use o relato
+        privado descrito no [SECURITY.md](https://github.com/francisco-efjr/mo-baile/blob/main/SECURITY.md).
+
+        Não cole tokens, cookies, dados pessoais nem tráfego de produção. Troque
+        por valores fictícios.
+  - type: input
+    id: versao
+    attributes:
+      label: Versão do Mo baile
+      description: Menu Mo baile > Sobre, ou o arquivo VERSION se roda do código.
+      placeholder: "3.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: app
+    attributes:
+      label: Qual app
+      options:
+        - App nativo (Mo baile (nativo).app, SwiftUI)
+        - App Tk legado (Mo baile.app)
+        - Motor rodando do código (make run-engine / make qa)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: Versão do macOS e chip
+      placeholder: "macOS 15.1, Apple M2"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python usado pelo motor
+      description: Saída de `python3 --version` e o caminho (`which python3`).
+      placeholder: "Python 3.12.6, /opt/homebrew/bin/python3"
+  - type: dropdown
+    id: plataforma
+    attributes:
+      label: Plataforma do aparelho
+      options:
+        - Android físico
+        - Android emulador
+        - iPhone físico
+        - iOS simulador
+        - Sem aparelho (relatório, log exportado)
+    validations:
+      required: true
+  - type: input
+    id: aparelho
+    attributes:
+      label: Aparelho e sistema
+      description: Modelo e versão do Android/iOS. Para iOS, versão do Xcode e do Appium/WebDriverAgent.
+      placeholder: "Pixel 7, Android 14 / iPhone 15, iOS 18.1, Xcode 16.1, Appium 2.12"
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Conectar o aparelho
+        2. Abrir a aba Rede
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que você esperava
+    validations:
+      required: true
+  - type: textarea
+    id: obtido
+    attributes:
+      label: O que aconteceu
+      description: Mensagem de erro, comportamento observado. Capturas ajudam.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Trecho relevante do log do motor, sem dados sensíveis.
+      render: text
+  - type: checkboxes
+    id: confere
+    attributes:
+      label: Conferências
+      options:
+        - label: Procurei e não achei issue igual.
+          required: true
+        - label: Removi tokens, cookies e dados pessoais do que colei.
+          required: true

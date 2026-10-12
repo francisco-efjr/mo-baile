@@ -15,8 +15,12 @@ struct TreeNode: Identifiable, Equatable {
     }
 }
 
+/// Árvore de acessibilidade: a mesma que o Appium enxerga, igual para iOS e
+/// Android. Lista nativa com triângulos de expandir, setas do teclado e menu
+/// de contexto.
 struct HierarchyTreeView: View {
     @Environment(AppState.self) var appState
+    @Environment(EngineSession.self) var session
     @Environment(ThemeManager.self) var themeManager
 
     var body: some View {
@@ -25,42 +29,113 @@ struct HierarchyTreeView: View {
             filterText: appState.hierarchySearchText
         )
 
-        if appState.hierarchyElements.isEmpty {
-            VStack(spacing: 8) {
-                Spacer()
-                Image(systemName: "list.bullet.indent")
-                    .font(.system(size: 24))
-                    .foregroundColor(themeManager.current.textDisabled)
-                Text(appState.isDeviceConnected ? "Hierarquia vazia ou carregando…" : "Conecte um dispositivo")
-                    .font(.system(size: 11))
-                    .foregroundColor(themeManager.current.textTertiary)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if !appState.isDeviceConnected {
+            EmptyState(icon: "list.bullet.indent", text: "Conecte um aparelho para ver a hierarquia da tela.", compact: true)
+        } else if appState.hierarchyElements.isEmpty {
+            EmptyState(text: "Lendo a hierarquia…", loading: true, compact: true)
         } else if tree.isEmpty {
-            VStack(spacing: 8) {
-                Spacer()
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 20))
-                    .foregroundColor(themeManager.current.textDisabled)
-                Text("Nenhum elemento encontrado")
-                    .font(.system(size: 11))
-                    .foregroundColor(themeManager.current.textTertiary)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            EmptyState(
+                icon: "magnifyingglass",
+                title: "Nenhum elemento encontrado",
+                text: "Nada corresponde a “\(appState.hierarchySearchText)”.",
+                compact: true
+            )
         } else {
-            List(tree, children: \.children) { node in
-                HierarchyRow(node: node, selectedElement: appState.selectedElement) {
-                    appState.selectedElement = node.element
+            let linhas = Self.flatten(tree, recolhidos: buscando ? [] : recolhidos)
+            List(selection: selecao) {
+                ForEach(linhas) { linha in
+                    HierarchyRow(
+                        node: linha.node,
+                        depth: buscando ? 0 : linha.depth,
+                        hasChildren: !buscando && linha.temFilhos,
+                        expanded: !recolhidos.contains(linha.id),
+                        toggle: { alternar(linha.id) }
+                    )
+                    .tag(linha.id)
+                    .contextMenu { menu(linha.node.element) }
                 }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
             }
             .listStyle(.sidebar)
-            .environment(\.defaultMinListRowHeight, 22)
+            .environment(\.defaultMinListRowHeight, 24)
+            .accessibilityLabel("Árvore de acessibilidade")
+            // ← recolhe e → expande o nó escolhido, como no Finder.
+            .onKeyPress(.leftArrow) {
+                guard let id = appState.selectedElement?.id else { return .ignored }
+                recolhidos.insert(id)
+                return .handled
+            }
+            .onKeyPress(.rightArrow) {
+                guard let id = appState.selectedElement?.id else { return .ignored }
+                recolhidos.remove(id)
+                return .handled
+            }
         }
+    }
+
+    /// Nós recolhidos. A árvore abre expandida, como no Appium Inspector: o
+    /// elemento escolhido no espelho fica à vista sem precisar abrir pasta.
+    @State private var recolhidos: Set<UUID> = []
+
+    private var buscando: Bool {
+        !appState.hierarchySearchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func alternar(_ id: UUID) {
+        if recolhidos.contains(id) { recolhidos.remove(id) } else { recolhidos.insert(id) }
+    }
+
+    struct Linha: Identifiable {
+        let node: TreeNode
+        let depth: Int
+        var id: UUID { node.id }
+        var temFilhos: Bool { node.children?.isEmpty == false }
+    }
+
+    /// Achata a árvore em linhas com profundidade, pulando os filhos dos nós
+    /// recolhidos.
+    static func flatten(_ nodes: [TreeNode], recolhidos: Set<UUID>, depth: Int = 0) -> [Linha] {
+        nodes.flatMap { node -> [Linha] in
+            var linhas = [Linha(node: node, depth: depth)]
+            if let filhos = node.children, !recolhidos.contains(node.id) {
+                linhas += flatten(filhos, recolhidos: recolhidos, depth: depth + 1)
+            }
+            return linhas
+        }
+    }
+
+    private var selecao: Binding<UUID?> {
+        Binding(
+            get: { appState.selectedElement?.id },
+            set: { id in
+                appState.selectedElement = id.flatMap { alvo in
+                    appState.hierarchyElements.first { $0.id == alvo }
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func menu(_ element: UIElement) -> some View {
+        Button("Copiar Locator") {
+            Exporters.copy(element.locatorValue)
+            appState.statusMessage = "Locator copiado"
+        }
+        Button("Copiar XPath") {
+            Exporters.copy(element.xpath)
+            appState.statusMessage = "XPath copiado"
+        }
+        Button("Copiar Atributos") {
+            Exporters.copy(element.attributesText)
+            appState.statusMessage = "Atributos copiados"
+        }
+        Divider()
+        // Gravar também toca no aparelho, como o clique no espelho em "Gravar
+        // passo": gravar um fluxo exige navegar por ele.
+        Button("Gravar como Passo") {
+            appState.workspaceTab = .pageObjects
+            Task { await session.record(at: element.center) }
+        }
+        .disabled(!appState.isDeviceConnected)
     }
 
     /// Constrói a árvore de acessibilidade real respeitando o parentIndex de cada elemento.
@@ -132,31 +207,74 @@ struct HierarchyTreeView: View {
 struct HierarchyRow: View {
     @Environment(ThemeManager.self) var themeManager
     let node: TreeNode
-    let selectedElement: UIElement?
-    let action: () -> Void
-
-    var isSelected: Bool {
-        selectedElement?.id == node.element.id
-    }
+    var depth: Int = 0
+    var hasChildren: Bool = false
+    var expanded: Bool = true
+    var toggle: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
+            Color.clear.frame(width: CGFloat(depth) * DesignMetrics.treeIndent, height: 1)
+            Group {
+                if hasChildren {
+                    Button(action: toggle) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .animation(Motion.snappy(), value: expanded)
+                            .frame(width: 12, height: 16)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(expanded ? "Recolher" : "Expandir")
+                } else {
+                    Color.clear.frame(width: 12, height: 1)
+                }
+            }
             TypeChip(type: node.element.chipType)
             Text(node.element.displayName)
-                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                .foregroundColor(themeManager.current.textPrimary)
+                .font(DSFont.callout)
                 .lineLimit(1)
-            Spacer()
+                .truncationMode(.middle)
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
-        .background(isSelected ? themeManager.current.selectionBg : Color.clear)
-        .cornerRadius(6)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(isSelected ? themeManager.current.selectionBorder : Color.clear, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: action)
+        .help(node.element.className)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(hasChildren ? (expanded ? "expandido" : "recolhido") : "")
+    }
+}
+
+extension UIElement {
+    /// O que o motor usaria como localizador por ID: o identificador, ou o
+    /// texto quando não há identificador.
+    var locatorValue: String {
+        if !resourceId.isEmpty { return resourceId }
+        if !contentDesc.isEmpty { return contentDesc }
+        return text
+    }
+
+    /// XPath pelo atributo que identifica o elemento em cada plataforma.
+    var xpath: String {
+        let atributo = platform == .ios ? "name" : "resource-id"
+        if !resourceId.isEmpty { return "//\(className)[@\(atributo)=\"\(resourceId)\"]" }
+        if !text.isEmpty { return "//\(className)[@\(platform == .ios ? "label" : "text")=\"\(text)\"]" }
+        if !contentDesc.isEmpty { return "//\(className)[@\(platform == .ios ? "label" : "content-desc")=\"\(contentDesc)\"]" }
+        return "//\(className)"
+    }
+
+    /// Atributos na ordem do painel. "clickable" é o que o motor informa; não
+    /// há "enabled" na árvore, e o rótulo antigo dizia o contrário.
+    var attributeRows: [(key: String, value: String)] {
+        [
+            ("type", className),
+            ("name", resourceId),
+            ("label", text.isEmpty ? contentDesc : text),
+            ("bounds", "[\(Int(bounds.minX)),\(Int(bounds.minY))][\(Int(bounds.maxX)),\(Int(bounds.maxY))]"),
+            ("center", "[\(Int(center.x)),\(Int(center.y))]"),
+            ("clickable", clickable ? "true" : "false"),
+        ]
+    }
+
+    var attributesText: String {
+        attributeRows.map { "\($0.key): \($0.value.isEmpty ? "—" : $0.value)" }.joined(separator: "\n")
     }
 }

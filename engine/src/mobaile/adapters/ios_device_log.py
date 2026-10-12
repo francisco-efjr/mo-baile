@@ -18,6 +18,8 @@ Protocolo do filho: uma linha JSON por mensagem no stdout.
 - `list`: `{"devices": [...]}` ou `{"error": "..."}`.
 - `stream <udid>`: primeiro `{"status": "ready"}` ou `{"error": "..."}`, depois
   um `{"time", "process", "pid", "message"}` por registro do log.
+- `stream <udid> --cfnetwork`: igual, mas so os registros dos blocos de
+  diagnostico do CFNetwork (`CFNETWORK_DIAGNOSTICS`), ver `ios_cfnetwork`.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -73,8 +76,18 @@ def _child_env() -> dict[str, str]:
     return env
 
 
+# Marcadores dos blocos de `CFNETWORK_DIAGNOSTICS`: abre com
+# `CFNetwork Diagnostics [1:23] ... {` e fecha com `} [1:23]`.
+CFNETWORK_MARKER = "CFNetwork Diagnostics ["
+_CFNETWORK_CLOSE = re.compile(r"^\s*\}\s*\[\d+:\d+\]\s*$", re.MULTILINE)
+
+
 def stream_command(udid: str, contains: str = DEFAULT_CONTAINS) -> list[str]:
     return [sys.executable, "-m", MODULE, "stream", udid, "--contains", contains]
+
+
+def cfnetwork_command(udid: str) -> list[str]:
+    return [sys.executable, "-m", MODULE, "stream", udid, "--cfnetwork"]
 
 
 def popen_kwargs() -> dict[str, Any]:
@@ -141,19 +154,45 @@ async def _list() -> None:
     _emit({"devices": devices})
 
 
-async def _stream(udid: str, contains: str) -> None:
+class _CFNetworkFilter:
+    """Deixa passar so o que pertence a um bloco de diagnostico do CFNetwork.
+
+    O bloco pode vir num registro so ou quebrado em varios do mesmo processo;
+    por isso o estado e por pid: aberto no marcador, fechado no `} [n:m]`.
+    """
+
+    def __init__(self) -> None:
+        self._open: set[int] = set()
+
+    def keep(self, pid: int, message: str) -> bool:
+        if CFNETWORK_MARKER in message:
+            if not _CFNETWORK_CLOSE.search(message.split(CFNETWORK_MARKER, 1)[1]):
+                self._open.add(pid)
+            return True
+        if pid in self._open:
+            if _CFNETWORK_CLOSE.search(message):
+                self._open.discard(pid)
+            return True
+        return False
+
+
+async def _stream(udid: str, contains: str, cfnetwork: bool = False) -> None:
     from pymobiledevice3.lockdown import create_using_usbmux
     from pymobiledevice3.services.os_trace import OsTraceService
 
     lockdown = await create_using_usbmux(serial=udid, autopair=False)
     service = OsTraceService(lockdown=lockdown)
     ready = False
+    cf_filter = _CFNetworkFilter() if cfnetwork else None
     async for entry in service.syslog():
         if not ready:
             # So depois do primeiro registro: e quando o aparelho aceitou o stream.
             _emit({"status": "ready"})
             ready = True
-        if contains and contains not in entry.message:
+        if cf_filter is not None:
+            if not cf_filter.keep(entry.pid, entry.message):
+                continue
+        elif contains and contains not in entry.message:
             continue
         _emit({
             "time": entry.timestamp.isoformat(sep=" ", timespec="milliseconds"),
@@ -170,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     stream = sub.add_parser("stream")
     stream.add_argument("udid")
     stream.add_argument("--contains", default=DEFAULT_CONTAINS)
+    stream.add_argument("--cfnetwork", action="store_true")
     args = parser.parse_args(argv)
 
     if not is_available():
@@ -179,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "list":
             asyncio.run(_list())
         else:
-            asyncio.run(_stream(args.udid, args.contains))
+            asyncio.run(_stream(args.udid, args.contains, args.cfnetwork))
     except (KeyboardInterrupt, BrokenPipeError):
         return 0
     except Exception as exc:
