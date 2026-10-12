@@ -5,6 +5,27 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.5.1] - 2026-10-12
+
+### Adicionado
+
+- 
+
+## [3.5.1] - 2026-10-12
+
+CI do GitHub de volta ao verde. As falhas já existiam desde a 3.3, só
+apareciam no GitHub e travaram o Release da 3.5.0.
+
+### Corrigido
+
+- Front nativo e Release rodam no `macos-26` (Xcode 26). O `macos-14` traz
+  Swift 5.10 e não compila o código em Swift 6.2.
+- A conferência das fixtures compara os PNGs pelos pixels, não pelos bytes.
+  A compressão muda com a versão do Pillow e do zlib e acusava fixture
+  desatualizada sem ela estar.
+- O teste de `scrcpy.start` sem aparelho não depende mais de o `scrcpy` estar
+  instalado na máquina.
+
 ## [3.5.0] - 2026-10-11
 
 ### Adicionado
