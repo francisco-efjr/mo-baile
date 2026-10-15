@@ -142,16 +142,72 @@ class TestServidorRetentaODesmonte(unittest.TestCase):
         self.assertEqual(self.server.adb.teardown_reverse_proxy.call_count, 1)
 
         self.server.adb.teardown_reverse_proxy.return_value = True
+        self.server.adb.list_devices.return_value = [(SERIAL, "device")]
         self.rpc("devices.watch_start", {"poll_interval": 3600})
-        self.server._watcher.on_device_changed("android", SERIAL)
-        # A nova tentativa roda numa thread curta; espera ela terminar.
-        for _ in range(100):
-            if self.server.adb.teardown_reverse_proxy.call_count >= 2:
-                break
-            import time
-            time.sleep(0.02)
+        self.server._watcher.poll_once()
+        self._espera(lambda: self.server.adb.teardown_reverse_proxy.call_count >= 2)
         self.assertEqual(self.server.adb.teardown_reverse_proxy.call_count, 2)
         self.assertEqual(self.server._proxy_pending, {})
+
+    def test_aparelho_que_volta_sem_ser_o_alvo_da_sessao_tambem_e_retentado(self):
+        """A varredura avisa mesmo sem transicao de alvo (REV-3)."""
+        outro = "R58M123ABC"
+        self._liga_proxy()
+        self.server.adb.teardown_reverse_proxy.return_value = False
+        self.rpc("session.select_device", {"platform": "android", "device_id": outro})
+        self.assertIn(SERIAL, self.server._proxy_pending)
+
+        self.server.adb.teardown_reverse_proxy.return_value = True
+        self.server.adb.list_devices.return_value = [(outro, "device"), (SERIAL, "device")]
+        self.rpc("devices.watch_start", {"poll_interval": 3600})
+        self.server._watcher.poll_once()
+        self._espera(lambda: SERIAL not in self.server._proxy_pending)
+        self.assertNotIn(SERIAL, self.server._proxy_pending)
+        self.assertEqual(self.server.device_id, outro, "a sessao continua no aparelho escolhido")
+
+    def test_varreduras_seguidas_nao_abrem_retentativas_duplicadas(self):
+        import threading
+
+        self._liga_proxy()
+        self.server.adb.teardown_reverse_proxy.return_value = False
+        self.rpc("proxy.stop")
+        chamadas_antes = self.server.adb.teardown_reverse_proxy.call_count
+
+        solta, entrou = threading.Event(), threading.Event()
+
+        def lento(serial, porta):
+            entrou.set()
+            solta.wait(3)
+            return True
+
+        self.server.adb.teardown_reverse_proxy.side_effect = lento
+        self.server._retry_pending_proxy(SERIAL)
+        self.assertTrue(entrou.wait(2))
+        self.server._retry_pending_proxy(SERIAL)  # a primeira ainda roda
+        self.server._retry_pending_proxy(SERIAL)
+        solta.set()
+        self._espera(lambda: not self.server._proxy_retrying)
+        self.assertEqual(self.server.adb.teardown_reverse_proxy.call_count - chamadas_antes, 1)
+
+    def test_proxy_religado_cancela_a_retentativa_pendente(self):
+        self._liga_proxy()
+        self.server.adb.teardown_reverse_proxy.return_value = False
+        self.rpc("proxy.stop")
+        self.assertIn(SERIAL, self.server._proxy_pending)
+        chamadas = self.server.adb.teardown_reverse_proxy.call_count
+        self.rpc("proxy.start", {"configure_device": True})  # substitui o pendente
+        self.assertNotIn(SERIAL, self.server._proxy_pending)
+        self.server._retry_pending_proxy(SERIAL)
+        self.assertEqual(self.server.adb.teardown_reverse_proxy.call_count, chamadas)
+
+    @staticmethod
+    def _espera(condicao, tentativas=150):
+        import time
+
+        for _ in range(tentativas):
+            if condicao():
+                return
+            time.sleep(0.02)
 
     def test_desmonte_bem_sucedido_nao_deixa_pendencia(self):
         self._liga_proxy()

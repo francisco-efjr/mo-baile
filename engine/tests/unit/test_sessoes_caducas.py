@@ -63,6 +63,23 @@ class TestWdaReabreSessaoCaduca(unittest.TestCase):
         self.assertEqual(self.bridge.session_id, "boa")
         self.assertFalse(any(u.endswith("/session") for u in self.posts), "nao abre sessao nova")
 
+    def test_404_de_comando_desconhecido_segue_para_o_fallback_de_acoes(self):
+        """404 nao e sempre sessao caduca: um WDA sem `/wda/tap` responde 404."""
+        self.bridge.session_id = "boa"
+
+        def post(url, json=None, timeout=None):
+            self.posts.append(url)
+            if url.endswith("/wda/tap"):
+                return resposta(404, {"value": {"error": "unknown command"}})
+            if url.endswith("/actions"):
+                return resposta(200)
+            return resposta(500)
+
+        with patch("requests.post", side_effect=post):
+            self.assertTrue(self.bridge.tap(10, 20))
+        self.assertEqual(self.bridge.session_id, "boa", "a sessao segue valida")
+        self.assertTrue(any(u.endswith("/actions") for u in self.posts))
+
 
 class TestAppiumLimpaSessaoCaduca(unittest.TestCase):
     def setUp(self):
@@ -77,7 +94,7 @@ class TestAppiumLimpaSessaoCaduca(unittest.TestCase):
         self.assertIsNone(self.bridge.session_id)
 
     def test_depois_de_limpar_a_sessao_e_reaberta_em_vez_de_dita_ja_aberta(self):
-        with patch("requests.get", return_value=resposta(404)):
+        with patch("requests.get", return_value=resposta(404, {"value": {"error": "invalid session id"}})):
             self.bridge.get_page_source()
         with patch.object(self.bridge, "start_server", return_value=(True, "ok")), \
              patch("requests.post", return_value=resposta(200, {"value": {"sessionId": "nova"}})) as post:
@@ -89,6 +106,11 @@ class TestAppiumLimpaSessaoCaduca(unittest.TestCase):
 
     def test_erro_do_servidor_nao_derruba_a_sessao(self):
         with patch("requests.get", return_value=resposta(500)):
+            self.assertIsNone(self.bridge.get_page_source())
+        self.assertEqual(self.bridge.session_id, "velha")
+
+    def test_404_sem_ser_sessao_invalida_nao_limpa_o_id(self):
+        with patch("requests.get", return_value=resposta(404, {"value": {"error": "unknown command"}})):
             self.assertIsNone(self.bridge.get_page_source())
         self.assertEqual(self.bridge.session_id, "velha")
 

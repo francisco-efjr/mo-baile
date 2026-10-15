@@ -2447,7 +2447,12 @@ class MobileRecorderApp:
             self.android_listener.start()
         elif self.active_platform == "ios":
             self.ios_listener = IOSPassiveListener(on_tap_callback=self._on_passive_tap)
-            self.ios_listener.start()
+            try:
+                self.ios_listener.start()
+            except Exception as exc:  # AdapterError: Python sem pyobjc-framework-Quartz
+                self.ios_listener = None
+                self.passive_mode_var.set(False)
+                self._set_status(f"Modo Passivo indisponivel: {exc}")
 
     def _stop_passive_listeners(self):
         if self.android_listener:

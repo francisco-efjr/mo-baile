@@ -41,10 +41,15 @@ class DeviceWatcher:
         on_device_changed: DeviceChangedHandler,
         target_platform: str = "ios",
         poll_interval: float | None = None,
+        on_targets_listed: Callable[[str, list[str]], None] | None = None,
     ):
         self.adb = adb_bridge
         self.ios = ios_bridge
         self.on_device_changed = on_device_changed
+        # Chamado em toda listagem bem-sucedida, com os ids prontos, mesmo
+        # quando nada mudou. `on_device_changed` so dispara na transicao, e um
+        # aparelho que volta sem ser o alvo da sessao nao gera transicao.
+        self.on_targets_listed = on_targets_listed
         self.target_platform = target_platform
         self.poll_interval = poll_interval or settings.poll_interval
 
@@ -137,11 +142,19 @@ class DeviceWatcher:
         """
         with self._lock:
             platform, generation = self.target_platform, self._generation
+        listed = True
         try:
             targets = self._list_targets(platform)
         except (EngineError, OSError) as exc:
             logger.warning("Falha ao consultar dispositivos: %s", exc)
             targets = []
+            listed = False
+
+        if listed and self.on_targets_listed is not None:
+            try:
+                self.on_targets_listed(platform, [target[0] for target in targets])
+            except Exception:
+                logger.exception("Falha ao tratar a listagem de dispositivos.")
 
         with self._lock:
             if self._stop_event.is_set():

@@ -262,8 +262,13 @@ class CodeGenerator:
     def _generate_text_xpath(element: UIElement) -> str:
         """XPath que casa pelo texto, sem passar pelo resource-id."""
         tag = _xpath_tag(element.class_name)
-        atributo = "@value" if element.platform == "ios" else "@text"
-        return f"//{tag}[{atributo}={_xpath_str(element.text)}]"
+        if element.platform == "ios":
+            # O `text` do elemento iOS e o `value` ou, sem ele, o `label`
+            # (hierarchy.py). Procurar so `@value` nao achava um botao que so
+            # tem label.
+            literal = _xpath_str(element.text)
+            return f"//{tag}[@value={literal} or @label={literal}]"
+        return f"//{tag}[@text={_xpath_str(element.text)}]"
 
     @staticmethod
     def _xpath_matches(element: UIElement, screen: list[UIElement]) -> int:

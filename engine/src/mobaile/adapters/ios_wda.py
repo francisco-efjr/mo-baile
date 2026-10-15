@@ -102,8 +102,19 @@ class IOSBridge:
 
     @staticmethod
     def _sessao_invalida(res) -> bool:
-        """404 do WDA: o id de sessao em cache nao existe mais."""
-        return res.status_code == 404
+        """O WDA disse que o id de sessao em cache nao existe mais.
+
+        Um 404 sozinho nao basta: no W3C ele tambem e "unknown command" e "no
+        such element". Tratar qualquer 404 como sessao caduca pulava o
+        fallback `/actions` de um WDA sem a rota `/wda/tap`.
+        """
+        if res.status_code != 404:
+            return False
+        try:
+            erro = ((res.json() or {}).get("value") or {}).get("error", "")
+        except (ValueError, AttributeError):
+            erro = ""
+        return "invalid session" in str(erro).lower()
 
     def tap(self, x: int, y: int) -> bool:
         """Toca em (x, y). Se o id de sessao caducou, abre outro e tenta uma vez.

@@ -59,6 +59,23 @@ class TestRankingHonesto(unittest.TestCase):
         candidatos = {c["strategy"]: c for c in CodeGenerator().rank_locators(alvo, [alvo, sem(60)])}
         self.assertEqual(candidatos["xpath"]["matches"], 2)
 
+    def test_xpath_de_texto_no_ios_aceita_label_alem_de_value(self):
+        """O `text` do elemento iOS pode vir do label; `@value` sozinho nao achava."""
+        alvo = UIElement(
+            tag="XCUIElementTypeButton", class_name="XCUIElementTypeButton", resource_id="Entrar",
+            text="Entrar", content_desc="Entrar", clickable=True, bounds=(0, 0, 100, 50),
+            area=5000, package="", platform="ios",
+        )
+        filho = UIElement(
+            tag="XCUIElementTypeStaticText", class_name="XCUIElementTypeStaticText", resource_id="Entrar",
+            text="Entrar", content_desc="Entrar", clickable=False, bounds=(0, 0, 80, 20),
+            area=1600, package="", platform="ios",
+        )
+        candidatos = {c["strategy"]: c for c in CodeGenerator().rank_locators(alvo, [alvo, filho])}
+        valor = candidatos["text"]["value"]
+        self.assertIn("@label=", valor)
+        self.assertIn("@value=", valor)
+
 
 class TestPassoGravadoUsaOLocalizadorEscolhido(unittest.TestCase):
     def setUp(self):

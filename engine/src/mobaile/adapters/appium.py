@@ -241,6 +241,17 @@ class AppiumBridge:
         self.session_udid = udid
         return True, "Sessao Android no ar."
 
+    @staticmethod
+    def _sessao_invalida(response) -> bool:
+        """404 com `invalid session id`: so isso prova que o id caducou."""
+        if response.status_code != 404:
+            return False
+        try:
+            erro = ((response.json() or {}).get("value") or {}).get("error", "")
+        except (ValueError, AttributeError):
+            erro = ""
+        return "invalid session" in str(erro).lower()
+
     def get_page_source(self) -> str | None:
         """XML da tela pela sessao aberta, seja Android ou iOS."""
         import requests
@@ -256,7 +267,7 @@ class AppiumBridge:
         except requests.RequestException as exc:
             logger.debug("Page source pelo Appium falhou: %s", exc)
             return None
-        if response.status_code == 404:
+        if self._sessao_invalida(response):
             # Sessao inexistente: o id em cache morreu (UiAutomator2 caiu,
             # aparelho foi desplugado). Sem limpar, `ensure_android_session`
             # respondia "ja estava aberta" para sempre. O lock so e tomado se
