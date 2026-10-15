@@ -49,6 +49,8 @@ class AppState {
     var httpRequests: [NetworkEvent] = []
     var selectedRequest: NetworkEvent? = nil
     var httpFilterText: String = ""
+    /// Escopo da tabela de Rede (Todos · API · Mídia · Erros · Lentas).
+    var networkScope: NetworkScope = .all
     var proxyRunning: Bool = false
     /// Resposta do último `proxy.diagnose` e se o popover dela está aberto.
     var trafficDiagnosis: EngineDTO.TrafficDiagnosis? = nil
@@ -196,14 +198,15 @@ class AppState {
     /// correlação usam.
     var filteredHTTPRequests: [NetworkEvent] {
         let busca = SearchQuery(httpFilterText)
-        guard !busca.isEmpty else { return httpRequests.reversed() }
-        return httpRequests.reversed().filter { busca.matches($0.searchableFields) }
+        let escopo = networkScope
+        if busca.isEmpty && escopo == .all { return httpRequests.reversed() }
+        return httpRequests.reversed().filter { escopo.includes($0) && (busca.isEmpty || busca.matches($0)) }
     }
 
     var filteredAnalyticsEvents: [AnalyticsEvent] {
         let busca = SearchQuery(analyticsFilterText)
         guard !busca.isEmpty else { return analyticsEvents.reversed() }
-        return analyticsEvents.reversed().filter { busca.matches($0.searchableFields) }
+        return analyticsEvents.reversed().filter { busca.matches($0) }
     }
     
     // MARK: - Actions

@@ -324,15 +324,21 @@ private struct SectionSearch: ViewModifier {
                 text: $state.httpFilterText,
                 isPresented: $state.toolbarSearchPresented,
                 placement: .toolbar,
-                prompt: "Buscar em URL, headers e corpo"
+                prompt: "Buscar ou filtrar: status:4xx metodo:POST tipo:json"
             )
+            .searchSuggestions {
+                sugestoes(SearchQuery.networkSuggestions, texto: appState.httpFilterText)
+            }
         } else if appState.isDeviceConnected && appState.workspaceTab == .analytics {
             content.searchable(
                 text: $state.analyticsFilterText,
                 isPresented: $state.toolbarSearchPresented,
                 placement: .toolbar,
-                prompt: "Buscar em eventos, parâmetros e log"
+                prompt: "Buscar ou filtrar: evento:screen_view param:chave=valor"
             )
+            .searchSuggestions {
+                sugestoes(SearchQuery.analyticsSuggestions, texto: appState.analyticsFilterText)
+            }
         } else if appState.workspaceTab == .report {
             content.searchable(
                 text: $state.reportFilterText,
@@ -342,6 +348,19 @@ private struct SectionSearch: ViewModifier {
             )
         } else {
             content
+        }
+    }
+}
+
+/// Tokens sugeridos no campo de busca, como o Console.app: aparecem enquanto
+/// o campo está vazio ou termina em espaço, e completam o texto.
+@ViewBuilder
+private func sugestoes(_ tokens: [String], texto: String) -> some View {
+    if texto.isEmpty || texto.hasSuffix(" ") {
+        ForEach(tokens, id: \.self) { token in
+            Text(token)
+                .font(DSFont.mono(12))
+                .searchCompletion(texto + token + (token.hasSuffix(":") ? "" : " "))
         }
     }
 }

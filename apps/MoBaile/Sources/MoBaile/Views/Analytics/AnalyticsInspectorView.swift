@@ -8,6 +8,8 @@ struct AnalyticsInspectorView: View {
     @Environment(ThemeManager.self) private var themeManager
 
     @State private var ordem = [KeyPathComparator(\AnalyticsEvent.id, order: .reverse)]
+    /// Largura, ordem e visibilidade das colunas sobrevivem ao reabrir (D8).
+    @SceneStorage("colunasAnalytics") private var colunas: TableColumnCustomization<AnalyticsEvent>
 
     var body: some View {
         let theme = themeManager.current
@@ -37,7 +39,7 @@ struct AnalyticsInspectorView: View {
     private var tabela: some View {
         let theme = themeManager.current
         let linhas = appState.filteredAnalyticsEvents.sorted(using: ordem)
-        return Table(linhas, selection: selecao, sortOrder: $ordem) {
+        return Table(linhas, selection: selecao, sortOrder: $ordem, columnCustomization: $colunas) {
             TableColumn("Hora", value: \.timeStr) { event in
                 Text(event.timeStr)
                     .font(DSFont.mono(11).monospacedDigit())
@@ -45,6 +47,7 @@ struct AnalyticsInspectorView: View {
                     .accessibilityLabel(event.accessibilitySummary)
             }
             .width(min: 80, ideal: 100, max: 130)
+            .customizationID("hora")
 
             TableColumn("Evento", value: \.eventName) { event in
                 Text(event.eventName)
@@ -53,6 +56,7 @@ struct AnalyticsInspectorView: View {
                     .lineLimit(1)
             }
             .width(min: 120, ideal: 260)
+            .customizationID("evento")
 
             TableColumn("Parâmetros", value: \.paramCount) { event in
                 Text("\(event.paramCount)")
@@ -60,11 +64,13 @@ struct AnalyticsInspectorView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 60, ideal: 84, max: 110)
+            .customizationID("parametros")
 
             TableColumn("Origem", value: \.tag) { event in
                 Text(event.tag).font(DSFont.callout).lineLimit(1)
             }
             .width(min: 70, ideal: 110, max: 160)
+            .customizationID("origem")
         }
         .alternatingRowBackgrounds()
         .overlay {
