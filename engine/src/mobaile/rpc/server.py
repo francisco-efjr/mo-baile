@@ -239,6 +239,10 @@ class EngineServer:
         # sem registro e a recuperacao do front depois de o motor anterior
         # cair, e a limpeza vai para o aparelho da sessao.
         self._proxy_configured_once = False
+        # Desmontes que nao se confirmaram (cabo solto, adb sem resposta):
+        # serial -> porta. Retentados quando o serial reaparece e no
+        # encerramento, em vez de esquecidos.
+        self._proxy_pending: dict[str, int] = {}
         self._stream: RealTimeStreamEngine | None = None
         self._watcher: DeviceWatcher | None = None
         self._flow_thread = None
@@ -519,6 +523,8 @@ class EngineServer:
                     self.current_xml = None
                     self._session_epoch += 1
             self.notify("device.changed", {"platform": platform, "device_id": device_id or None})
+            if platform == "android" and device_id:
+                self._retry_pending_proxy(device_id)
 
         self._watcher = DeviceWatcher(
             adb_bridge=self.adb,
@@ -915,11 +921,32 @@ class EngineServer:
             self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
             self._proxy_notify_on = True
 
-    def _teardown_proxy_device(self, serial: str, port: int) -> None:
+    def _teardown_proxy_device(self, serial: str, port: int) -> bool:
+        """Desfaz o proxy do aparelho. Se nao confirmar, fica pendente."""
         try:
-            self.adb.teardown_reverse_proxy(serial, port)
+            ok = bool(self.adb.teardown_reverse_proxy(serial, port))
         except Exception:
             logger.exception("Falha ao desfazer o proxy no aparelho %s.", serial)
+            ok = False
+        with self._state_lock:
+            if ok:
+                self._proxy_pending.pop(serial, None)
+            else:
+                self._proxy_pending[serial] = port
+        return ok
+
+    def _retry_pending_proxy(self, serial: str) -> None:
+        """Nova tentativa quando o aparelho com desmonte pendente reaparece."""
+        with self._state_lock:
+            port = self._proxy_pending.get(serial)
+        if port is None:
+            return
+        threading.Thread(
+            target=self._teardown_proxy_device,
+            args=(serial, port),
+            daemon=True,
+            name="mobaile-proxy-retry",
+        ).start()
 
     def _release_proxy_device(self, fallback: str | None) -> None:
         """Desfaz o proxy do aparelho em que ele foi ligado.
@@ -952,6 +979,8 @@ class EngineServer:
                 with self._state_lock:
                     self._proxy_device = (sessao.device_id, self.proxy.port)
                     self._proxy_configured_once = True
+                    # A configuracao nova substitui o desmonte que estava pendente.
+                    self._proxy_pending.pop(sessao.device_id, None)
         return {"running": self.proxy.is_running(), "started": started, "device_configured": configured}
 
     def proxy_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -1718,6 +1747,11 @@ class EngineServer:
             if sessao.platform is Platform.ANDROID and sessao.device_id and self.proxy.is_running():
                 fallback = sessao.device_id
             self._release_proxy_device(fallback)
+            # Ultima tentativa nos aparelhos cujo desmonte nao se confirmou.
+            with self._state_lock:
+                pendentes = list(self._proxy_pending.items())
+            for serial, port in pendentes:
+                self._teardown_proxy_device(serial, port)
         except Exception:
             logger.exception("Falha ao desfazer a configuracao de proxy do dispositivo.")
         try:

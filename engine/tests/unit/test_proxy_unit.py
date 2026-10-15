@@ -227,14 +227,16 @@ class TestADBBridgeProxyControl(unittest.TestCase):
         self.assertFalse(any("http_proxy" in c for c in calls))
 
     def test_setup_reverse_proxy_rollback_se_settings_falhar(self):
-        # Primeiro comando (reverse) passa, segundo (captive_portal) passa, terceiro (http_proxy) falha
-        self.adb._run_cmd = MagicMock(side_effect=[
-            (0, b"ok", b""),
-            (0, b"ok", b""),
-            (1, b"", b"permission denied"),
-            (0, b"ok", b""),
-            (0, b"ok", b""),
-        ])
+        # So o `put http_proxy` falha. A ordem dos demais comandos (inclusive as
+        # leituras dos valores anteriores) nao faz parte do que se prova aqui.
+        def run(args, timeout=15):
+            if "put" in args and "http_proxy" in args:
+                return 1, b"", b"permission denied"
+            if "get" in args:
+                return 0, b"null\n", b""
+            return 0, b"ok", b""
+
+        self.adb._run_cmd = MagicMock(side_effect=run)
         res = self.adb.setup_reverse_proxy("device1", 8082)
         self.assertFalse(res)
 
