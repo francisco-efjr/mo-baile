@@ -28,6 +28,7 @@ import pathlib
 import queue
 import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -1304,7 +1305,9 @@ class EngineServer:
             is_open = b"mInputShown=true" in saida
             self._keyboard_cache = (now, is_open)
             return is_open
-        except (InvalidInputError, ToolNotFoundError) as exc:
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+            # Um `dumpsys` acima do prazo (aparelho ocupado) nao pode derrubar a
+            # escuta passiva: o toque so segue como passo, sem a checagem.
             logger.debug("Nao foi possivel checar o teclado: %s", exc)
             return False
 
@@ -1368,6 +1371,11 @@ class EngineServer:
         except EngineError as exc:
             logger.warning("Toque passivo em (%s,%s) nao virou passo: %s", x, y, exc)
             self.notify("passive.skipped", {"x": x, "y": y, "reason": str(exc)})
+        except Exception as exc:
+            # Rede final: roda na thread do `getevent`. Uma excecao solta aqui
+            # encerrava a gravacao sem aviso, com a tela ainda em "Gravando".
+            logger.exception("Erro inesperado no toque passivo em (%s,%s).", x, y)
+            self.notify("passive.skipped", {"x": x, "y": y, "reason": f"erro inesperado: {exc}"})
 
     def _async_prefetch_hierarchy(self) -> None:
         """Pré-carrega a hierarquia da nova tela após um toque no aparelho.

@@ -274,7 +274,14 @@ class FirebaseAnalyticsListener:
         scheme no Xcode); sem isso o SDK nao loga os eventos.
         """
         if self._is_running:
-            return True
+            proc = self._proc
+            if proc is not None and proc.poll() is None:
+                return True
+            # A flag diz "ligado", mas o processo de log ja morreu (cabo
+            # desplugado, simulador desligado). Dizer que ja estava ligado
+            # deixava a escuta muda: religa de verdade.
+            logger.info("Captura de analytics estava marcada como ativa com o processo encerrado; religando.")
+            self.stop()
 
         self.active_platform = platform.lower()
         self.active_device = device_id
@@ -386,6 +393,7 @@ class FirebaseAnalyticsListener:
 
         source = self.active_source
         assembler = IOSLogRecordAssembler()
+        proc_do_laco = self._proc
 
         for line in iter(self._proc.stdout.readline, ""):
             if not self._is_running:
@@ -401,6 +409,11 @@ class FirebaseAnalyticsListener:
             # Filtra linhas de eventos do Firebase
             elif any(marker in line for marker in ("Logging event", "logging event", "Event recorded:", "Log event:")):
                 self._emit(self._parse_line(line.strip(), platform=self.active_platform))
+
+        # O fim do laco sem `stop()` e o processo de log que morreu. A flag
+        # continuava verdadeira e o `start` seguinte respondia "ja ligado".
+        if self._proc is proc_do_laco:
+            self._is_running = False
 
         if source == "ios_device" and not self._device_ready.is_set():
             # Filho saiu sem dizer nada (crash, import quebrado): nao deixar o
