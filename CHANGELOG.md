@@ -5,11 +5,43 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
-## [3.5.1] - 2026-10-12
+## [3.5.2] - 2026-10-14
 
-### Adicionado
+Correções de comportamento da auditoria orquestrada de 14/10: o que o motor
+deixava para trás quando algo falhava, e o que ele entregava errado. Nenhuma
+mudança de contrato RPC. O relatório completo, com a revisão independente, está
+em `docs/melhorias/2026-10-14/`.
 
-- 
+### Corrigido
+
+- **Aparelho escolhido não volta ao primeiro (M1).** Com emulador e aparelho
+  físico conectados, escolher o segundo era desfeito na varredura seguinte e
+  ainda religava o espelho. O vigia passa a saber qual é o alvo da sessão.
+- **Escuta passiva e analytics não morrem em silêncio (M5).** Um `dumpsys`
+  lento, um toque que falha, o Python do app sem Quartz e o `logcat` que morre
+  com o cabo deixavam a tela dizendo "Gravando"/"Ligado" sem ouvir nada.
+- **O proxy do aparelho volta ao que era (M2).** `http_proxy` e
+  `captive_portal_mode` anteriores são restaurados, e um desmonte que não se
+  confirma (cabo solto) é retentado quando o aparelho reaparece e ao encerrar.
+- **Seletor "único" é único de verdade (M7).** O candidato por texto gravava o
+  xpath do `resource-id`, que casava com todos os elementos de mesmo id; o
+  xpath contava `matches` fixo em 1. Um botão com "campo" no rótulo não vira
+  mais passo de digitação.
+- **Sessão WDA/Appium caduca é reaberta (M6).** O id em cache nunca expirava, e
+  todo toque falhava até reiniciar o motor.
+- **cURL e código gerado escapam o que vem do tráfego (M12).** Método, URL e
+  nome de header entravam sem escape no cURL copiado, e o caminho da requisição
+  no literal Python da asserção de contrato.
+
+### Alterado
+
+- O candidato `xpath` do ranking de localizadores conta os elementos que ele
+  realmente casa. Sem texto nem id único, o modo automático passa a escolher
+  coordenada com mais frequência, que é o que o ranking já devia dizer.
+- O desmonte do proxy (`teardown_reverse_proxy`) devolve `False` quando o
+  aparelho não confirma.
+- `IOSPassiveListener.start` levanta `AdapterError` sem Quartz, em vez de
+  responder `listening: true`.
 
 ## [3.5.1] - 2026-10-12
 
