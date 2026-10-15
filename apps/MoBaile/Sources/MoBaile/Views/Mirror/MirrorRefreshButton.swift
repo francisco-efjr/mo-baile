@@ -107,7 +107,7 @@ struct CorrelationPopover: View {
         var snippet = """
 
         # Asserção de contrato de API correlacionada (MITM)
-        response = self.network_interceptor.wait_for_request('\(cleanPath)', timeout=5.0)
+        response = self.network_interceptor.wait_for_request(\(Exporters.pythonStringLiteral(cleanPath)), timeout=5.0)
 
 """
         if let status = lastReq.statusCode {
