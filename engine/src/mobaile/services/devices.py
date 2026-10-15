@@ -93,6 +93,23 @@ class DeviceWatcher:
             self.target_platform = platform
             self.reset_current()
 
+    def set_target(self, platform: str, device_id: str | None) -> None:
+        """Fixa o alvo que a sessao escolheu, sem que a proxima varredura o troque.
+
+        `set_platform` zerava o estado e a varredura seguinte elegia sempre o
+        primeiro alvo: com emulador e aparelho fisico conectados, escolher o
+        segundo era desfeito em ate um intervalo, e ainda gerava um
+        `device.changed` que religava o espelho. Aqui o vigia passa a saber qual
+        e o alvo da sessao. Ele so volta a eleger sozinho se esse alvo sumir.
+        """
+        with self._lock:
+            # A geracao sobe sempre: uma listagem em voo foi pedida antes da
+            # escolha e pode descrever outra plataforma.
+            self._generation += 1
+            self.target_platform = platform
+            self.current_platform = platform if device_id else None
+            self.current_device_id = device_id or None
+
     def reset_current(self) -> None:
         self.current_device_id = None
         self.current_platform = None
@@ -134,7 +151,11 @@ class DeviceWatcher:
                 return None
 
             if targets:
-                device_id = targets[0][0]
+                ids = [target[0] for target in targets]
+                if self.current_platform == platform and self.current_device_id in ids:
+                    # O alvo da sessao continua conectado: nao ha o que eleger.
+                    return self.current_device_id
+                device_id = ids[0]
                 if self.current_platform != platform or self.current_device_id != device_id:
                     self.current_platform = platform
                     self.current_device_id = device_id

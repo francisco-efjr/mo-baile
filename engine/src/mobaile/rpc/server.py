@@ -474,7 +474,9 @@ class EngineServer:
             self._teardown_proxy_device(*proxy_anterior)
         watcher = self._watcher
         if watcher:
-            watcher.set_platform(platform.value)
+            # Informa o alvo escolhido, e nao so a plataforma: senao a varredura
+            # seguinte elegia o primeiro alvo e desfazia a escolha (M1).
+            watcher.set_target(platform.value, device_id)
         return {"platform": platform.value, "device_id": device_id}
 
     def devices_list(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -524,6 +526,8 @@ class EngineServer:
             target_platform=self.platform.value,
             poll_interval=interval,
         )
+        # Se a sessao ja tem alvo, o vigia parte dele em vez de eleger o primeiro.
+        self._watcher.set_target(self.platform.value, self.device_id)
         self._watcher.start()
         return {"watching": True, "platform": self.platform.value, "poll_interval": interval}
 
