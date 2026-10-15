@@ -1119,10 +1119,14 @@ class EngineServer:
         # "auto" deixa o motor escolher pelo que e mais robusto e unico nesta
         # tela, em vez de aplicar uma estrategia fixa a todos os elementos.
         alternativas: list[dict] = []
+        valor_escolhido: str | None = None
         if strategy_raw == "auto":
             na_tela = UIHierarchyParser.parse_xml(xml)
             alternativas = self.codegen.rank_locators(element, na_tela)
             escolhido = alternativas[0]["strategy"]
+            # O passo grava o valor do candidato escolhido. Reconstruir pela
+            # estrategia trocava "texto unico" por "resource-id repetido".
+            valor_escolhido = alternativas[0]["value"]
             strategy_raw = {"accessibility_id": "id", "text": "xpath"}.get(escolhido, escolhido)
 
         try:
@@ -1130,7 +1134,7 @@ class EngineServer:
         except ValueError as exc:
             raise InvalidInputError(f"Estrategia invalida: {strategy_raw!r}") from exc
         var_name, object_code, action_code = self.codegen.generate_entry(
-            element, strategy=strategy, click_coord=(x, y)
+            element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido
         )
         return {
             "var_name": var_name,

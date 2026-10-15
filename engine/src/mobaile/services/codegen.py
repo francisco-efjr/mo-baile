@@ -207,16 +207,24 @@ class CodeGenerator:
                 "why": "rotulo de acessibilidade, estavel e legivel",
             })
         if element.text:
+            # O xpath do candidato "texto" tem de ser de texto: `_generate_xpath`
+            # prioriza o resource-id e o passo gravado casava com todos os
+            # elementos de mesmo id, embora aqui o texto fosse unico.
+            xpath_texto = self._generate_text_xpath(element)
+            tag = _xpath_tag(element.class_name)
             candidatos.append({
                 "strategy": "text",
-                "value": f"(AppiumBy.XPATH, {self._generate_xpath(element)!r})",
-                "matches": quantos_com("text", element.text),
+                "value": f"(AppiumBy.XPATH, {xpath_texto!r})",
+                "matches": sum(
+                    1 for e in screen
+                    if e.text == element.text and (tag == "*" or _xpath_tag(e.class_name) == tag)
+                ),
                 "why": "texto visivel; muda com idioma e com conteudo dinamico",
             })
         candidatos.append({
             "strategy": "xpath",
             "value": f"(AppiumBy.XPATH, {self._generate_xpath(element)!r})",
-            "matches": 1,
+            "matches": self._xpath_matches(element, screen),
             "why": "caminho na arvore; quebra se o layout mudar",
         })
         candidatos.append({
@@ -251,6 +259,30 @@ class CodeGenerator:
         return f"(AppiumBy.XPATH, {xpath!r})"
 
     @staticmethod
+    def _generate_text_xpath(element: UIElement) -> str:
+        """XPath que casa pelo texto, sem passar pelo resource-id."""
+        tag = _xpath_tag(element.class_name)
+        atributo = "@value" if element.platform == "ios" else "@text"
+        return f"//{tag}[{atributo}={_xpath_str(element.text)}]"
+
+    @staticmethod
+    def _xpath_matches(element: UIElement, screen: list[UIElement]) -> int:
+        """Quantos elementos da tela o `_generate_xpath` deste elemento casa."""
+        tag = _xpath_tag(element.class_name)
+        if element.resource_id:
+            campo = "resource_id"
+        elif element.platform == "ios":
+            campo = "content_desc" if element.content_desc else ("text" if element.text else None)
+        else:
+            campo = "text" if element.text else ("content_desc" if element.content_desc else None)
+        valor = getattr(element, campo) if campo else None
+        return max(1, sum(
+            1 for e in screen
+            if (tag == "*" or _xpath_tag(e.class_name) == tag)
+            and (campo is None or getattr(e, campo, None) == valor)
+        ))
+
+    @staticmethod
     def _generate_xpath(element: UIElement) -> str:
         tag = _xpath_tag(element.class_name)
         if element.platform == "ios":
@@ -275,15 +307,21 @@ class CodeGenerator:
         element: UIElement,
         strategy: LocatorStrategy | None = None,
         click_coord: tuple[int, int] | None = None,
+        locator_value: str | None = None,
     ) -> tuple[str, str, str]:
+        """`locator_value` e o localizador que o ranking escolheu. Sem ele, o
+        valor sai da estrategia, que prioriza o resource-id e pode casar com
+        mais elementos do que o candidato escolhido (M7)."""
         active_strat = strategy or self.strategy
         var_name, slug = self.generate_variable_name(element)
-        locator_val = self.generate_locator_value(element, active_strat)
+        locator_val = locator_value or self.generate_locator_value(element, active_strat)
 
         object_line = f"    {var_name} = {locator_val}"
         self.declared_objects[var_name] = object_line
 
-        is_input = "CAMPO" in var_name or "SEARCH" in element.class_name.upper()
+        # Pelo prefixo, e nao por substring: um botao "Preencher campo" tem
+        # "CAMPO" no nome da variavel e virava passo de digitacao sem texto.
+        is_input = var_name.startswith("CAMPO_") or "SEARCH" in element.class_name.upper()
 
         # O codigo exibido e o que a pessoa cola no proprio Page Object, entao
         # segue o padrao da casa e nao carrega coordenada: o clique por posicao
