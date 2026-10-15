@@ -6,21 +6,24 @@ em [`revisao/propostas-priorizadas.md`](revisao/propostas-priorizadas.md).
 
 ## Resumo
 
-Seis correções de comportamento, uma por commit, cada uma com o teste que
-falhava antes e passa depois. Nenhuma mudança de contrato RPC
+Seis correções de comportamento, uma por commit, cada uma com ao menos um
+teste que falhava antes e passa depois (há também testes de caracterização,
+que já passavam e fixam o comportamento: `test_sem_valor_anterior_apaga_como_antes`,
+`test_desmonte_bem_sucedido_nao_deixa_pendencia`, `test_erro_do_servidor_nao_repete_o_toque`,
+`testMetodoHTTPComumFicaSemAspas`). Nenhuma mudança de contrato RPC
 (`PROTOCOL_VERSION` segue 2; só a versão aparece nas fixtures).
 
 ## Linha de base × depois
 
 | Verificação | Antes (3.5.1) | Depois (3.5.2) |
 |---|---|---|
-| Motor (`pytest`) | todos passam | 511 passam, 238 subtests |
+| Motor (`pytest`) | todos passam (rodado com `-q`, sem contagem registrada; `def test` conta 480) | 528 passam, 238 subtests (`def test` conta 528) |
 | Fluxos de QA (sem device / iOS / Android / HTTPS / relatório) | 19 / 31 / 35 / 34 / 26 | 19 / 31 / 35 / 34 / 26 |
 | `swift test` | — | 298 testes, 0 falhas, 26 pulados (sessão gráfica; ver M17) |
 | `ruff` | ok | ok |
 | `make fixtures-check` | ok | ok |
 
-A linha de base do motor foi medida na `efcc5f9` antes de qualquer mudança.
+A linha de base do motor foi rodada na `efcc5f9` antes de qualquer mudança, pela própria sessão, e não ficou registrada no repositório: é afirmação da sessão, não artefato.
 
 ## Melhorias
 
@@ -33,6 +36,7 @@ A linha de base do motor foi medida na `efcc5f9` antes de qualquer mudança.
 | M6 | Código | Id de sessão WDA/Appium nunca caducava | limpa o id e reabre uma vez | `test_sessoes_caducas.py` | `bb2c6d8` |
 | M12 | Segurança | cURL/Python gerados sem escape do tráfego (`Exporters.swift`) | `shellQuoted`, `pythonStringLiteral` | `ExportersEscapeTests.swift` | `01113a9` |
 | REV-1…5 | Revisão independente | Achados do revisor | ver commit | testes acrescentados | `5c85125` |
+| A-1…A-6 | Auditoria de 15/10 | 2 regressões do M7, corrida no desmonte do proxy ao encerrar, retentativa a cada varredura, status do Tk | ver [`revisao/auditoria-2026-10-15.md`](revisao/auditoria-2026-10-15.md) | testes acrescentados | commits seguintes |
 
 ## Propostas descartadas ou rebaixadas na contraprova
 

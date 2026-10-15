@@ -33,7 +33,7 @@ Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 | `stream.settled` | A tela parou de mudar. É o momento certo de reler a hierarquia |
 | `proxy.event` | Uma requisição HTTP foi observada |
 | `analytics.event` | Um evento de tagueamento foi capturado |
-| `device.changed` | Um alvo foi conectado ou desconectado. `device_id` nulo significa que sumiu |
+| `device.changed` | Um alvo foi conectado ou desconectado. `device_id` nulo significa que sumiu. Não é emitida pela escolha manual (`session.select_device`) nem ao ligar o vigia com um alvo já escolhido: só a chegada e a saída de um alvo geram a notificação (3.5.2) |
 | `passive.step` | A escuta passiva transformou um toque no aparelho em passo gravado. Mesmo formato de `codegen.record` |
 | `passive.skipped` | Um toque no aparelho não virou passo, com `x`, `y` e o motivo |
 | `passive.text` | O texto digitado num campo foi lido e guardado no último passo de entrada |
@@ -176,9 +176,9 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações |
 | `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos |
 | `engine.shutdown` | — | `{stopped}` na hora; o desmonte roda depois que a resposta sai. Fim do stdin e SIGTERM encerram pelo mesmo caminho, sem interromper o desmonte |
-| `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele |
+| `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele. O alvo escolhido fica fixo no vigia: a varredura seguinte não o troca pelo primeiro da lista, e não há `device.changed` redundante (3.5.2) |
 | `devices.list` | `platform` | alvos conectados |
-| `devices.watch_start` | `poll_interval` | liga a detecção automática |
+| `devices.watch_start` | `poll_interval` | liga a detecção automática. Parte do alvo já escolhido na sessão, se houver; se ele não estiver conectado, a primeira varredura elege outro ou avisa que sumiu |
 | `devices.watch_stop` | — | desliga. Idempotente |
 
 ### Ambiente e inicialização
@@ -266,7 +266,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `passive.start` | — | liga a gravação do que é feito direto no aparelho. Os passos chegam por `passive.step` |
+| `passive.start` | — | liga a gravação do que é feito direto no aparelho. Os passos chegam por `passive.step`. No iOS responde erro (`adapter_error`) quando o Python do motor não tem o `pyobjc-framework-Quartz`; antes respondia `listening: true` sem ouvir nada (3.5.2) |
 | `passive.stop` | — | desliga. Idempotente |
 | `passive.status` | — | `{listening}` |
 

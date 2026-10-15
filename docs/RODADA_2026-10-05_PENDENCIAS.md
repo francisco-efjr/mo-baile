@@ -65,7 +65,7 @@ Os vereditos são: CONF (confirmado), PARC (parcial), RESOLV (já resolvido) e N
 
 | Item | Veredito | Estado |
 |---|---|---|
-| A1 unicidade de seletor | PARC. `matches: 1` só é fixo em xpath e position. Um `//tag` sem atributos aparece como "único". No iOS, o candidato `text` conta por texto, mas a expressão gerada usa `@name` | Pendente (pequena mudança em `codegen.py` na branch) |
+| A1 unicidade de seletor | PARC. `matches: 1` só é fixo em xpath e position. Um `//tag` sem atributos aparece como "único". No iOS, o candidato `text` conta por texto, mas a expressão gerada usa `@name` | **Resolvido na 3.5.2 (M7):** o candidato por texto emite e conta xpath de texto; `xpath` conta os elementos que casa; o passo grava o valor escolhido |
 | A2 `click_at_position` / BasePage / `ast` | CONF. Aspas no texto geram `SyntaxError`, e um teste e uma fixture travavam o defeito. Só `ast.parse` não basta: o XPath também precisa ser válido | Pendente |
 | A3 replay por coordenada | CONF. O analista sugeriu etapa própria (G) | Pendente, junto com PB4 |
 | A4 `web_app.py` | PARC. Chama o adb direto, `streamlit` não está declarado, fica fora do lint e **executa um `main.py` recebido por upload** | ~~Pendente: mover para `tools/experimental/` e documentar o risco~~ **Resolvido em 11/10/2026 (WEB-1):** o `web_app.py` foi removido do repositório |
@@ -110,7 +110,7 @@ Para inspecionar: `git log -p 4436082..worktree-agent-<id>`. Para descartar:
 ## Fora dos prompts: achados do pesquisador
 
 O relatório completo está em [`research/pontos-de-melhoria-2026-10-05.md`](research/pontos-de-melhoria-2026-10-05.md).
-Nenhum item dele foi aplicado. Os P0 são:
+Estado em 15/10/2026: o P0 1 foi resolvido na 3.0.0; o P0 2 foi resolvido em duas partes (3.5.0: proxy desfeito no aparelho certo e debug do Firebase desligado no `stop`; 3.5.2: valor anterior de `http_proxy` e `captive_portal_mode` restaurado, desmonte que falha retentado); o P0 3 perdeu o objeto com o ADR 0005 (app Tk congelado; o nativo é o produto); o P0 4 continua aberto. Os P0 eram:
 
 1. **O callback do proxy é registrado a cada `proxy.start`.** Religar a captura multiplica as linhas da aba Rede e do HAR (`server.py:868`, `proxy.py:535`). O defeito foi reproduzido. Correção pequena (quick win).
 2. **O motor não registra nem desfaz o que muda no aparelho.** O proxy é removido do aparelho atual, não do que foi configurado. O `captive_portal_mode` não é restaurado. O `stop` do analytics não desliga o debug do Firebase, que continua ligado e vai para o BigQuery.

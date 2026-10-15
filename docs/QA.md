@@ -7,9 +7,9 @@ de 05/10, evidências e limites em [QA_2026-10-05.md](historico/QA_2026-10-05.md
 
 | Suite | Onde | Testes | Precisa de |
 |---|---|---|---|
-| Motor e contrato RPC | `engine/tests` | 437 + 133 subtests aprovados (88 do relatório, 14 do App em Debug no Android) | Python e sockets locais para integração; OCR real só no macOS com `swiftc` |
-| Front nativo | `apps/MoBaile/Tests` | 225 executados, 0 falhas; 23 skips (snapshots e catálogo sob demanda, casos com aparelho) | macOS com Swift |
-| UI Tkinter | `apps/tk-legacy/tests` | 18 aprovados | sessão gráfica |
+| Motor e contrato RPC | `engine/tests` | 528 + 238 subtests aprovados na 3.5.2 (88 do relatório, 14 do App em Debug no Android) | Python e sockets locais para integração; OCR real só no macOS com `swiftc` |
+| Front nativo | `apps/MoBaile/Tests` | 298 executados, 0 falhas; 26 skips na 3.5.2 (snapshots e catálogo sob demanda, casos com aparelho, e os de acessibilidade/toolbar fora de uma sessão gráfica) | macOS com Swift |
+| UI Tkinter | `apps/tk-legacy/tests` | 20 aprovados na 3.5.2 | sessão gráfica |
 | Harness de QA | `qa/tests` | 11 aprovados | Python |
 | Fluxos de ponta a ponta | `qa/qa_fluxo*.py` | 145 verificações em 5 fluxos | Python, openssl e sockets locais |
 

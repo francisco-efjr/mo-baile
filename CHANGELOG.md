@@ -8,9 +8,12 @@ A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/V
 ## [3.5.2] - 2026-10-14
 
 Correções de comportamento da auditoria orquestrada de 14/10: o que o motor
-deixava para trás quando algo falhava, e o que ele entregava errado. Nenhuma
-mudança de contrato RPC. O relatório completo, com a revisão independente, está
-em `docs/melhorias/2026-10-14/`.
+deixava para trás quando algo falhava, e o que ele entregava errado. O esquema
+do contrato RPC não muda (`PROTOCOL_VERSION` 2, fixtures iguais); três
+comportamentos observáveis mudam e estão anotados em `docs/PROTOCOLO_RPC.md`
+(`device.changed`, `devices.watch_start`, `passive.start` no iOS). O relatório
+completo, com a revisão independente e a auditoria, está em
+`docs/melhorias/2026-10-14/`.
 
 ### Corrigido
 
@@ -22,7 +25,8 @@ em `docs/melhorias/2026-10-14/`.
   com o cabo deixavam a tela dizendo "Gravando"/"Ligado" sem ouvir nada.
 - **O proxy do aparelho volta ao que era (M2).** `http_proxy` e
   `captive_portal_mode` anteriores são restaurados, e um desmonte que não se
-  confirma (cabo solto) é retentado quando o aparelho reaparece e ao encerrar.
+  confirma (cabo solto) é retentado uma vez quando o aparelho reaparece (mesmo
+  com a sessão em iOS) e ao encerrar. `global_http_proxy_*` não é guardado.
 - **Seletor "único" é único de verdade (M7).** O candidato por texto gravava o
   xpath do `resource-id`, que casava com todos os elementos de mesmo id; o
   xpath contava `matches` fixo em 1. Um botão com "campo" no rótulo não vira
@@ -41,7 +45,11 @@ em `docs/melhorias/2026-10-14/`.
 - O desmonte do proxy (`teardown_reverse_proxy`) devolve `False` quando o
   aparelho não confirma.
 - `IOSPassiveListener.start` levanta `AdapterError` sem Quartz, em vez de
-  responder `listening: true`.
+  responder `listening: true`. O app Tkinter legado mostra o motivo e desmarca
+  o modo passivo, em vez de quebrar.
+- A classificação de passo de digitação vale pela classe do elemento
+  (EditText, TextField, SearchView, AutoCompleteTextView), pelo prefixo `CAMPO`
+  do nome, ou por `campo` no id de um componente sem tipo conhecido.
 
 ## [3.5.1] - 2026-10-12
 
