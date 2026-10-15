@@ -125,7 +125,9 @@ class CodeGenerator:
             return "CHECK_BOX"
         if any(w in combined for w in ("button", "btn")):
             return "BOTAO"
-        if any(w in combined for w in ("search", "edittext", "input", "textfield")):
+        if any(w in combined for w in ("search", "edittext", "input", "textfield", "autocomplete")):
+            # `autocomplete`: AutoCompleteTextView e MultiAutoCompleteTextView
+            # sao EditText por heranca, mas o nome da classe so diz "textview".
             return "CAMPO"
         if any(w in combined for w in ("switch", "toggle")):
             return "SWITCH"
@@ -217,7 +219,7 @@ class CodeGenerator:
                 "value": f"(AppiumBy.XPATH, {xpath_texto!r})",
                 "matches": sum(
                     1 for e in screen
-                    if e.text == element.text and (tag == "*" or _xpath_tag(e.class_name) == tag)
+                    if self._casa_texto(e, element.text) and (tag == "*" or _xpath_tag(e.class_name) == tag)
                 ),
                 "why": "texto visivel; muda com idioma e com conteudo dinamico",
             })
@@ -257,6 +259,22 @@ class CodeGenerator:
 
         xpath = self._generate_xpath(element)
         return f"(AppiumBy.XPATH, {xpath!r})"
+
+    @staticmethod
+    def _casa_texto(e: UIElement, texto: str) -> bool:
+        """O elemento `e` seria casado pelo xpath de texto gerado para `texto`?
+
+        No Android o xpath e `@text`, que e o campo `text`. No iOS ele e
+        `@value or @label`, e o `UIElement` guarda `value`-ou-`label` em `text`
+        e `label`-ou-`name` em `content_desc`: um elemento com value "1" e
+        label "Adicionar" casa pelo label, embora `text` seja "1". Contar so
+        por `text` dava "unico" a um xpath que pegava dois. Pelo `content_desc`
+        a contagem e conservadora (pode contar um `name` igual que o xpath nao
+        casa), e ambiguidade a mais e mais segura que unicidade falsa.
+        """
+        if e.platform == "ios":
+            return e.text == texto or e.content_desc == texto
+        return e.text == texto
 
     @staticmethod
     def _generate_text_xpath(element: UIElement) -> str:
@@ -324,9 +342,15 @@ class CodeGenerator:
         object_line = f"    {var_name} = {locator_val}"
         self.declared_objects[var_name] = object_line
 
-        # Pelo prefixo, e nao por substring: um botao "Preencher campo" tem
-        # "CAMPO" no nome da variavel e virava passo de digitacao sem texto.
-        is_input = var_name.startswith("CAMPO_") or "SEARCH" in element.class_name.upper()
+        # Tres sinais, em ordem de confianca: a classe e de entrada; o prefixo
+        # do nome e CAMPO; ou o elemento nao tem tipo conhecido (ELEMENTO) e o
+        # nome fala em campo, caso dos componentes custom com id `campo_cpf`.
+        # Um botao ou texto com "campo" no rotulo (BOTAO_PREENCHER_CAMPO) nao
+        # entra: virava passo de digitacao sem texto.
+        classe = element.class_name.upper()
+        por_classe = any(k in classe for k in ("EDITTEXT", "TEXTFIELD", "SEARCH", "AUTOCOMPLETE"))
+        por_nome = var_name.startswith("ELEMENTO_") and "CAMPO" in var_name.split("_")
+        is_input = por_classe or var_name.startswith("CAMPO_") or por_nome
 
         # O codigo exibido e o que a pessoa cola no proprio Page Object, entao
         # segue o padrao da casa e nao carrega coordenada: o clique por posicao

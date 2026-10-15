@@ -76,6 +76,20 @@ class TestRankingHonesto(unittest.TestCase):
         self.assertIn("@label=", valor)
         self.assertIn("@value=", valor)
 
+    def test_no_ios_a_contagem_segue_o_mesmo_criterio_do_xpath(self):
+        """A-2: botao com label "Adicionar" e value "1" tem `text` "1", mas o
+        xpath `@value or @label` o casa. A contagem precisa casar tambem."""
+        def botao_ios(value, label):
+            return UIElement(
+                tag="XCUIElementTypeButton", class_name="XCUIElementTypeButton", resource_id=label,
+                text=value or label, content_desc=label, clickable=True, bounds=(0, 0, 100, 50),
+                area=5000, package="", platform="ios",
+            )
+        alvo, outro = botao_ios("", "Adicionar"), botao_ios("1", "Adicionar")
+        candidatos = {c["strategy"]: c for c in CodeGenerator().rank_locators(alvo, [alvo, outro])}
+        self.assertEqual(candidatos["text"]["matches"], 2)
+        self.assertFalse(candidatos["text"]["unique"])
+
 
 class TestPassoGravadoUsaOLocalizadorEscolhido(unittest.TestCase):
     def setUp(self):
@@ -98,6 +112,32 @@ class TestPassoGravadoUsaOLocalizadorEscolhido(unittest.TestCase):
     def test_botao_com_campo_no_rotulo_continua_sendo_clique(self):
         self._grava(XML_BOTAO_CAMPO, 50, 50)
         self.assertEqual(self.server.codegen.get_steps()[-1].action_type, "click")
+
+
+class TestCamposQueNaoSaoEditText(unittest.TestCase):
+    """A-1: a classificacao por prefixo deixou de fora campos cujo nome de
+    classe nao diz "EditText" nem "input"."""
+
+    def _passo(self, classe, rid):
+        gerador = CodeGenerator()
+        gerador.generate_entry(botao("", rid=rid, classe=classe))
+        return gerador.get_steps()[-1]
+
+    def test_autocomplete_text_view_e_campo(self):
+        passo = self._passo("android.widget.AutoCompleteTextView", "br.app:id/campo_nome")
+        self.assertEqual(passo.action_type, "input")
+        self.assertTrue(passo.var_name.startswith("CAMPO_"), passo.var_name)
+
+    def test_multi_autocomplete_text_view_e_campo(self):
+        self.assertEqual(self._passo("android.widget.MultiAutoCompleteTextView", "br.app:id/tags").action_type, "input")
+
+    def test_componente_custom_com_campo_no_id_e_campo(self):
+        self.assertEqual(self._passo("android.view.View", "br.app:id/campo_data").action_type, "input")
+
+    def test_texto_com_campo_no_rotulo_continua_clique(self):
+        gerador = CodeGenerator()
+        gerador.generate_entry(botao("Campo obrigatório", rid="", classe="android.widget.TextView"))
+        self.assertEqual(gerador.get_steps()[-1].action_type, "click")
 
 
 if __name__ == "__main__":
