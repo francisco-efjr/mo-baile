@@ -599,6 +599,11 @@ class FirebaseAnalyticsListener:
                 lines.append(f"{ev.time_str}\t{ev.platform.upper()}\t{ev.tag}\t{ev.event_name}\t{main_params}\t{json_str}")
         return "\n".join(lines)
 
+    def history_events(self) -> list[AnalyticsEvent]:
+        """Copia dos eventos sob o lock, para quem filtra por hora (correlacao)."""
+        with self._lock:
+            return list(self.events_history)
+
     def history_snapshot(self) -> list[dict]:
         """Copia do historico, tirada sob o lock: a escuta pode estar acrescentando."""
         with self._lock:

@@ -37,6 +37,8 @@ struct SearchQuery: Equatable, Sendable {
     struct Filter: Equatable, Sendable {
         let key: Key
         let value: String
+        /// O token como foi digitado (`evento:login`), para áreas sem filtro.
+        let text: String
     }
 
     let terms: [String]
@@ -51,7 +53,7 @@ struct SearchQuery: Equatable, Sendable {
                 let chave = String(palavra[..<dois])
                 let valor = String(palavra[palavra.index(after: dois)...])
                 if let key = Key.named(chave), !valor.isEmpty {
-                    filters.append(Filter(key: key, value: valor))
+                    filters.append(Filter(key: key, value: valor, text: palavra))
                     continue
                 }
             }
@@ -63,9 +65,18 @@ struct SearchQuery: Equatable, Sendable {
 
     var isEmpty: Bool { terms.isEmpty && filters.isEmpty }
 
-    /// As palavras livres contra os campos (Relatório usa só isto).
+    /// As palavras livres contra os campos.
     func matches(_ fields: [String]) -> Bool {
         terms.allSatisfy { termo in
+            fields.contains { Self.contains($0, termo) }
+        }
+    }
+
+    /// Para áreas sem filtros próprios (Relatório): um token `chave:valor`
+    /// vale como texto literal, em vez de ser ignorado e mostrar tudo.
+    func matchesLiteral(_ fields: [String]) -> Bool {
+        let literais = terms + filters.map(\.text)
+        return literais.allSatisfy { termo in
             fields.contains { Self.contains($0, termo) }
         }
     }
@@ -88,11 +99,16 @@ struct SearchQuery: Equatable, Sendable {
             case .event: return Self.contains(event.eventName, filtro.value)
             case .origin: return Self.contains(event.tag, filtro.value)
             case .param:
-                let partes = filtro.value.split(separator: "=", maxSplits: 1).map(String.init)
-                let chave = partes[0]
+                // `omittingEmptySubsequences: false`: "param:=42" tem chave vazia e
+                // `partes[0]` num array vazio derrubava o app no meio da digitação.
+                let partes = filtro.value.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                    .map(String.init)
+                guard let chave = partes.first, !chave.isEmpty else { return false }
+                // "param:chave=" (valor vazio) vale como "a chave existe".
+                let esperado = partes.count > 1 ? partes[1] : ""
                 return event.params.contains { nome, valor in
                     guard Self.contains(nome, chave) else { return false }
-                    return partes.count == 1 || Self.contains(valor, partes[1])
+                    return esperado.isEmpty || Self.contains(valor, esperado)
                 }
             case .status, .method, .host, .type: return false
             }

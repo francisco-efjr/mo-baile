@@ -30,7 +30,7 @@ class TestCorrelacao(unittest.TestCase):
         self.server.proxy = MagicMock()
         self.server.proxy.events_history = []
         self.server.analytics = MagicMock()
-        self.server.analytics.events_history = []
+        self.server.analytics.history_events.return_value = []
 
     def call(self, method, params=None):
         return self.server.handle_message(
@@ -51,7 +51,11 @@ class TestCorrelacao(unittest.TestCase):
                 '<hierarchy><node index="0" text="Entrar" resource-id="br.app:id/ok" class="android.widget.Button" '
                 'package="br.app" content-desc="" clickable="true" bounds="[0,0][100,100]" /></hierarchy>'
             )
-        with patch("mobaile.services.codegen.time.time", return_value=T0):
+        from types import SimpleNamespace
+
+        from mobaile.services import codegen as codegen_mod
+
+        with patch.object(codegen_mod, "time", SimpleNamespace(time=lambda: T0)):
             gravado = self.call("codegen.record", {"x": 50, "y": 50, "strategy": "id"})["result"]
         self.assertEqual(gravado["recorded_at"], T0)
         self.assertEqual(gravado["step_num"], 1)
@@ -62,7 +66,7 @@ class TestCorrelacao(unittest.TestCase):
         self._passo(1, T0)
         self.server.proxy.events_history = [requisicao(1, T0 - 5), requisicao(2, T0 + 0.8), requisicao(3, T0 + 3.9),
                                             requisicao(4, T0 + 4.5)]
-        self.server.analytics.events_history = [evento(10, T0 - 0.5), evento(11, T0 + 2), evento(12, T0 + 9)]
+        self.server.analytics.history_events.return_value = [evento(10, T0 - 0.5), evento(11, T0 + 2), evento(12, T0 + 9)]
         r = self.call("session.correlate", {"step_num": 1})["result"]
         self.assertEqual(r["requests"], [2, 3])
         self.assertEqual(r["events"], [10, 11])

@@ -114,7 +114,7 @@ class AppState {
         guard let report else { return [] }
         let busca = SearchQuery(reportFilterText)
         return report.results.filter { result in
-            reportFilter.includes(result) && (busca.isEmpty || busca.matches(result.searchableFields))
+            reportFilter.includes(result) && (busca.isEmpty || busca.matchesLiteral(result.searchableFields))
         }
     }
 
@@ -124,7 +124,7 @@ class AppState {
         let busca = SearchQuery(reportFilterText)
         guard !busca.isEmpty else { return report.extras }
         return report.extras.filter {
-            busca.matches([$0.event, $0.screenText, $0.detailText, $0.componentText, $0.flowName ?? ""])
+            busca.matchesLiteral([$0.event, $0.screenText, $0.detailText, $0.componentText, $0.flowName ?? ""])
         }
     }
 
@@ -235,11 +235,13 @@ class AppState {
     
     func clearHTTPTraffic() {
         httpRequests.removeAll()
+        correlation = nil
         selectedRequest = nil
     }
     
     func clearAnalyticsEvents() {
         analyticsEvents.removeAll()
+        correlation = nil
         selectedAnalyticsEvent = nil
     }
     

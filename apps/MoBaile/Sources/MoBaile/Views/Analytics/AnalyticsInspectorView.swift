@@ -81,8 +81,11 @@ struct AnalyticsInspectorView: View {
         .overlay {
             if linhas.isEmpty {
                 EmptyState(
-                    icon: appState.analyticsFilterText.isEmpty ? "antenna.radiowaves.left.and.right" : "magnifyingglass",
-                    text: appState.analyticsFilterText.isEmpty ? "Aguardando eventos…" : "Nenhum evento corresponde ao filtro.",
+                    icon: appState.analyticsFilterText.isEmpty && appState.correlation == nil
+                        ? "antenna.radiowaves.left.and.right" : "magnifyingglass",
+                    text: appState.correlation != nil
+                        ? "Nenhum evento na janela deste passo."
+                        : (appState.analyticsFilterText.isEmpty ? "Aguardando eventos…" : "Nenhum evento corresponde ao filtro."),
                     compact: true
                 )
                 .allowsHitTesting(false)

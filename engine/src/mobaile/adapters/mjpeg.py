@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import http.client
 import logging
+import socket
 import threading
 from urllib.parse import urlsplit
 
@@ -51,6 +52,14 @@ class MJPEGReader:
             self._resp = self._conn.getresponse()
             if self._resp.status != 200:
                 raise OSError(f"HTTP {self._resp.status}")
+            # O prazo curto vale so para conectar. Na leitura, uma pausa do WDA
+            # (um /wda/keys longo, uma transicao) passa de 2 s e derrubaria o
+            # fluxo; o `stop()` fecha o socket e destrava a leitura. A resposta
+            # e `will_close` (sem Content-Length), entao `conn.sock` ja e None:
+            # o socket vivo e o do arquivo da resposta.
+            sock = getattr(getattr(self._resp.fp, "raw", None), "_sock", None)
+            if sock is not None:
+                sock.settimeout(None)
         except (OSError, ValueError, http.client.HTTPException) as exc:
             logger.info("MJPEG indisponivel em %s: %s", self.url, exc)
             self._fechar()
@@ -68,6 +77,13 @@ class MJPEGReader:
         self._thread = None
 
     def _fechar(self) -> None:
+        # `shutdown` acorda um `read1` bloqueado; so `close` nao garante isso.
+        sock = getattr(getattr(getattr(self._resp, "fp", None), "raw", None), "_sock", None)
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
         for recurso in (self._resp, self._conn):
             if recurso is not None:
                 try:
@@ -99,7 +115,9 @@ class MJPEGReader:
                 with self._lock:
                     self._latest = frame
                     self._seq += 1
-        except (OSError, ValueError, http.client.HTTPException) as exc:
+        except (OSError, ValueError, http.client.HTTPException, AttributeError) as exc:
+            # AttributeError: `stop()` fechou a resposta no meio de um `read1`
+            # (o http.client tenta fechar um `fp` que ja e None).
             if not self._stop.is_set():
                 logger.info("Fluxo MJPEG terminou: %s", exc)
 

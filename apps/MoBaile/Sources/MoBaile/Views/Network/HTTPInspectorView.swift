@@ -261,11 +261,13 @@ struct HTTPTableView: View {
         .overlay {
             if linhas.isEmpty {
                 EmptyState(
-                    icon: appState.httpFilterText.isEmpty && appState.networkScope == .all
+                    icon: appState.httpFilterText.isEmpty && appState.networkScope == .all && appState.correlation == nil
                         ? "antenna.radiowaves.left.and.right" : "magnifyingglass",
-                    text: appState.httpFilterText.isEmpty && appState.networkScope == .all
-                        ? "Aguardando tráfego do aparelho…"
-                        : "Nenhuma requisição corresponde ao filtro ou ao escopo.",
+                    text: appState.correlation != nil
+                        ? "Nenhuma requisição na janela deste passo."
+                        : (appState.httpFilterText.isEmpty && appState.networkScope == .all
+                            ? "Aguardando tráfego do aparelho…"
+                            : "Nenhuma requisição corresponde ao filtro ou ao escopo."),
                     compact: true
                 )
                 .allowsHitTesting(false)

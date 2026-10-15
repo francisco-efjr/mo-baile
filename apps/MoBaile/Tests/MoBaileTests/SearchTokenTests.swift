@@ -101,6 +101,23 @@ final class SearchTokenTests: XCTestCase {
         XCTAssertEqual(eventos.filter { SearchQuery("parametro:item_name=tenis").matches($0) }.map(\.id), [2])
     }
 
+    func testParamComChaveVaziaNaoDerrubaNemCasa() {
+        // REV-1: "param:=42" aparece no meio da digitação e derrubava o app.
+        let eventos = [evento(1, "select_item", ["item_id": "42"])]
+        XCTAssertTrue(eventos.filter { SearchQuery("param:=").matches($0) }.isEmpty)
+        XCTAssertTrue(eventos.filter { SearchQuery("param:=42").matches($0) }.isEmpty)
+        XCTAssertEqual(eventos.filter { SearchQuery("param:item_id=").matches($0) }.map(\.id), [1])
+    }
+
+    func testRelatorioTrataTokenComoTextoLiteral() {
+        // REV-9: no Relatório não há filtros; "evento:login" procura o texto, não mostra tudo.
+        let q = SearchQuery("evento:login")
+        XCTAssertFalse(q.isEmpty)
+        XCTAssertTrue(q.matchesLiteral(["evento:login na tela"]))
+        XCTAssertFalse(q.matchesLiteral(["login"]))
+        XCTAssertTrue(SearchQuery("login").matchesLiteral(["evento:login"]))
+    }
+
     func testFiltroDeRedeNaoCasaEmAnalyticsNemOContrario() {
         XCTAssertFalse(SearchQuery("status:200").matches(evento(1, "x", [:])))
         XCTAssertFalse(SearchQuery("evento:x").matches(requisicao(1, url: "https://a.test/x")))

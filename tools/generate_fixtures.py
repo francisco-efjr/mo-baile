@@ -223,7 +223,11 @@ def build() -> dict:
             fixtures["hierarchy.dump"] = call("hierarchy.dump")
         fixtures["hierarchy.element_at"] = call("hierarchy.element_at", {"x": 60, "y": 45})
         # Hora de gravacao fixa: `recorded_at` e relogio, nao contrato.
-        with patch("mobaile.services.codegen.time.time", return_value=1757030000.0):
+        from types import SimpleNamespace
+
+        from mobaile.services import codegen as codegen_mod
+
+        with patch.object(codegen_mod, "time", SimpleNamespace(time=lambda: 1757030000.0)):
             fixtures["codegen.record"] = call("codegen.record", {"x": 60, "y": 45, "strategy": "position"})
         fixtures["codegen.steps"] = call("codegen.steps")
         fixtures["session.correlate"] = call("session.correlate", {"step_num": 1})

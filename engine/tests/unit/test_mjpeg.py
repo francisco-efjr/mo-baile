@@ -26,8 +26,9 @@ def _jpeg(color) -> bytes:
 class ServidorMJPEG:
     """Serve `quadros` como o WDA: multipart/x-mixed-replace com Content-Length."""
 
-    def __init__(self, quadros: list[bytes], com_content_length: bool = True):
+    def __init__(self, quadros: list[bytes], com_content_length: bool = True, pausa_entre_quadros: float = 0.03):
         servidor = self
+        self.pausa = pausa_entre_quadros
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
@@ -40,7 +41,7 @@ class ServidorMJPEG:
                         self.wfile.write(b"Content-Length: %d\r\n" % len(quadro))
                     self.wfile.write(b"\r\n" + quadro + b"\r\n")
                     self.wfile.flush()
-                    time.sleep(0.03)
+                    time.sleep(servidor.pausa)
                 servidor.terminou.set()
                 # Segura a conexao aberta ate o cliente fechar, como o WDA.
                 servidor.solta.wait(5)
@@ -92,6 +93,20 @@ class TestMJPEGReader(unittest.TestCase):
         self.addCleanup(servidor.fechar)
         self._le_tudo(servidor, quadros)
 
+    def test_pausa_maior_que_o_prazo_de_conexao_nao_derruba_a_leitura(self):
+        quadros = [_jpeg("red"), _jpeg("blue")]
+        servidor = ServidorMJPEG(quadros, pausa_entre_quadros=1.2)
+        self.addCleanup(servidor.fechar)
+        reader = MJPEGReader(servidor.url, connect_timeout=0.5)
+        self.assertTrue(reader.start())
+        self.addCleanup(reader.stop)
+        self.assertTrue(servidor.terminou.wait(5))
+        prazo = time.monotonic() + 2
+        while time.monotonic() < prazo and (reader.latest() or (None, 0))[1] < 2:
+            time.sleep(0.02)
+        self.assertEqual(reader.latest()[1], 2, "o segundo quadro chegou apos a pausa")
+        self.assertTrue(reader.is_running())
+
     def test_sem_servidor_start_devolve_false_rapido(self):
         reader = MJPEGReader("http://127.0.0.1:1/", connect_timeout=0.5)
         inicio = time.monotonic()
@@ -133,20 +148,39 @@ class TestEspelhoIOSPeloMJPEG(unittest.TestCase):
         porta = int(servidor.url.rsplit(":", 1)[1].strip("/"))
         with patch.object(rpc_server, "settings", replace(rpc_server.settings, wda_url="http://127.0.0.1:8100",
                                                            wda_mjpeg_port=porta)), \
-             patch.object(self.server.ios, "take_screenshot", side_effect=AssertionError("simctl nao deve ser usado")):
+             patch.object(self.server.ios, "take_screenshot", return_value=Image.new("RGB", (40, 80), "black")) as shot, \
+             patch.object(self.server.ios, "set_mjpeg_scaling", return_value=True) as escala:
             self.call("session.select_device", {"platform": "ios", "device_id": "A1B2C3D4-1111-2222-3333-444455556666"})
             resultado = self.call("stream.start", {"fps": 30, "max_width": 900})["result"]
             self.assertEqual(resultado["source"], "wda_mjpeg")
+            # Uma captura so, para medir a largura; os quadros vem do MJPEG.
+            escala.assert_not_called()  # 40 px cabe em 900: nao precisa reduzir
             prazo = time.monotonic() + 3
             while len(self._quadros()) < 1 and time.monotonic() < prazo:
                 time.sleep(0.02)
             self.call("stream.stop")
         emitidos = self._quadros()
         self.assertTrue(emitidos, "nenhum quadro saiu do MJPEG")
+        self.assertEqual(shot.call_count, 1, "o simctl so mede a largura; os quadros vem do MJPEG")
         import base64
 
         bytes_emitidos = {base64.b64decode(q["image_base64"]) for q in emitidos}
         self.assertTrue(bytes_emitidos & set(quadros), "o JPEG emitido deve ser o mesmo que o WDA mandou")
+
+    def test_quadro_nativo_maior_que_max_width_pede_reducao_ao_wda(self):
+        import mobaile.rpc.server as rpc_server
+
+        servidor = ServidorMJPEG([_jpeg("red")])
+        self.addCleanup(servidor.fechar)
+        porta = int(servidor.url.rsplit(":", 1)[1].strip("/"))
+        with patch.object(rpc_server, "settings", replace(rpc_server.settings, wda_url="http://127.0.0.1:8100",
+                                                           wda_mjpeg_port=porta)), \
+             patch.object(self.server.ios, "take_screenshot", return_value=Image.new("RGB", (1170, 2532), "black")), \
+             patch.object(self.server.ios, "set_mjpeg_scaling", return_value=True) as escala:
+            self.call("session.select_device", {"platform": "ios", "device_id": "A1B2C3D4-1111-2222-3333-444455556666"})
+            self.call("stream.start", {"fps": 30, "max_width": 900, "quality": 70})
+            self.call("stream.stop")
+        escala.assert_called_once_with(76, 70)
 
     def test_sem_mjpeg_cai_no_simctl(self):
         import mobaile.rpc.server as rpc_server

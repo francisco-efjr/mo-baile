@@ -54,6 +54,29 @@ class IOSBridge:
 
         return None
 
+    def set_mjpeg_scaling(self, percent: int, quality: int = 80) -> bool:
+        """Pede ao WDA quadros MJPEG reduzidos (`mjpegScalingFactor`, em %).
+
+        Sem isso o fluxo vem em pixels nativos e cada quadro teria de ser
+        decodificado, reduzido e reencodado no motor. Melhor esforco: WDA
+        antigo sem a configuracao devolve erro e o motor segue.
+        """
+        import requests
+
+        sid = self._ensure_session()
+        if not sid:
+            return False
+        try:
+            res = requests.post(
+                f"{self.wda_url}/session/{sid}/appium/settings",
+                json={"settings": {"mjpegScalingFactor": max(1, min(100, int(percent))),
+                                   "mjpegServerScreenshotQuality": max(1, min(100, int(quality)))}},
+                timeout=4,
+            )
+            return res.status_code == 200
+        except Exception:
+            return False
+
     def list_booted_simulators(self) -> list[tuple[str, str]]:
         try:
             cmd = ["xcrun", "simctl", "list", "devices"]

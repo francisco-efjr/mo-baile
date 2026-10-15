@@ -30,6 +30,7 @@ class TestDiagnostico(unittest.TestCase):
         self.server.proxy.port = 8082
         self.server.proxy.is_running.return_value = True
         self.server.proxy.events_history = []
+        self.server.proxy.active_tunnels = 0
         self.server.adb = MagicMock()
         self.server.adb.is_proxy_configured.return_value = True
         self.server.android_netlog = MagicMock()
@@ -73,9 +74,26 @@ class TestDiagnostico(unittest.TestCase):
         self.assertEqual(resultado["requests_total"], 1)
         self.assertLess(resultado["last_event_age_s"], 5)
 
-    def test_tuneis_falhando_sugerem_pinning(self):
-        self.server.proxy.events_history = [evento(i, tunnel=True, error="ConnectionResetError", response_bytes=0) for i in range(5)]
-        self.assertEqual(self.codigos(), ["tls_pinning_suspected"])
+    def test_tuneis_falhando_apontam_a_rede_do_mac_e_nao_pinning(self):
+        self.server.proxy.events_history = [evento(i, tunnel=True, error="gaierror", response_bytes=0) for i in range(5)]
+        resultado = self.diag()
+        self.assertEqual([c["code"] for c in resultado["causes"]], ["tunnels_failing"])
+        self.assertIn("gaierror", resultado["causes"][0]["detail"])
+        self.assertNotIn("pinning", resultado["causes"][0]["title"].lower())
+
+    def test_tunel_fechado_sem_erro_e_sem_bytes_nao_conta_como_falha(self):
+        self.server.proxy.events_history = [evento(i, tunnel=True, response_bytes=0) for i in range(4)]
+        self.assertEqual(self.codigos(), ["only_tunnels"])
+
+    def test_tunel_aberto_agora_nao_e_nenhuma_conexao(self):
+        self.server.proxy.active_tunnels = 2
+        resultado = self.diag()
+        self.assertEqual(resultado["tunnels_active"], 2)
+        self.assertEqual(resultado["causes"], [])
+
+    def test_sem_aparelho_na_sessao_nao_afirma_que_o_aparelho_aponta_para_o_proxy(self):
+        self._sessao("android", None)
+        self.assertNotIn("no_connections", self.codigos())
 
     def test_so_tuneis_sem_conteudo(self):
         self.server.proxy.events_history = [evento(i, tunnel=True) for i in range(4)]

@@ -59,7 +59,7 @@ Causas, do mais ao menos provável, cada uma só entra quando a evidência exist
 | `proxy_stopped` | `proxy.is_running() == False` | ligar o proxy |
 | `proxy_not_on_device` | Android, `is_proxy_configured(serial) == False` | reconfigurar / comando adb |
 | `no_connections` | proxy ligado, aparelho configurado, nenhum evento nem túnel em 30 s | o app pode ignorar o proxy do sistema (Flutter/Dart, OkHttp com proxy próprio, WebSocket). Use "App em Debug" (OkHttp) ou o CFNetwork no iOS |
-| `tls_pinning_suspected` | túneis `CONNECT` ≥ 3 e ≥ 80% com `error` ou sem bytes de resposta | certificate pinning: desligue no build de debug ou use "App em Debug" |
+| `tunnels_failing` | túneis `CONNECT` ≥ 3 e ≥ 80% com `error` | o proxy não alcança o servidor (DNS, VPN, rede do Mac). *Revisão: pinning não é diagnosticável daqui, o TLS é repassado sem abrir (ADR 0004)* |
 | `only_tunnels` | túneis sem erro, nenhuma requisição decodificada | o proxy não abre HTTPS (não há MITM, ADR 0004): use "App em Debug" para ver o conteúdo |
 | `ios_no_proxy_support` | sessão iOS com proxy ligado | o proxy configura só Android; no iOS use o CFNetwork por cabo (`netlog.start`) |
 | `netlog_running_no_events` | netlog ligado e nenhum evento em 30 s | o app precisa do `HttpLoggingInterceptor` (Android) ou `CFNETWORK_DIAGNOSTICS=3` (iOS) |

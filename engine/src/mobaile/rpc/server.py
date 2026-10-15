@@ -574,7 +574,7 @@ class EngineServer:
             fim = min(fim, proximo)
 
         requisicoes = [e.id for e in self.proxy.events_history if inicio <= e.timestamp <= fim]
-        eventos = [e.id for e in self.analytics.events_history if inicio <= e.timestamp <= fim]
+        eventos = [e.id for e in self.analytics.history_events() if inicio <= e.timestamp <= fim]
         return {
             "step_num": step_num,
             "recorded_at": passo.recorded_at,
@@ -917,10 +917,22 @@ class EngineServer:
         host = partes.hostname or "localhost"
         return f"http://{host}:{settings.wda_mjpeg_port}/"
 
-    def _start_mjpeg_if_available(self, sessao: _Sessao) -> MJPEGReader | None:
-        """No iOS, tenta o MJPEG do WDA; sem resposta em 2 s, fica o simctl."""
+    def _start_mjpeg_if_available(self, sessao: _Sessao, max_width: int, quality: int) -> MJPEGReader | None:
+        """No iOS, tenta o MJPEG do WDA; sem resposta em 2 s, fica o simctl.
+
+        Antes de ler, pede ao WDA quadros reduzidos para caberem no `max_width`
+        (o espelho pede 900 e o simulador entrega mais de 1100 de largura):
+        so assim o JPEG e repassado sem reencodar. Melhor esforco.
+        """
         if sessao.platform is not Platform.IOS:
             return None
+        largura = None
+        try:
+            largura = self.ios.take_screenshot(sessao.device_id).size[0]
+        except Exception:
+            largura = None
+        if largura and max_width and largura > max_width:
+            self.ios.set_mjpeg_scaling(int(100 * max_width / largura), quality)
         reader = MJPEGReader(self._mjpeg_url(), connect_timeout=2.0)
         if not reader.start():
             return None
@@ -940,7 +952,7 @@ class EngineServer:
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
-        self._mjpeg = self._start_mjpeg_if_available(self._require_session())
+        self._mjpeg = self._start_mjpeg_if_available(self._require_session(), max_width, quality)
         ultimo_seq = [0]
 
         def capturar():
@@ -950,8 +962,12 @@ class EngineServer:
             if reader is not None and sessao.platform is Platform.IOS:
                 if not reader.is_running():
                     # O fluxo caiu (WDA reiniciado): volta ao simctl ate o
-                    # proximo stream.start.
-                    self._mjpeg = None
+                    # proximo stream.start. Troca atomica e fecha o socket.
+                    with self._state_lock:
+                        if self._mjpeg is reader:
+                            self._mjpeg = None
+                    reader.stop()
+                    logger.info("MJPEG do WDA caiu; espelho iOS volta ao simctl.")
                     return self._capture_image(sessao)
                 quadro = reader.latest()
                 if quadro is None or quadro[1] == ultimo_seq[0]:
@@ -1001,9 +1017,15 @@ class EngineServer:
         }
 
     def stream_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
-        if self._mjpeg is not None:
-            self._mjpeg.stop()
-            self._mjpeg = None
+        # Primeiro o espelho, depois o leitor MJPEG: na ordem inversa, enquanto
+        # o leitor fechava, a thread do espelho via `_mjpeg` nulo e caia no
+        # simctl por alguns quadros.
+        if self._stream:
+            self._stream.stop()
+        with self._state_lock:
+            reader, self._mjpeg = self._mjpeg, None
+        if reader is not None:
+            reader.stop()
         if self._stream:
             self._stream.stop()
             self._stream = None
@@ -1254,7 +1276,7 @@ class EngineServer:
         Cada causa so entra quando ha evidencia para ela: proxy parado, aparelho
         sem o proxy aplicado, nenhuma conexao chegando (app que ignora o proxy do
         sistema), so tuneis CONNECT (HTTPS sem MITM, ADR 0004), tuneis falhando
-        (pinning), sessao iOS com proxy, ou "App em Debug" ligado sem eventos.
+        (rede do Mac), sessao iOS com proxy, ou "App em Debug" ligado sem eventos.
         """
         sessao = self._sessao()
         agora = time.time()
@@ -1268,7 +1290,11 @@ class EngineServer:
 
         requests_total = sum(1 for e in eventos if not e.is_tunnel)
         tunnels = [e for e in eventos if e.is_tunnel]
-        tunnels_failed = sum(1 for e in tunnels if e.error or e.response_bytes == 0)
+        # Tunel com `error` e o proxy que nao alcancou o servidor (DNS, rede):
+        # o CONNECT e repassado sem abrir o TLS (ADR 0004), entao pinning nao
+        # derruba o tunel e nao se le daqui.
+        tunnels_failed = sum(1 for e in tunnels if e.error)
+        tunnels_active = int(getattr(self.proxy, "active_tunnels", 0) or 0)
         last_age = (agora - max(e.timestamp for e in eventos)) if eventos else None
         quiet = last_age is None or last_age > self._DIAGNOSE_QUIET_S
         porta = self.proxy.port
@@ -1293,11 +1319,12 @@ class EngineServer:
         if device_configured is False:
             causa(
                 "proxy_not_on_device", "O aparelho não está apontando para o proxy",
-                f"settings get global http_proxy não devolve 127.0.0.1:{porta}.",
+                "settings get global http_proxy não devolveu um proxy (ou o adb não respondeu à consulta).",
                 "Clique em Configurar Proxy de novo. Se o aparelho recusar, rode: "
                 f"adb shell settings put global http_proxy 127.0.0.1:{porta}",
             )
-        if running and android and device_configured is not False and quiet and not tunnels and requests_total == 0:
+        if (running and android and device_configured is True and quiet
+                and not tunnels and tunnels_active == 0 and requests_total == 0):
             causa(
                 "no_connections", "Nenhuma conexão chegou ao proxy",
                 f"O aparelho aponta para o proxy, mas nenhuma conexão foi aberta nos últimos {int(self._DIAGNOSE_QUIET_S)} s.",
@@ -1305,11 +1332,12 @@ class EngineServer:
                 "Use o App em Debug (log do OkHttp) ou confirme no app que ele respeita o proxy do Android.",
             )
         if len(tunnels) >= 3 and requests_total == 0 and tunnels_failed / len(tunnels) >= 0.8:
+            erros = sorted({e.error for e in tunnels if e.error})
             causa(
-                "tls_pinning_suspected", "As conexões HTTPS estão sendo recusadas",
-                f"{tunnels_failed} de {len(tunnels)} túneis CONNECT terminaram com erro ou sem resposta.",
-                "Parece certificate pinning: o app fecha a conexão ao ver o proxy. Desligue o pinning no build de debug "
-                "ou use o App em Debug, que lê o log do OkHttp sem passar pelo proxy.",
+                "tunnels_failing", "O proxy não está alcançando os servidores",
+                f"{tunnels_failed} de {len(tunnels)} túneis CONNECT falharam ao conectar ({', '.join(erros)}).",
+                "O Mac não resolve ou não alcança o host: confira DNS, VPN e rede do Mac. "
+                "Pinning não aparece aqui: o proxy repassa o TLS sem abrir (ADR 0004).",
             )
         elif tunnels and requests_total == 0:
             causa(
@@ -1335,6 +1363,7 @@ class EngineServer:
             "requests_total": requests_total,
             "tunnels_total": len(tunnels),
             "tunnels_failed": tunnels_failed,
+            "tunnels_active": tunnels_active,
             "last_event_age_s": round(last_age, 1) if last_age is not None else None,
             "causes": causes,
         }
