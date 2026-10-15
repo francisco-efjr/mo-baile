@@ -15,6 +15,11 @@ struct AnalyticsInspectorView: View {
         let theme = themeManager.current
         VStack(spacing: 0) {
             AnalyticsToolbar()
+            if appState.correlation != nil {
+                HStack { CorrelationChip(); Spacer() }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+            }
 
             if !appState.analyticsListenerActive && appState.analyticsEvents.isEmpty {
                 EmptyState(

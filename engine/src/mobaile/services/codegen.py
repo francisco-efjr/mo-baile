@@ -8,6 +8,7 @@ existentes.
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 
 from mobaile.config import settings
@@ -385,6 +386,7 @@ class CodeGenerator:
             input_text=None,
             package=element.package,
             platform=element.platform,
+            recorded_at=time.time(),
         )
         self.steps.append(step)
 

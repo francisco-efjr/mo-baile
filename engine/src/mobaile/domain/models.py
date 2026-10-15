@@ -137,11 +137,15 @@ class AutomationStep:
     input_text: str | None = None
     package: str = ""
     platform: str = "android"
+    # Hora da gravacao no relogio do Mac (epoch), o mesmo das requisicoes e
+    # dos eventos de analytics: e o que permite correlacionar os tres (F5).
+    recorded_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         strategy = self.strategy.value if isinstance(self.strategy, LocatorStrategy) else str(self.strategy)
         return {
             "step_num": self.step_num,
+            "recorded_at": self.recorded_at or None,
             "action_type": self.action_type,
             "var_name": self.var_name,
             "element_name": self.element_name,

@@ -285,8 +285,10 @@ enum EngineDTO {
         let inputText: String?
         let package: String
         let platform: String
+        let recordedAt: Double?
 
         enum CodingKeys: String, CodingKey {
+            case recordedAt = "recorded_at"
             case stepNum = "step_num"
             case actionType = "action_type"
             case varName = "var_name"
@@ -321,7 +323,8 @@ enum EngineDTO {
                 coords: coords.count == 2 ? CGPoint(x: coords[0], y: coords[1]) : nil,
                 inputText: inputText,
                 package: package,
-                platform: platform == "ios" ? .ios : .android
+                platform: platform == "ios" ? .ios : .android,
+                recordedAt: recordedAt.map { Date(timeIntervalSince1970: $0) }
             )
         }
     }
@@ -612,6 +615,22 @@ enum EngineDTO {
                 return "Nada aponta problema: \(requestsTotal) requisições e \(tunnelsTotal) túneis registrados."
             }
             return causes.map(\.title).joined(separator: " · ")
+        }
+    }
+
+    /// `session.correlate`: o que a Rede e o Analytics viram na janela de um passo.
+    struct Correlation: Decodable, Equatable, Sendable {
+        let stepNum: Int
+        let recordedAt: Double
+        let window: [Double]
+        let requests: [Int]
+        let events: [Int]
+        let probable: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case window, requests, events, probable
+            case stepNum = "step_num"
+            case recordedAt = "recorded_at"
         }
     }
 

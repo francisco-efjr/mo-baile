@@ -222,8 +222,11 @@ def build() -> dict:
         with patch.object(server.adb, "get_ui_hierarchy", return_value=HIERARCHY_XML):
             fixtures["hierarchy.dump"] = call("hierarchy.dump")
         fixtures["hierarchy.element_at"] = call("hierarchy.element_at", {"x": 60, "y": 45})
-        fixtures["codegen.record"] = call("codegen.record", {"x": 60, "y": 45, "strategy": "position"})
+        # Hora de gravacao fixa: `recorded_at` e relogio, nao contrato.
+        with patch("mobaile.services.codegen.time.time", return_value=1757030000.0):
+            fixtures["codegen.record"] = call("codegen.record", {"x": 60, "y": 45, "strategy": "position"})
         fixtures["codegen.steps"] = call("codegen.steps")
+        fixtures["session.correlate"] = call("session.correlate", {"step_num": 1})
         with patch.object(server.adb, "take_screenshot", return_value=Image.new("RGB", (60, 120), "black")):
             fixtures["screen.capture"] = call("screen.capture", {"max_width": 30})
         with patch.object(server.adb, "get_screen_size", return_value=(1080, 2400)):

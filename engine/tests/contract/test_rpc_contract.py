@@ -143,7 +143,7 @@ class TestSuperficie(ContractBase):
         "proxy.start", "proxy.stop", "proxy.events", "proxy.clear", "proxy.diagnose",
         "netlog.start", "netlog.stop",
         "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
-        "codegen.record", "codegen.steps", "codegen.reset",
+        "codegen.record", "codegen.steps", "codegen.reset", "session.correlate",
     }
 
     def test_superficie_publica_nao_encolhe_sem_aviso(self):

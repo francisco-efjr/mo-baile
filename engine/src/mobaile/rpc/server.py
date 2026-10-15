@@ -274,6 +274,7 @@ class EngineServer:
             "engine.info": self.engine_info,
             "engine.shutdown": self.engine_shutdown,
             "session.select_device": self.session_select_device,
+            "session.correlate": self.session_correlate,
             "devices.list": self.devices_list,
             "devices.watch_start": self.devices_watch_start,
             "devices.watch_stop": self.devices_watch_stop,
@@ -536,6 +537,52 @@ class EngineServer:
             # seguinte elegia o primeiro alvo e desfazia a escolha (M1).
             watcher.set_target(platform.value, device_id)
         return {"platform": platform.value, "device_id": device_id}
+
+    # Janela padrao em volta do toque: um pouco antes (o app ja pode ter
+    # disparado algo ao pressionar) e alguns segundos depois (resposta e evento).
+    _CORRELATE_BEFORE_S = 1.0
+    _CORRELATE_AFTER_S = 4.0
+
+    def session_correlate(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Requisicoes e eventos de analytics na janela de tempo de um passo.
+
+        Atribuicao por tempo, nao causal: por isso `probable` e sempre `true`.
+        Todos os carimbos sao do relogio do Mac na recepcao (proxy, logcat e
+        gravacao do passo), entao nao ha relogio do aparelho a corrigir. A
+        janela termina no passo seguinte, se ele vier antes do prazo.
+        """
+        try:
+            step_num = int(params.get("step_num"))
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError("step_num precisa ser um numero inteiro.") from exc
+        before = float(params.get("before_s", self._CORRELATE_BEFORE_S))
+        after = float(params.get("after_s", self._CORRELATE_AFTER_S))
+        if not (0 <= before <= 60 and 0 <= after <= 60):
+            raise InvalidInputError("before_s e after_s precisam ficar entre 0 e 60 segundos.")
+
+        passos = self.codegen.get_steps()
+        passo = next((p for p in passos if p.step_num == step_num), None)
+        if passo is None:
+            raise InvalidInputError(f"Nao ha passo {step_num}.")
+        if not passo.recorded_at:
+            raise InvalidInputError(f"O passo {step_num} nao tem hora de gravacao.")
+
+        inicio = passo.recorded_at - before
+        fim = passo.recorded_at + after
+        proximo = next((p.recorded_at for p in passos if p.step_num > step_num and p.recorded_at), None)
+        if proximo is not None:
+            fim = min(fim, proximo)
+
+        requisicoes = [e.id for e in self.proxy.events_history if inicio <= e.timestamp <= fim]
+        eventos = [e.id for e in self.analytics.events_history if inicio <= e.timestamp <= fim]
+        return {
+            "step_num": step_num,
+            "recorded_at": passo.recorded_at,
+            "window": [inicio, fim],
+            "requests": requisicoes,
+            "events": eventos,
+            "probable": True,
+        }
 
     def devices_list(self, params: dict[str, Any]) -> dict[str, Any]:
         platform_raw = str(params.get("platform", self.platform.value)).lower()
@@ -1389,12 +1436,15 @@ class EngineServer:
         var_name, object_code, action_code = self.codegen.generate_entry(
             element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido
         )
+        passos = self.codegen.get_steps()
         return {
             "var_name": var_name,
             "object_code": object_code,
             "action_code": action_code,
             "element": element.to_dict(),
-            "step_count": len(self.codegen.get_steps()),
+            "step_count": len(passos),
+            "step_num": passos[-1].step_num if passos else None,
+            "recorded_at": passos[-1].recorded_at if passos else None,
             "strategy": strategy.value,
             # Vazio quando a estrategia foi imposta pela interface; preenchido
             # no modo "auto", para a tela poder mostrar o que foi descartado e

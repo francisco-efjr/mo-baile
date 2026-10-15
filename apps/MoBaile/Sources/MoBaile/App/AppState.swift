@@ -199,14 +199,18 @@ class AppState {
     var filteredHTTPRequests: [NetworkEvent] {
         let busca = SearchQuery(httpFilterText)
         let escopo = networkScope
-        if busca.isEmpty && escopo == .all { return httpRequests.reversed() }
-        return httpRequests.reversed().filter { escopo.includes($0) && (busca.isEmpty || busca.matches($0)) }
+        let janela = correlation.map { Set($0.requests) }
+        if busca.isEmpty && escopo == .all && janela == nil { return httpRequests.reversed() }
+        return httpRequests.reversed().filter {
+            (janela?.contains($0.id) ?? true) && escopo.includes($0) && (busca.isEmpty || busca.matches($0))
+        }
     }
 
     var filteredAnalyticsEvents: [AnalyticsEvent] {
         let busca = SearchQuery(analyticsFilterText)
-        guard !busca.isEmpty else { return analyticsEvents.reversed() }
-        return analyticsEvents.reversed().filter { busca.matches($0) }
+        let janela = correlation.map { Set($0.events) }
+        if busca.isEmpty && janela == nil { return analyticsEvents.reversed() }
+        return analyticsEvents.reversed().filter { (janela?.contains($0.id) ?? true) && (busca.isEmpty || busca.matches($0)) }
     }
     
     // MARK: - Actions
@@ -244,6 +248,7 @@ class AppState {
         actionsCode = ""
         locatorsCode = ""
         selectedStepID = nil
+        correlation = nil
     }
 
     // MARK: - Janela (redesenho 3.0)
@@ -292,6 +297,19 @@ class AppState {
     }
     /// Passo escolhido na seção Fluxo da barra lateral. Destaca o código dele.
     var selectedStepID: UUID? = nil
+    /// Janela correlacionada de um passo (`session.correlate`): enquanto houver
+    /// uma, Rede e Analytics mostram só o que caiu nela. Independe da seleção
+    /// na barra lateral, para sobreviver à troca de área.
+    var correlation: EngineDTO.Correlation? = nil
+
+    var correlatedStep: AutomationStep? {
+        guard let correlation else { return nil }
+        return steps.first { $0.stepNum == correlation.stepNum }
+    }
+
+    func clearCorrelation() {
+        correlation = nil
+    }
     /// Confirmação de limpeza aberta (tráfego, eventos ou passos).
     var pendingClear: ClearKind? = nil
     /// Pedido de foco no campo de busca da hierarquia (⌘F em Page Objects).

@@ -80,6 +80,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "engine.info": _spec(),
     "engine.shutdown": _spec(LANE_INLINE, 5),
     "session.select_device": _spec(),
+    # Le listas em memoria: fila rapida.
+    "session.correlate": _spec(),
     "devices.list": _spec(LANE_QUERY),
     "devices.watch_start": _spec(),
     "devices.watch_stop": _spec(),

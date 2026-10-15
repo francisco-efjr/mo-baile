@@ -188,6 +188,7 @@ struct HTTPTableView: View {
             .help(appState.networkScope.help)
             .accessibilityLabel("Escopo da tabela de Rede")
             Spacer()
+            CorrelationChip()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
