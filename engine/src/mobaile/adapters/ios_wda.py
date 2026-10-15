@@ -100,12 +100,32 @@ class IOSBridge:
             pass
         return None
 
-    def tap(self, x: int, y: int) -> bool:
-        import requests
+    @staticmethod
+    def _sessao_invalida(res) -> bool:
+        """404 do WDA: o id de sessao em cache nao existe mais."""
+        return res.status_code == 404
 
-        sid = self._ensure_session()
-        if not sid:
-            return False
+    def tap(self, x: int, y: int) -> bool:
+        """Toca em (x, y). Se o id de sessao caducou, abre outro e tenta uma vez.
+
+        O 404 do WDA e uma resposta HTTP, nao excecao: antes o id velho ficava
+        em cache e todo toque falhava ate reiniciar o motor. So o 404 refaz; um
+        500 nao e id caduco, e repetir poderia tocar duas vezes.
+        """
+        for _tentativa in range(2):
+            sid = self._ensure_session()
+            if not sid:
+                return False
+            resultado = self._tap_na_sessao(sid, x, y)
+            if resultado is not None:
+                return resultado
+            if self.session_id == sid:
+                self.session_id = None
+        return False
+
+    def _tap_na_sessao(self, sid: str, x: int, y: int) -> bool | None:
+        """`True`/`False` pelo resultado, `None` se a sessao `sid` caducou."""
+        import requests
 
         try:
             res = requests.post(
@@ -115,6 +135,8 @@ class IOSBridge:
             )
             if res.status_code == 200:
                 return True
+            if self._sessao_invalida(res):
+                return None
         except Exception:
             pass
 
@@ -139,6 +161,8 @@ class IOSBridge:
                 json=action_payload,
                 timeout=4,
             )
+            if self._sessao_invalida(res):
+                return None
             return res.status_code == 200
         except Exception:
             self.session_id = None

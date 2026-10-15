@@ -256,6 +256,21 @@ class AppiumBridge:
         except requests.RequestException as exc:
             logger.debug("Page source pelo Appium falhou: %s", exc)
             return None
+        if response.status_code == 404:
+            # Sessao inexistente: o id em cache morreu (UiAutomator2 caiu,
+            # aparelho foi desplugado). Sem limpar, `ensure_android_session`
+            # respondia "ja estava aberta" para sempre. O lock so e tomado se
+            # estiver livre: quem o segura esta abrindo outra sessao.
+            if self._lock.acquire(blocking=False):
+                try:
+                    if self.session_id == session_id:
+                        self.session_id = None
+                        self.session_platform = None
+                        self.session_udid = None
+                finally:
+                    self._lock.release()
+            logger.debug("Sessao %s do Appium caducou; sera reaberta no proximo uso.", session_id)
+            return None
         if response.status_code != 200:
             logger.debug("Page source pelo Appium respondeu %s", response.status_code)
             return None
