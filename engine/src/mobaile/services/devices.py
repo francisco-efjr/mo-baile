@@ -150,6 +150,16 @@ class DeviceWatcher:
             targets = []
             listed = False
 
+        with self._lock:
+            # Decidido antes do aviso: uma listagem que terminou depois do
+            # `stop()` nao pode disparar trabalho novo (retentativa de proxy
+            # durante o encerramento), e uma de outra plataforma nao vale.
+            if self._stop_event.is_set():
+                return None
+            if generation != self._generation:
+                logger.debug("Listagem de %s descartada: a plataforma mudou durante ela.", platform)
+                return None
+
         if listed and self.on_targets_listed is not None:
             try:
                 self.on_targets_listed(platform, [target[0] for target in targets])
@@ -157,10 +167,7 @@ class DeviceWatcher:
                 logger.exception("Falha ao tratar a listagem de dispositivos.")
 
         with self._lock:
-            if self._stop_event.is_set():
-                return None
-            if generation != self._generation:
-                logger.debug("Listagem de %s descartada: a plataforma mudou durante ela.", platform)
+            if self._stop_event.is_set() or generation != self._generation:
                 return None
 
             if targets:

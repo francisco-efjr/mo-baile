@@ -407,3 +407,52 @@ class TestAlvoDaSessao(unittest.TestCase):
         release.set()
         t.join(3)
         self.assertEqual(eventos, [], "a listagem era da plataforma anterior")
+
+
+class TestAvisoDeListagem(unittest.TestCase):
+    """`on_targets_listed` avisa em toda listagem valida, e so nelas (A-4)."""
+
+    def test_avisa_com_os_ids_mesmo_sem_transicao(self):
+        avisos = []
+        adb = FakeADB([("emulator-5554", "device"), ("R58N12ABCDE", "offline")])
+        w = DeviceWatcher(adb_bridge=adb, ios_bridge=FakeIOS(), on_device_changed=MagicMock(),
+                          target_platform="android", poll_interval=0.02,
+                          on_targets_listed=lambda p, ids: avisos.append((p, ids)))
+        w.poll_once()
+        w.poll_once()
+        self.assertEqual(avisos, [("android", ["emulator-5554"])] * 2)
+
+    def test_nao_avisa_depois_de_parado_nem_com_listagem_de_outra_plataforma(self):
+        avisos = []
+        adb = FakeADB([("emulator-5554", "device")])
+        w = DeviceWatcher(adb_bridge=adb, ios_bridge=FakeIOS(), on_device_changed=MagicMock(),
+                          target_platform="android", poll_interval=0.02,
+                          on_targets_listed=lambda p, ids: avisos.append((p, ids)))
+        w._stop_event.set()
+        self.assertIsNone(w.poll_once())
+        self.assertEqual(avisos, [])
+
+        w._stop_event.clear()
+        original = adb.list_devices
+
+        def troca_no_meio():
+            w.set_target("ios", None)
+            return original()
+
+        adb.list_devices = troca_no_meio
+        self.assertIsNone(w.poll_once())
+        self.assertEqual(avisos, [])
+
+    def test_falha_na_listagem_nao_avisa(self):
+        avisos = []
+
+        class ADBQuebrado:
+            def list_devices(self):
+                raise OSError("adb morreu")
+
+        w = DeviceWatcher(adb_bridge=ADBQuebrado(), ios_bridge=FakeIOS(), on_device_changed=MagicMock(),
+                          target_platform="android", poll_interval=0.02,
+                          on_targets_listed=lambda p, ids: avisos.append((p, ids)))
+        w.poll_once()
+        self.assertEqual(avisos, [])
+
