@@ -736,6 +736,23 @@
       "percent": null
     }
   },
+  "notif_stream.frame": {
+    "jsonrpc": "2.0",
+    "method": "stream.frame",
+    "params": {
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "width": 30,
+      "height": 60,
+      "source_width": 60,
+      "source_height": 120,
+      "format": "png",
+      "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "device_id": "emulator-5554",
+      "fps": 0,
+      "capture_ms": 0,
+      "skipped": 0
+    }
+  },
   "notif_proxy.event": {
     "jsonrpc": "2.0",
     "method": "proxy.event",

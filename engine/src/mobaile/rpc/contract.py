@@ -108,6 +108,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "input.tap": _spec(),
     "input.text": _spec(),
     # Espelho
+    # `format` (jpeg|png) e `quality` desde 3.6; o quadro sai com `format` e
+    # `image_base64` (e `png_base64` quando PNG).
     "stream.start": _spec(),
     "stream.stop": _spec(),
     "stream.stats": _spec(),

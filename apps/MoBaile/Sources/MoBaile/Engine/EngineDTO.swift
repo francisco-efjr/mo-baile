@@ -28,7 +28,12 @@ enum EngineDTO {
     // MARK: - Tela
 
     struct Frame: Decodable, Sendable {
-        let pngBase64: String
+        /// Desde a 3.6 o quadro vem em `image_base64` com `format` (`jpeg` ou
+        /// `png`); `png_base64` continua quando o formato é PNG, para o motor
+        /// anterior. Os dois são opcionais e o decodificador lê o que vier.
+        let pngBase64: String?
+        let imageBase64: String?
+        let format: String?
         let width: Int
         let height: Int
         let sourceWidth: Int
@@ -46,8 +51,9 @@ enum EngineDTO {
 
         enum CodingKeys: String, CodingKey {
             case pngBase64 = "png_base64"
+            case imageBase64 = "image_base64"
             case deviceId = "device_id"
-            case width, height, fps
+            case width, height, fps, format
             case sourceWidth = "source_width"
             case sourceHeight = "source_height"
             case captureMs = "capture_ms"
@@ -64,7 +70,8 @@ enum EngineDTO {
         /// quadro. Forçando aqui, quem chama escolhe a thread: a sessão chama de
         /// uma tarefa destacada e só entrega ao MainActor a imagem pronta.
         var image: NSImage? {
-            guard let data = Data(base64Encoded: pngBase64),
+            guard let base64 = imageBase64 ?? pngBase64,
+                  let data = Data(base64Encoded: base64),
                   let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let cgImage = CGImageSourceCreateImageAtIndex(
                       source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary

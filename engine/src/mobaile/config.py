@@ -54,6 +54,10 @@ class Settings:
     proxy_port: int
     proxy_host: str
     appium_url: str
+    # Espelho: formato do quadro, qualidade JPEG e a porta do MJPEG do WDA.
+    stream_format: str
+    stream_quality: int
+    wda_mjpeg_port: int
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -74,6 +78,12 @@ class Settings:
             proxy_host=os.getenv("PROXY_HOST") or "127.0.0.1",
             # O Appium gerencia o ciclo de vida do WebDriverAgent no iOS.
             appium_url=(os.getenv("APPIUM_URL") or "http://127.0.0.1:4723").rstrip("/"),
+            # JPEG por padrao: medido em tools/bench_frame.py, codifica em uma
+            # fracao do tempo do PNG e trafega bem menos bytes por quadro.
+            stream_format=_env_choice("STREAM_FORMAT", "jpeg", ("jpeg", "png")),
+            stream_quality=int(_env_float("STREAM_QUALITY", 80, minimum=10, maximum=95)),
+            # O WebDriverAgent serve MJPEG da tela nessa porta (padrao dele: 9100).
+            wda_mjpeg_port=int(_env_float("WDA_MJPEG_PORT", 9100, minimum=1, maximum=65535)),
         )
 
 

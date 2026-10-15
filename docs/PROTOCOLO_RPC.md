@@ -24,12 +24,12 @@ explicitamente.
 Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 
 ```json
-{"jsonrpc":"2.0","method":"stream.frame","params":{"png_base64":"...","width":900,"device_id":"emulator-5554",...}}
+{"jsonrpc":"2.0","method":"stream.frame","params":{"format":"jpeg","image_base64":"...","width":900,"device_id":"emulator-5554",...}}
 ```
 
 | Notificação | Quando chega |
 |---|---|
-| `stream.frame` | Um quadro novo, apenas quando a tela mudou. `device_id` diz de qual aparelho ele veio; quadro capturado antes de uma troca de aparelho não é emitido |
+| `stream.frame` | Um quadro novo, apenas quando a tela mudou. `device_id` diz de qual aparelho ele veio; quadro capturado antes de uma troca de aparelho não é emitido. Desde a 3.6 traz `format` (`jpeg`, o padrão, ou `png`) e `image_base64`; `png_base64` continua presente só quando o formato é PNG. No iOS, com o MJPEG do WebDriverAgent no ar (porta `WDA_MJPEG_PORT`, padrão 9100), o JPEG é repassado sem reencodar |
 | `stream.settled` | A tela parou de mudar. É o momento certo de reler a hierarquia |
 | `proxy.event` | Uma requisição HTTP foi observada |
 | `analytics.event` | Um evento de tagueamento foi capturado |
@@ -222,7 +222,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `stream.start` | `fps`, `max_width` | confirma o início |
+| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
 | `scrcpy.start` | `fps`, `max_size`, `title`, `always_on_top` | inicia janela nativa a 60 FPS com baixíssima latência |

@@ -444,7 +444,10 @@ class TestStreamingPorNotificacao(ContractBase):
         quadros = [n for n in self.notificacoes() if n.get("method") == "stream.frame"]
         self.assertGreaterEqual(len(quadros), 1)
         self.assertNotIn("id", quadros[0], "notificacao nao carrega id")
-        self.assertIn("png_base64", quadros[0]["params"])
+        # 3.6: o quadro do espelho e JPEG por padrao, em `image_base64`.
+        self.assertEqual(quadros[0]["params"]["format"], "jpeg")
+        self.assertIn("image_base64", quadros[0]["params"])
+        self.assertNotIn("png_base64", quadros[0]["params"])
 
         # As metricas viajam com o quadro. Sem isso o front precisava de uma ida
         # e volta de `stream.stats` por quadro, e o laco de notificacoes dele

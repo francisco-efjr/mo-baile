@@ -89,7 +89,7 @@ try:
     # --- streaming ----------------------------------------------------------
     m.ok("stream.start", {"fps": 20, "max_width": 300})
     n1 = m.esperar_notificacao("stream.frame", timeout=10)
-    check("quadro chega como notificacao", "png_base64" in n1["params"])
+    check("quadro chega como notificacao", "image_base64" in n1["params"] and n1["params"].get("format") == "jpeg")
     check("notificacao nao carrega id", "id" not in n1)
     check("quadro respeita max_width", n1["params"]["width"] == 300, str(n1["params"]["width"]))
     time.sleep(1.2)

@@ -38,6 +38,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
+from PIL import Image
+
 from mobaile import __version__
 from mobaile.adapters import ios_device_log
 from mobaile.adapters.adb import ADBBridge
@@ -46,6 +48,7 @@ from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
 from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
 from mobaile.adapters.ios_wda import IOSBridge
+from mobaile.adapters.mjpeg import MJPEGReader
 from mobaile.adapters.proxy import MobileNetworkProxy
 from mobaile.adapters.scrcpy import ScrcpyManager
 from mobaile.adapters.screen_recorder import ScreenRecorder
@@ -253,6 +256,8 @@ class EngineServer:
         # uma vez so).
         self._proxy_teardown_lock = threading.Lock()
         self._stream: RealTimeStreamEngine | None = None
+        # Leitor do MJPEG do WDA, so enquanto o espelho iOS estiver ligado.
+        self._mjpeg: MJPEGReader | None = None
         self._watcher: DeviceWatcher | None = None
         self._flow_thread = None
         self._flow_running = False
@@ -413,6 +418,44 @@ class EngineServer:
             "png_base64": base64.b64encode(buffer.getvalue()).decode("ascii"),
             "width": image.size[0],
             "height": image.size[1],
+            "source_width": width,
+            "source_height": height,
+        }
+
+    @staticmethod
+    def _encode_frame(image, max_width: int | None, fmt: str, quality: int) -> dict[str, Any]:
+        """Quadro do espelho: JPEG por padrao, PNG a pedido.
+
+        `format` e `image_base64` sao os campos novos; `png_base64` continua
+        quando o formato e PNG, para front anterior a 3.6 seguir funcionando.
+        Um quadro que ja chegou como JPEG (MJPEG do WDA, em `info`) e repassado
+        sem reencodar quando cabe no `max_width`.
+        """
+        width, height = image.size
+        if fmt == "png":
+            payload = EngineServer._encode_png(image, max_width)
+            payload["format"] = "png"
+            payload["image_base64"] = payload["png_base64"]
+            return payload
+        original = image.info.get("mobaile_jpeg") if isinstance(image.info, dict) else None
+        if original and not (max_width and width > max_width):
+            data = original
+            out_w, out_h = width, height
+        else:
+            if max_width and width > max_width:
+                ratio = max_width / float(width)
+                image = image.resize((max_width, int(height * ratio)))
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=quality, optimize=False)
+            data = buffer.getvalue()
+            out_w, out_h = image.size
+        return {
+            "format": "jpeg",
+            "image_base64": base64.b64encode(data).decode("ascii"),
+            "width": out_w,
+            "height": out_h,
             "source_width": width,
             "source_height": height,
         }
@@ -818,17 +861,58 @@ class EngineServer:
 
     # -------------------------------------------------------------- streaming
 
+    def _mjpeg_url(self) -> str:
+        """`http://<host do WDA>:<porta MJPEG>/`."""
+        from urllib.parse import urlsplit
+
+        partes = urlsplit(settings.wda_url)
+        host = partes.hostname or "localhost"
+        return f"http://{host}:{settings.wda_mjpeg_port}/"
+
+    def _start_mjpeg_if_available(self, sessao: _Sessao) -> MJPEGReader | None:
+        """No iOS, tenta o MJPEG do WDA; sem resposta em 2 s, fica o simctl."""
+        if sessao.platform is not Platform.IOS:
+            return None
+        reader = MJPEGReader(self._mjpeg_url(), connect_timeout=2.0)
+        if not reader.start():
+            return None
+        logger.info("Espelho iOS pelo MJPEG do WebDriverAgent em %s", reader.url)
+        return reader
+
     def stream_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self.stream_stop({})
         fps = float(params.get("fps") or settings.stream_fps)
         max_width = int(params.get("max_width") or STREAM_MAX_WIDTH)
+        fmt = str(params.get("format") or settings.stream_format).lower()
+        if fmt not in ("jpeg", "png"):
+            raise InvalidInputError(f"Formato de quadro invalido: {fmt!r}")
+        quality = int(params.get("quality") or settings.stream_quality)
+        if not 10 <= quality <= 95:
+            raise InvalidInputError("quality precisa ficar entre 10 e 95.")
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
+        self._mjpeg = self._start_mjpeg_if_available(self._require_session())
+        ultimo_seq = [0]
 
         def capturar():
             sessao = self._require_session()
             retrato[:] = [sessao]
+            reader = self._mjpeg
+            if reader is not None and sessao.platform is Platform.IOS:
+                if not reader.is_running():
+                    # O fluxo caiu (WDA reiniciado): volta ao simctl ate o
+                    # proximo stream.start.
+                    self._mjpeg = None
+                    return self._capture_image(sessao)
+                quadro = reader.latest()
+                if quadro is None or quadro[1] == ultimo_seq[0]:
+                    return None
+                data, ultimo_seq[0] = quadro
+                image = Image.open(io.BytesIO(data))
+                image.load()
+                image.info["mobaile_jpeg"] = data
+                return image
             return self._capture_image(sessao)
 
         def on_frame(image) -> None:
@@ -838,7 +922,7 @@ class EngineServer:
                 # front o desenharia sob o aparelho novo.
                 if sessao.epoch != self._sessao().epoch:
                     return
-                payload = self._encode_png(image, max_width)
+                payload = self._encode_frame(image, max_width, fmt, quality)
                 payload["device_id"] = sessao.device_id
                 # As metricas vao junto com o quadro de proposito.
                 #
@@ -863,9 +947,15 @@ class EngineServer:
             fps=fps,
         )
         self._stream.start()
-        return {"started": True, "fps": fps, "max_width": max_width}
+        return {
+            "started": True, "fps": fps, "max_width": max_width, "format": fmt, "quality": quality,
+            "source": "wda_mjpeg" if self._mjpeg is not None else "capture",
+        }
 
     def stream_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
+        if self._mjpeg is not None:
+            self._mjpeg.stop()
+            self._mjpeg = None
         if self._stream:
             self._stream.stop()
             self._stream = None
