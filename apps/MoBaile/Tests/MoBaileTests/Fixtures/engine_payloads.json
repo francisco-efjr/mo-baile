@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.5.2",
+      "version": "3.6.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -82,7 +82,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.5.2",
+      "engine_version": "3.6.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -589,6 +589,7 @@
       "requests_total": 0,
       "tunnels_total": 0,
       "tunnels_failed": 0,
+      "tunnels_active": 0,
       "last_event_age_s": null,
       "causes": [
         {

@@ -5,6 +5,60 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.6.0] - 2026-10-15
+
+Rodada 2 do orquestrador: cinco funcionalidades escolhidas na mesa de
+propostas (F3, F11, F8, F12, F5), com o contrato escrito antes do código em
+[docs/melhorias/2026-10-15/CONTRATO.md](docs/melhorias/2026-10-15/CONTRATO.md).
+`PROTOCOL_VERSION` continua 2: tudo é aditivo e está em
+[docs/PROTOCOLO_RPC.md](docs/PROTOCOLO_RPC.md).
+
+### Adicionado
+
+- **Digitação no iOS dentro do fluxo (F3).** O passo de digitação toca no
+  campo e envia o texto por `/wda/keys`; antes virava só um toque e era dado
+  como sucesso. Sem texto gravado, falha, como no Android. O texto nunca vai
+  para o `flow.log`.
+- **Espelho em JPEG e MJPEG do WebDriverAgent (F11).** `stream.frame` sai com
+  `format` (`jpeg` por padrão) e `image_base64`; `png_base64` continua quando
+  o formato é PNG. `stream.start` aceita `format` e `quality`. No iOS, com o
+  MJPEG do WDA no ar (`WDA_MJPEG_PORT`, padrão 9100), o JPEG é repassado sem
+  reencodar. Medido em `tools/bench_frame.py` (900×2000, mediana de 20): PNG
+  20,7 ms e 1,97 MB; JPEG 2,2 ms e 86 KB.
+- **"Por que não vejo tráfego?" (F8).** Método `proxy.diagnose` e botão na
+  Rede, na paleta e no menu Editar: o motor olha o proxy, o aparelho e o
+  histórico e diz a causa provável com o passo de correção (proxy parado,
+  aparelho sem proxy, app que ignora o proxy, só túneis HTTPS, pinning,
+  sessão iOS, App em Debug sem eventos).
+- **Busca com tokens, escopo e colunas lembradas (F12).** `status:4xx`,
+  `metodo:POST`, `host:`, `tipo:json` na Rede; `evento:`, `param:chave=valor`,
+  `origem:` em Analytics, com sugestões no campo de busca. Escopo Todos · API ·
+  Mídia · Erros · Lentas acima da tabela de Rede. Largura, ordem e
+  visibilidade das colunas de Rede e Analytics sobrevivem ao reabrir.
+- **Linha do tempo correlacionada (F5).** Cada passo gravado ganha
+  `recorded_at`; `session.correlate` devolve as requisições e os eventos de
+  analytics na janela do passo (1 s antes, 4 s depois ou até o passo
+  seguinte). Selecionar um passo na barra lateral, ou "Ver na Rede" / "Ver em
+  Analytics" no menu dele, filtra as duas tabelas pela janela, com o chip
+  "Passo N · elemento · requisições · eventos" e "Mostrar tudo". A atribuição
+  é por tempo (`probable`), não causal.
+
+### Alterado
+
+- `screen.capture` continua em PNG: é a captura do OCR e do Relatório.
+- Os quadros do espelho deixam de ser comparáveis byte a byte entre versões
+  da libjpeg; a fixture `notif_stream.frame` é gerada em PNG e conferida por
+  pixel.
+
+### Limites
+
+- Nada desta rodada foi exercitado com aparelho real: WDA, adb, simctl e o
+  MJPEG foram falsos nos testes. O roteiro manual está em
+  `docs/melhorias/2026-10-15/COMO-TESTAR.md`.
+- A correlação não corrige relógio do aparelho porque não precisa: todos os
+  carimbos são do Mac na recepção; a latência do `logcat` (sub-segundo) é o
+  único desvio.
+
 ## [3.5.2] - 2026-10-14
 
 Correções de comportamento da auditoria orquestrada de 14/10: o que o motor
