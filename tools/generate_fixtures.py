@@ -230,6 +230,10 @@ def build() -> dict:
             fixtures["screen.size"] = call("screen.size")
         fixtures["stream.stats"] = call("stream.stats")
         fixtures["proxy.events"] = call("proxy.events")
+        with patch.object(server.adb, "is_proxy_configured", return_value=False):
+            fixtures["proxy.diagnose"] = call("proxy.diagnose")
+        # Carimbo de relogio nao e contrato: fixo, para a conferencia nao oscilar.
+        fixtures["proxy.diagnose"]["result"]["checked_at"] = 0
         fixtures["devices.list"] = call("devices.list")
         fixtures["erro_dominio"] = call("input.tap", {"x": -1, "y": 0})
 

@@ -140,7 +140,7 @@ class TestSuperficie(ContractBase):
         "screen.capture", "screen.size", "hierarchy.dump", "hierarchy.element_at",
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",
         "scrcpy.start", "scrcpy.stop", "scrcpy.status",
-        "proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+        "proxy.start", "proxy.stop", "proxy.events", "proxy.clear", "proxy.diagnose",
         "netlog.start", "netlog.stop",
         "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
         "codegen.record", "codegen.steps", "codegen.reset",

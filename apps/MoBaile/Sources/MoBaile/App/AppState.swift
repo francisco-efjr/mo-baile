@@ -50,6 +50,9 @@ class AppState {
     var selectedRequest: NetworkEvent? = nil
     var httpFilterText: String = ""
     var proxyRunning: Bool = false
+    /// Resposta do último `proxy.diagnose` e se o popover dela está aberto.
+    var trafficDiagnosis: EngineDTO.TrafficDiagnosis? = nil
+    var trafficDiagnosisPresented: Bool = false
     /// Tráfego do app em debug, sem proxy: no iOS, o log `CFNETWORK_DIAGNOSTICS`
     /// pelo cabo; no Android, o log do OkHttp pelo logcat.
     var debugNetActive: Bool = false

@@ -94,6 +94,8 @@ struct MoBaileCommands: Commands {
             Divider()
             item(.clearTraffic, c)
             item(.clearAnalytics, c)
+            Divider()
+            item(.diagnoseTraffic, c)
         }
 
         // MARK: Visualizar

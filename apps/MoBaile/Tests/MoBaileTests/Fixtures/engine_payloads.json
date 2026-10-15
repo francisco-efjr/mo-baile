@@ -48,6 +48,7 @@
         "passive.status",
         "passive.stop",
         "proxy.clear",
+        "proxy.diagnose",
         "proxy.events",
         "proxy.start",
         "proxy.stop",
@@ -255,6 +256,11 @@
         "proxy.clear": {
           "lane": "services",
           "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.diagnose": {
+          "lane": "services",
+          "timeout_s": 20,
           "progress": false
         },
         "netlog.start": {
@@ -545,6 +551,29 @@
     "result": {
       "events": [],
       "total": 0
+    }
+  },
+  "proxy.diagnose": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "checked_at": 0,
+      "platform": "android",
+      "proxy_running": false,
+      "device_configured": null,
+      "netlog_running": false,
+      "requests_total": 0,
+      "tunnels_total": 0,
+      "tunnels_failed": 0,
+      "last_event_age_s": null,
+      "causes": [
+        {
+          "code": "proxy_stopped",
+          "title": "O proxy está desligado",
+          "detail": "Nenhuma captura ligada: nem o proxy nem o App em Debug.",
+          "fix": "Clique em Configurar Proxy. No iOS, ou em app que ignora o proxy, use o App em Debug."
+        }
+      ]
     }
   },
   "devices.list": {

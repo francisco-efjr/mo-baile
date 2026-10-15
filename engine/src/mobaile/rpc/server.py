@@ -304,6 +304,7 @@ class EngineServer:
             "proxy.stop": self.proxy_stop,
             "proxy.events": self.proxy_events,
             "proxy.clear": self.proxy_clear,
+            "proxy.diagnose": self.proxy_diagnose,
             "netlog.start": self.netlog_start,
             "netlog.stop": self.netlog_stop,
             "analytics.start": self.analytics_start,
@@ -1196,6 +1197,100 @@ class EngineServer:
     def proxy_clear(self, _params: dict[str, Any]) -> dict[str, Any]:
         self.proxy.clear_history()
         return {"cleared": True}
+
+    # Janela sem trafego que ja conta como "nada chega".
+    _DIAGNOSE_QUIET_S = 30.0
+
+    def proxy_diagnose(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Por que nao vejo trafego? Causas prováveis, da mais a menos provável.
+
+        Cada causa so entra quando ha evidencia para ela: proxy parado, aparelho
+        sem o proxy aplicado, nenhuma conexao chegando (app que ignora o proxy do
+        sistema), so tuneis CONNECT (HTTPS sem MITM, ADR 0004), tuneis falhando
+        (pinning), sessao iOS com proxy, ou "App em Debug" ligado sem eventos.
+        """
+        sessao = self._sessao()
+        agora = time.time()
+        eventos = self.proxy.events_history
+        running = self.proxy.is_running()
+        android = sessao.platform is Platform.ANDROID
+        netlog_running = bool(self.android_netlog.is_running() or self.ios_netlog.is_running())
+        device_configured: bool | None = None
+        if android and sessao.device_id and running:
+            device_configured = bool(self.adb.is_proxy_configured(sessao.device_id))
+
+        requests_total = sum(1 for e in eventos if not e.is_tunnel)
+        tunnels = [e for e in eventos if e.is_tunnel]
+        tunnels_failed = sum(1 for e in tunnels if e.error or e.response_bytes == 0)
+        last_age = (agora - max(e.timestamp for e in eventos)) if eventos else None
+        quiet = last_age is None or last_age > self._DIAGNOSE_QUIET_S
+        porta = self.proxy.port
+
+        causes: list[dict[str, str]] = []
+
+        def causa(code: str, title: str, detail: str, fix: str) -> None:
+            causes.append({"code": code, "title": title, "detail": detail, "fix": fix})
+
+        if not running and not netlog_running:
+            causa(
+                "proxy_stopped", "O proxy está desligado",
+                "Nenhuma captura ligada: nem o proxy nem o App em Debug.",
+                "Clique em Configurar Proxy. No iOS, ou em app que ignora o proxy, use o App em Debug.",
+            )
+        if running and not android:
+            causa(
+                "ios_no_proxy_support", "O proxy só configura aparelhos Android",
+                "A sessão está no iOS: o simulador não é apontado para o proxy automaticamente.",
+                "No iOS, leia o tráfego do app em debug pelo cabo (CFNETWORK_DIAGNOSTICS=3 no scheme) com o botão iPhone em Debug.",
+            )
+        if device_configured is False:
+            causa(
+                "proxy_not_on_device", "O aparelho não está apontando para o proxy",
+                f"settings get global http_proxy não devolve 127.0.0.1:{porta}.",
+                "Clique em Configurar Proxy de novo. Se o aparelho recusar, rode: "
+                f"adb shell settings put global http_proxy 127.0.0.1:{porta}",
+            )
+        if running and android and device_configured is not False and quiet and not tunnels and requests_total == 0:
+            causa(
+                "no_connections", "Nenhuma conexão chegou ao proxy",
+                f"O aparelho aponta para o proxy, mas nenhuma conexão foi aberta nos últimos {int(self._DIAGNOSE_QUIET_S)} s.",
+                "O app pode ignorar o proxy do sistema (Flutter/Dart, OkHttp com proxy próprio, WebSocket, gRPC). "
+                "Use o App em Debug (log do OkHttp) ou confirme no app que ele respeita o proxy do Android.",
+            )
+        if len(tunnels) >= 3 and requests_total == 0 and tunnels_failed / len(tunnels) >= 0.8:
+            causa(
+                "tls_pinning_suspected", "As conexões HTTPS estão sendo recusadas",
+                f"{tunnels_failed} de {len(tunnels)} túneis CONNECT terminaram com erro ou sem resposta.",
+                "Parece certificate pinning: o app fecha a conexão ao ver o proxy. Desligue o pinning no build de debug "
+                "ou use o App em Debug, que lê o log do OkHttp sem passar pelo proxy.",
+            )
+        elif tunnels and requests_total == 0:
+            causa(
+                "only_tunnels", "Só túneis HTTPS, sem conteúdo",
+                f"{len(tunnels)} túneis CONNECT e nenhuma requisição decodificada.",
+                "O proxy não abre HTTPS (não há MITM, ADR 0004): você vê host e tamanho, não o conteúdo. "
+                "Para ver o conteúdo, use o App em Debug.",
+            )
+        if netlog_running and quiet:
+            causa(
+                "netlog_running_no_events", "App em Debug ligado, mas sem eventos",
+                f"A leitura do log está ativa e nada chegou nos últimos {int(self._DIAGNOSE_QUIET_S)} s.",
+                "Android: o build de debug precisa do HttpLoggingInterceptor do OkHttp (nível BASIC ou mais). "
+                "iOS: o app precisa rodar com CFNETWORK_DIAGNOSTICS=3 no scheme.",
+            )
+
+        return {
+            "checked_at": agora,
+            "platform": sessao.platform.value,
+            "proxy_running": running,
+            "device_configured": device_configured,
+            "netlog_running": netlog_running,
+            "requests_total": requests_total,
+            "tunnels_total": len(tunnels),
+            "tunnels_failed": tunnels_failed,
+            "last_event_age_s": round(last_age, 1) if last_age is not None else None,
+            "causes": causes,
+        }
 
     # -------------------------------------------------------------- analytics
 

@@ -111,6 +111,8 @@ struct CommandPerformer {
             Exporters.exportHAR(appState)
         case .clearTraffic:
             appState.pendingClear = .network
+        case .diagnoseTraffic:
+            Task { await session.diagnoseTraffic() }
         case .exportAnalytics:
             Exporters.exportAnalyticsJSON(appState)
         case .clearAnalytics:

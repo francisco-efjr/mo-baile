@@ -126,6 +126,18 @@ private struct NetworkAccessoryBar: View {
             }
             .buttonStyle(PlainTextButtonStyle(theme: theme, destructive: true))
             .disabled(appState.httpRequests.isEmpty)
+
+            @Bindable var state = appState
+            Button {
+                Task { await session.diagnoseTraffic() }
+            } label: {
+                rotulo("Por que não vejo tráfego?", icone: "stethoscope", compacto: compacto)
+            }
+            .help("Pergunta ao motor o que está impedindo o tráfego de aparecer e como resolver")
+            .accessibilityLabel("Por que não vejo tráfego?")
+            .popover(isPresented: $state.trafficDiagnosisPresented, arrowEdge: .bottom) {
+                TrafficDiagnosisView()
+            }
         }
     }
 

@@ -62,6 +62,7 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
 
     static let exportHAR: CommandID = "network.exportHAR"
     static let clearTraffic: CommandID = "network.clear"
+    static let diagnoseTraffic: CommandID = "network.diagnose"
 
     static let exportAnalytics: CommandID = "analytics.exportJSON"
     static let clearAnalytics: CommandID = "analytics.clear"
@@ -464,6 +465,10 @@ enum CommandRegistry {
             AppCommand(
                 id: .clearTraffic, title: "Limpar Tráfego…", category: .network, symbol: "trash",
                 keywords: ["apagar", "requisições", "http"], disabledReason: c.httpCount == 0 ? Motivo.semTrafego : nil
+            ),
+            AppCommand(
+                id: .diagnoseTraffic, title: "Por que Não Vejo Tráfego?", category: .network, symbol: "stethoscope",
+                keywords: ["diagnóstico", "proxy", "pinning", "flutter", "sem tráfego", "vazio"]
             ),
             AppCommand(
                 id: .exportAnalytics, title: "Exportar JSON de Analytics…", category: .analytics, symbol: "square.and.arrow.up",

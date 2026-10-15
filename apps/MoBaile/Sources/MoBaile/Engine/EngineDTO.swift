@@ -576,6 +576,45 @@ enum EngineDTO {
         }
     }
 
+    /// `proxy.diagnose`: por que o tráfego não aparece.
+    struct TrafficDiagnosis: Decodable, Equatable, Sendable {
+        struct Cause: Decodable, Equatable, Sendable, Identifiable {
+            let code: String
+            let title: String
+            let detail: String
+            let fix: String
+            var id: String { code }
+        }
+
+        let proxyRunning: Bool
+        let deviceConfigured: Bool?
+        let netlogRunning: Bool
+        let requestsTotal: Int
+        let tunnelsTotal: Int
+        let tunnelsFailed: Int
+        let lastEventAgeS: Double?
+        let causes: [Cause]
+
+        enum CodingKeys: String, CodingKey {
+            case causes
+            case proxyRunning = "proxy_running"
+            case deviceConfigured = "device_configured"
+            case netlogRunning = "netlog_running"
+            case requestsTotal = "requests_total"
+            case tunnelsTotal = "tunnels_total"
+            case tunnelsFailed = "tunnels_failed"
+            case lastEventAgeS = "last_event_age_s"
+        }
+
+        /// Uma linha de resumo para a barra de status e para o VoiceOver.
+        var summary: String {
+            if causes.isEmpty {
+                return "Nada aponta problema: \(requestsTotal) requisições e \(tunnelsTotal) túneis registrados."
+            }
+            return causes.map(\.title).joined(separator: " · ")
+        }
+    }
+
     struct ProxyState: Decodable {
         let running: Bool
         let started: Bool?

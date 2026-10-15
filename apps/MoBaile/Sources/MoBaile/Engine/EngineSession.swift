@@ -1170,6 +1170,19 @@ final class EngineSession {
 
     // MARK: - Rede
 
+    /// "Por que não vejo tráfego?": pede o diagnóstico ao motor e abre o popover.
+    func diagnoseTraffic() async {
+        guard let client else { return }
+        do {
+            let resultado: EngineDTO.TrafficDiagnosis = try await client.call("proxy.diagnose")
+            state.trafficDiagnosis = resultado
+            state.trafficDiagnosisPresented = true
+            state.statusMessage = resultado.summary
+        } catch {
+            report(error)
+        }
+    }
+
     func toggleProxy() async {
         guard let client else { return }
         do {
