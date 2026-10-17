@@ -28,7 +28,12 @@ enum EngineDTO {
     // MARK: - Tela
 
     struct Frame: Decodable, Sendable {
-        let pngBase64: String
+        /// Desde a 3.6 o quadro vem em `image_base64` com `format` (`jpeg` ou
+        /// `png`); `png_base64` continua quando o formato é PNG, para o motor
+        /// anterior. Os dois são opcionais e o decodificador lê o que vier.
+        let pngBase64: String?
+        let imageBase64: String?
+        let format: String?
         let width: Int
         let height: Int
         let sourceWidth: Int
@@ -46,8 +51,9 @@ enum EngineDTO {
 
         enum CodingKeys: String, CodingKey {
             case pngBase64 = "png_base64"
+            case imageBase64 = "image_base64"
             case deviceId = "device_id"
-            case width, height, fps
+            case width, height, fps, format
             case sourceWidth = "source_width"
             case sourceHeight = "source_height"
             case captureMs = "capture_ms"
@@ -64,7 +70,8 @@ enum EngineDTO {
         /// quadro. Forçando aqui, quem chama escolhe a thread: a sessão chama de
         /// uma tarefa destacada e só entrega ao MainActor a imagem pronta.
         var image: NSImage? {
-            guard let data = Data(base64Encoded: pngBase64),
+            guard let base64 = imageBase64 ?? pngBase64,
+                  let data = Data(base64Encoded: base64),
                   let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let cgImage = CGImageSourceCreateImageAtIndex(
                       source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
@@ -278,8 +285,10 @@ enum EngineDTO {
         let inputText: String?
         let package: String
         let platform: String
+        let recordedAt: Double?
 
         enum CodingKeys: String, CodingKey {
+            case recordedAt = "recorded_at"
             case stepNum = "step_num"
             case actionType = "action_type"
             case varName = "var_name"
@@ -314,7 +323,8 @@ enum EngineDTO {
                 coords: coords.count == 2 ? CGPoint(x: coords[0], y: coords[1]) : nil,
                 inputText: inputText,
                 package: package,
-                platform: platform == "ios" ? .ios : .android
+                platform: platform == "ios" ? .ios : .android,
+                recordedAt: recordedAt.map { Date(timeIntervalSince1970: $0) }
             )
         }
     }
@@ -566,6 +576,61 @@ enum EngineDTO {
         enum CodingKeys: String, CodingKey {
             case running, available, started
             case deviceId = "device_id"
+        }
+    }
+
+    /// `proxy.diagnose`: por que o tráfego não aparece.
+    struct TrafficDiagnosis: Decodable, Equatable, Sendable {
+        struct Cause: Decodable, Equatable, Sendable, Identifiable {
+            let code: String
+            let title: String
+            let detail: String
+            let fix: String
+            var id: String { code }
+        }
+
+        let proxyRunning: Bool
+        let deviceConfigured: Bool?
+        let netlogRunning: Bool
+        let requestsTotal: Int
+        let tunnelsTotal: Int
+        let tunnelsFailed: Int
+        let lastEventAgeS: Double?
+        let causes: [Cause]
+
+        enum CodingKeys: String, CodingKey {
+            case causes
+            case proxyRunning = "proxy_running"
+            case deviceConfigured = "device_configured"
+            case netlogRunning = "netlog_running"
+            case requestsTotal = "requests_total"
+            case tunnelsTotal = "tunnels_total"
+            case tunnelsFailed = "tunnels_failed"
+            case lastEventAgeS = "last_event_age_s"
+        }
+
+        /// Uma linha de resumo para a barra de status e para o VoiceOver.
+        var summary: String {
+            if causes.isEmpty {
+                return "Nada aponta problema: \(requestsTotal) requisições e \(tunnelsTotal) túneis registrados."
+            }
+            return causes.map(\.title).joined(separator: " · ")
+        }
+    }
+
+    /// `session.correlate`: o que a Rede e o Analytics viram na janela de um passo.
+    struct Correlation: Decodable, Equatable, Sendable {
+        let stepNum: Int
+        let recordedAt: Double
+        let window: [Double]
+        let requests: [Int]
+        let events: [Int]
+        let probable: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case window, requests, events, probable
+            case stepNum = "step_num"
+            case recordedAt = "recorded_at"
         }
     }
 

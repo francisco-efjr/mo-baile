@@ -330,3 +330,129 @@ class TestTrocaDePlataformaDuranteAListagem(unittest.TestCase):
         self.assertIsNone(w.current_device_id)
         self.assertEqual(w.poll_once(), "SIM-1")
         handler.assert_called_once_with("ios", "SIM-1")
+
+
+class TestAlvoDaSessao(unittest.TestCase):
+    """A escolha manual do aparelho nao pode ser desfeita pelo vigia (M1).
+
+    O vigia elegia sempre `targets[0]`. Com emulador e aparelho fisico
+    conectados, escolher o segundo era revertido no poll seguinte e ainda
+    gerava um `device.changed` que religava o espelho.
+    """
+
+    def _dois_alvos(self):
+        eventos = []
+        adb = FakeADB([("emulator-5554", "device"), ("R58N12ABCDE", "device")])
+        w = watcher(adb=adb, handler=lambda p, d: eventos.append((p, d)))
+        w.poll_once()
+        eventos.clear()
+        return w, adb, eventos
+
+    def test_escolha_manual_do_segundo_alvo_nao_volta_para_o_primeiro(self):
+        w, _adb, eventos = self._dois_alvos()
+        w.set_target("android", "R58N12ABCDE")
+        for _ in range(3):
+            self.assertEqual(w.poll_once(), "R58N12ABCDE")
+        self.assertEqual(eventos, [], "o servidor ja sabe do alvo; avisar religaria o espelho")
+
+    def test_selecionar_o_unico_alvo_nao_gera_aviso_redundante(self):
+        eventos = []
+        adb = FakeADB([("emulator-5554", "device")])
+        w = watcher(adb=adb, handler=lambda p, d: eventos.append((p, d)))
+        w.poll_once()
+        eventos.clear()
+        w.set_target("android", "emulator-5554")
+        w.poll_once()
+        self.assertEqual(eventos, [])
+
+    def test_alvo_escolhido_some_com_outro_presente_volta_para_o_outro(self):
+        w, adb, eventos = self._dois_alvos()
+        w.set_target("android", "R58N12ABCDE")
+        adb.devices = [("emulator-5554", "device")]
+        self.assertEqual(w.poll_once(), "emulator-5554")
+        self.assertEqual(eventos, [("android", "emulator-5554")])
+
+    def test_outro_alvo_some_com_o_escolhido_presente_nao_avisa(self):
+        w, adb, eventos = self._dois_alvos()
+        w.set_target("android", "R58N12ABCDE")
+        adb.devices = [("R58N12ABCDE", "device")]
+        self.assertEqual(w.poll_once(), "R58N12ABCDE")
+        self.assertEqual(eventos, [])
+
+    def test_sem_alvo_escolhido_elege_o_primeiro_como_antes(self):
+        eventos = []
+        adb = FakeADB([("emulator-5554", "device"), ("R58N12ABCDE", "device")])
+        w = watcher(adb=adb, handler=lambda p, d: eventos.append((p, d)))
+        w.set_target("android", None)
+        w.poll_once()
+        self.assertEqual(eventos, [("android", "emulator-5554")])
+
+    def test_troca_de_plataforma_pelo_set_target_descarta_listagem_em_voo(self):
+        started, release = threading.Event(), threading.Event()
+        eventos = []
+        adb = FakeADB()
+
+        def list_devices():
+            started.set()
+            release.wait(3)
+            return [("emulator-5554", "device")]
+
+        adb.list_devices = list_devices
+        ios = FakeIOS([("UDID-1", "iPhone 15")])
+        w = watcher(adb=adb, ios=ios, platform="android", handler=lambda p, d: eventos.append((p, d)))
+        t = threading.Thread(target=w.poll_once)
+        t.start()
+        self.assertTrue(started.wait(2))
+        w.set_target("ios", "UDID-1")
+        release.set()
+        t.join(3)
+        self.assertEqual(eventos, [], "a listagem era da plataforma anterior")
+
+
+class TestAvisoDeListagem(unittest.TestCase):
+    """`on_targets_listed` avisa em toda listagem valida, e so nelas (A-4)."""
+
+    def test_avisa_com_os_ids_mesmo_sem_transicao(self):
+        avisos = []
+        adb = FakeADB([("emulator-5554", "device"), ("R58N12ABCDE", "offline")])
+        w = DeviceWatcher(adb_bridge=adb, ios_bridge=FakeIOS(), on_device_changed=MagicMock(),
+                          target_platform="android", poll_interval=0.02,
+                          on_targets_listed=lambda p, ids: avisos.append((p, ids)))
+        w.poll_once()
+        w.poll_once()
+        self.assertEqual(avisos, [("android", ["emulator-5554"])] * 2)
+
+    def test_nao_avisa_depois_de_parado_nem_com_listagem_de_outra_plataforma(self):
+        avisos = []
+        adb = FakeADB([("emulator-5554", "device")])
+        w = DeviceWatcher(adb_bridge=adb, ios_bridge=FakeIOS(), on_device_changed=MagicMock(),
+                          target_platform="android", poll_interval=0.02,
+                          on_targets_listed=lambda p, ids: avisos.append((p, ids)))
+        w._stop_event.set()
+        self.assertIsNone(w.poll_once())
+        self.assertEqual(avisos, [])
+
+        w._stop_event.clear()
+        original = adb.list_devices
+
+        def troca_no_meio():
+            w.set_target("ios", None)
+            return original()
+
+        adb.list_devices = troca_no_meio
+        self.assertIsNone(w.poll_once())
+        self.assertEqual(avisos, [])
+
+    def test_falha_na_listagem_nao_avisa(self):
+        avisos = []
+
+        class ADBQuebrado:
+            def list_devices(self):
+                raise OSError("adb morreu")
+
+        w = DeviceWatcher(adb_bridge=ADBQuebrado(), ios_bridge=FakeIOS(), on_device_changed=MagicMock(),
+                          target_platform="android", poll_interval=0.02,
+                          on_targets_listed=lambda p, ids: avisos.append((p, ids)))
+        w.poll_once()
+        self.assertEqual(avisos, [])
+

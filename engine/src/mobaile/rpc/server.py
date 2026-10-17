@@ -28,6 +28,7 @@ import pathlib
 import queue
 import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -37,6 +38,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
+from PIL import Image
+
 from mobaile import __version__
 from mobaile.adapters import ios_device_log
 from mobaile.adapters.adb import ADBBridge
@@ -45,6 +48,7 @@ from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
 from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
 from mobaile.adapters.ios_wda import IOSBridge
+from mobaile.adapters.mjpeg import MJPEGReader
 from mobaile.adapters.proxy import MobileNetworkProxy
 from mobaile.adapters.scrcpy import ScrcpyManager
 from mobaile.adapters.screen_recorder import ScreenRecorder
@@ -238,7 +242,22 @@ class EngineServer:
         # sem registro e a recuperacao do front depois de o motor anterior
         # cair, e a limpeza vai para o aparelho da sessao.
         self._proxy_configured_once = False
+        # Desmontes que nao se confirmaram (cabo solto, adb sem resposta):
+        # serial -> porta. Retentados quando o serial reaparece e no
+        # encerramento, em vez de esquecidos.
+        self._proxy_pending: dict[str, int] = {}
+        self._proxy_retrying: set[str] = set()
+        self._proxy_retry_threads: list[threading.Thread] = []
+        # Seriais Android presentes na ultima listagem: a retentativa so roda
+        # na transicao ausente -> presente, e nao a cada varredura.
+        self._proxy_seen: set[str] | None = None
+        # Um desmonte por vez: duas chamadas seguidas no mesmo serial apagariam
+        # o valor que a primeira acabou de restaurar (adb.py guarda o original
+        # uma vez so).
+        self._proxy_teardown_lock = threading.Lock()
         self._stream: RealTimeStreamEngine | None = None
+        # Leitor do MJPEG do WDA, so enquanto o espelho iOS estiver ligado.
+        self._mjpeg: MJPEGReader | None = None
         self._watcher: DeviceWatcher | None = None
         self._flow_thread = None
         self._flow_running = False
@@ -255,6 +274,7 @@ class EngineServer:
             "engine.info": self.engine_info,
             "engine.shutdown": self.engine_shutdown,
             "session.select_device": self.session_select_device,
+            "session.correlate": self.session_correlate,
             "devices.list": self.devices_list,
             "devices.watch_start": self.devices_watch_start,
             "devices.watch_stop": self.devices_watch_stop,
@@ -285,6 +305,7 @@ class EngineServer:
             "proxy.stop": self.proxy_stop,
             "proxy.events": self.proxy_events,
             "proxy.clear": self.proxy_clear,
+            "proxy.diagnose": self.proxy_diagnose,
             "netlog.start": self.netlog_start,
             "netlog.stop": self.netlog_stop,
             "analytics.start": self.analytics_start,
@@ -403,6 +424,44 @@ class EngineServer:
             "source_height": height,
         }
 
+    @staticmethod
+    def _encode_frame(image, max_width: int | None, fmt: str, quality: int) -> dict[str, Any]:
+        """Quadro do espelho: JPEG por padrao, PNG a pedido.
+
+        `format` e `image_base64` sao os campos novos; `png_base64` continua
+        quando o formato e PNG, para front anterior a 3.6 seguir funcionando.
+        Um quadro que ja chegou como JPEG (MJPEG do WDA, em `info`) e repassado
+        sem reencodar quando cabe no `max_width`.
+        """
+        width, height = image.size
+        if fmt == "png":
+            payload = EngineServer._encode_png(image, max_width)
+            payload["format"] = "png"
+            payload["image_base64"] = payload["png_base64"]
+            return payload
+        original = image.info.get("mobaile_jpeg") if isinstance(image.info, dict) else None
+        if original and not (max_width and width > max_width):
+            data = original
+            out_w, out_h = width, height
+        else:
+            if max_width and width > max_width:
+                ratio = max_width / float(width)
+                image = image.resize((max_width, int(height * ratio)))
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=quality, optimize=False)
+            data = buffer.getvalue()
+            out_w, out_h = image.size
+        return {
+            "format": "jpeg",
+            "image_base64": base64.b64encode(data).decode("ascii"),
+            "width": out_w,
+            "height": out_h,
+            "source_width": width,
+            "source_height": height,
+        }
+
     # ------------------------------------------------------------------ metodos
 
     def engine_hello(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -474,8 +533,56 @@ class EngineServer:
             self._teardown_proxy_device(*proxy_anterior)
         watcher = self._watcher
         if watcher:
-            watcher.set_platform(platform.value)
+            # Informa o alvo escolhido, e nao so a plataforma: senao a varredura
+            # seguinte elegia o primeiro alvo e desfazia a escolha (M1).
+            watcher.set_target(platform.value, device_id)
         return {"platform": platform.value, "device_id": device_id}
+
+    # Janela padrao em volta do toque: um pouco antes (o app ja pode ter
+    # disparado algo ao pressionar) e alguns segundos depois (resposta e evento).
+    _CORRELATE_BEFORE_S = 1.0
+    _CORRELATE_AFTER_S = 4.0
+
+    def session_correlate(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Requisicoes e eventos de analytics na janela de tempo de um passo.
+
+        Atribuicao por tempo, nao causal: por isso `probable` e sempre `true`.
+        Todos os carimbos sao do relogio do Mac na recepcao (proxy, logcat e
+        gravacao do passo), entao nao ha relogio do aparelho a corrigir. A
+        janela termina no passo seguinte, se ele vier antes do prazo.
+        """
+        try:
+            step_num = int(params.get("step_num"))
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError("step_num precisa ser um numero inteiro.") from exc
+        before = float(params.get("before_s", self._CORRELATE_BEFORE_S))
+        after = float(params.get("after_s", self._CORRELATE_AFTER_S))
+        if not (0 <= before <= 60 and 0 <= after <= 60):
+            raise InvalidInputError("before_s e after_s precisam ficar entre 0 e 60 segundos.")
+
+        passos = self.codegen.get_steps()
+        passo = next((p for p in passos if p.step_num == step_num), None)
+        if passo is None:
+            raise InvalidInputError(f"Nao ha passo {step_num}.")
+        if not passo.recorded_at:
+            raise InvalidInputError(f"O passo {step_num} nao tem hora de gravacao.")
+
+        inicio = passo.recorded_at - before
+        fim = passo.recorded_at + after
+        proximo = next((p.recorded_at for p in passos if p.step_num > step_num and p.recorded_at), None)
+        if proximo is not None:
+            fim = min(fim, proximo)
+
+        requisicoes = [e.id for e in self.proxy.events_history if inicio <= e.timestamp <= fim]
+        eventos = [e.id for e in self.analytics.history_events() if inicio <= e.timestamp <= fim]
+        return {
+            "step_num": step_num,
+            "recorded_at": passo.recorded_at,
+            "window": [inicio, fim],
+            "requests": requisicoes,
+            "events": eventos,
+            "probable": True,
+        }
 
     def devices_list(self, params: dict[str, Any]) -> dict[str, Any]:
         platform_raw = str(params.get("platform", self.platform.value)).lower()
@@ -523,7 +630,10 @@ class EngineServer:
             on_device_changed=on_changed,
             target_platform=self.platform.value,
             poll_interval=interval,
+            on_targets_listed=self._on_targets_listed,
         )
+        # Se a sessao ja tem alvo, o vigia parte dele em vez de eleger o primeiro.
+        self._watcher.set_target(self.platform.value, self.device_id)
         self._watcher.start()
         return {"watching": True, "platform": self.platform.value, "poll_interval": interval}
 
@@ -799,17 +909,74 @@ class EngineServer:
 
     # -------------------------------------------------------------- streaming
 
+    def _mjpeg_url(self) -> str:
+        """`http://<host do WDA>:<porta MJPEG>/`."""
+        from urllib.parse import urlsplit
+
+        partes = urlsplit(settings.wda_url)
+        host = partes.hostname or "localhost"
+        return f"http://{host}:{settings.wda_mjpeg_port}/"
+
+    def _start_mjpeg_if_available(self, sessao: _Sessao, max_width: int, quality: int) -> MJPEGReader | None:
+        """No iOS, tenta o MJPEG do WDA; sem resposta em 2 s, fica o simctl.
+
+        Antes de ler, pede ao WDA quadros reduzidos para caberem no `max_width`
+        (o espelho pede 900 e o simulador entrega mais de 1100 de largura):
+        so assim o JPEG e repassado sem reencodar. Melhor esforco.
+        """
+        if sessao.platform is not Platform.IOS:
+            return None
+        largura = None
+        try:
+            largura = self.ios.take_screenshot(sessao.device_id).size[0]
+        except Exception:
+            largura = None
+        if largura and max_width and largura > max_width:
+            self.ios.set_mjpeg_scaling(int(100 * max_width / largura), quality)
+        reader = MJPEGReader(self._mjpeg_url(), connect_timeout=2.0)
+        if not reader.start():
+            return None
+        logger.info("Espelho iOS pelo MJPEG do WebDriverAgent em %s", reader.url)
+        return reader
+
     def stream_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self.stream_stop({})
         fps = float(params.get("fps") or settings.stream_fps)
         max_width = int(params.get("max_width") or STREAM_MAX_WIDTH)
+        fmt = str(params.get("format") or settings.stream_format).lower()
+        if fmt not in ("jpeg", "png"):
+            raise InvalidInputError(f"Formato de quadro invalido: {fmt!r}")
+        quality = int(params.get("quality") or settings.stream_quality)
+        if not 10 <= quality <= 95:
+            raise InvalidInputError("quality precisa ficar entre 10 e 95.")
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
+        self._mjpeg = self._start_mjpeg_if_available(self._require_session(), max_width, quality)
+        ultimo_seq = [0]
 
         def capturar():
             sessao = self._require_session()
             retrato[:] = [sessao]
+            reader = self._mjpeg
+            if reader is not None and sessao.platform is Platform.IOS:
+                if not reader.is_running():
+                    # O fluxo caiu (WDA reiniciado): volta ao simctl ate o
+                    # proximo stream.start. Troca atomica e fecha o socket.
+                    with self._state_lock:
+                        if self._mjpeg is reader:
+                            self._mjpeg = None
+                    reader.stop()
+                    logger.info("MJPEG do WDA caiu; espelho iOS volta ao simctl.")
+                    return self._capture_image(sessao)
+                quadro = reader.latest()
+                if quadro is None or quadro[1] == ultimo_seq[0]:
+                    return None
+                data, ultimo_seq[0] = quadro
+                image = Image.open(io.BytesIO(data))
+                image.load()
+                image.info["mobaile_jpeg"] = data
+                return image
             return self._capture_image(sessao)
 
         def on_frame(image) -> None:
@@ -819,7 +986,7 @@ class EngineServer:
                 # front o desenharia sob o aparelho novo.
                 if sessao.epoch != self._sessao().epoch:
                     return
-                payload = self._encode_png(image, max_width)
+                payload = self._encode_frame(image, max_width, fmt, quality)
                 payload["device_id"] = sessao.device_id
                 # As metricas vao junto com o quadro de proposito.
                 #
@@ -844,9 +1011,21 @@ class EngineServer:
             fps=fps,
         )
         self._stream.start()
-        return {"started": True, "fps": fps, "max_width": max_width}
+        return {
+            "started": True, "fps": fps, "max_width": max_width, "format": fmt, "quality": quality,
+            "source": "wda_mjpeg" if self._mjpeg is not None else "capture",
+        }
 
     def stream_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
+        # Primeiro o espelho, depois o leitor MJPEG: na ordem inversa, enquanto
+        # o leitor fechava, a thread do espelho via `_mjpeg` nulo e caia no
+        # simctl por alguns quadros.
+        if self._stream:
+            self._stream.stop()
+        with self._state_lock:
+            reader, self._mjpeg = self._mjpeg, None
+        if reader is not None:
+            reader.stop()
         if self._stream:
             self._stream.stop()
             self._stream = None
@@ -910,11 +1089,92 @@ class EngineServer:
             self.proxy.add_event_callback(lambda event: self.notify("proxy.event", event.to_dict()))
             self._proxy_notify_on = True
 
-    def _teardown_proxy_device(self, serial: str, port: int) -> None:
-        try:
-            self.adb.teardown_reverse_proxy(serial, port)
-        except Exception:
-            logger.exception("Falha ao desfazer o proxy no aparelho %s.", serial)
+    def _teardown_proxy_device(self, serial: str, port: int, only_if_pending: bool = False) -> bool:
+        """Desfaz o proxy do aparelho. Se nao confirmar, fica pendente.
+
+        Serializado: o adapter guarda o valor original uma vez so, e um segundo
+        desmonte logo apos o primeiro apagaria o que ele restaurou. Com
+        `only_if_pending`, a chamada e uma retentativa e so roda se o serial
+        ainda estiver pendente e nao tiver sido reconfigurado por um
+        `proxy.start` nesse meio tempo.
+        """
+        with self._proxy_teardown_lock:
+            if only_if_pending:
+                with self._state_lock:
+                    pendente = serial in self._proxy_pending
+                    reconfigurado = bool(self._proxy_device and self._proxy_device[0] == serial)
+                if not pendente or reconfigurado:
+                    return True
+            try:
+                ok = bool(self.adb.teardown_reverse_proxy(serial, port))
+            except Exception:
+                logger.exception("Falha ao desfazer o proxy no aparelho %s.", serial)
+                ok = False
+            with self._state_lock:
+                if ok:
+                    self._proxy_pending.pop(serial, None)
+                else:
+                    self._proxy_pending[serial] = port
+            return ok
+
+    def _retry_pending_proxy(self, serial: str) -> None:
+        """Nova tentativa, em segundo plano, do desmonte pendente de `serial`."""
+        with self._state_lock:
+            port = self._proxy_pending.get(serial)
+            if port is None or serial in self._proxy_retrying or self._shutdown_done:
+                return
+            self._proxy_retrying.add(serial)
+
+        def tentar() -> None:
+            try:
+                self._teardown_proxy_device(serial, port, only_if_pending=True)
+            finally:
+                with self._state_lock:
+                    self._proxy_retrying.discard(serial)
+
+        thread = threading.Thread(target=tentar, daemon=True, name="mobaile-proxy-retry")
+        with self._state_lock:
+            self._proxy_retry_threads = [t for t in self._proxy_retry_threads if t.is_alive()]
+            self._proxy_retry_threads.append(thread)
+        thread.start()
+
+    def _on_targets_listed(self, platform: str, ids: list[str]) -> None:
+        """Retenta o desmonte pendente quando o aparelho volta a aparecer.
+
+        So na transicao ausente -> presente: retentar a cada varredura num
+        aparelho que recusa o `settings put` geraria seis comandos adb e um
+        aviso por intervalo, sem fim. Com a sessao em iOS o vigia lista
+        simuladores; se ha pendencia Android, o adb e consultado aqui, senao
+        o aparelho que volta nunca seria visto.
+        """
+        with self._state_lock:
+            pendentes = set(self._proxy_pending)
+        if platform != "android":
+            if not pendentes:
+                return
+            try:
+                ids = [serial for serial, state in self.adb.list_devices() if state == "device"]
+            except (EngineError, OSError) as exc:
+                logger.debug("Sem listagem Android para retentar o proxy: %s", exc)
+                return
+        presentes = set(ids)
+        with self._state_lock:
+            vistos = self._proxy_seen if self._proxy_seen is not None else set()
+            apareceram = [serial for serial in pendentes if serial in presentes and serial not in vistos]
+            self._proxy_seen = presentes
+        for serial in apareceram:
+            self._retry_pending_proxy(serial)
+
+    def _join_proxy_retries(self, timeout: float = 5.0) -> None:
+        """Espera as retentativas em voo antes do desmonte final do encerramento."""
+        with self._state_lock:
+            threads = list(self._proxy_retry_threads)
+        prazo = time.monotonic() + timeout
+        for thread in threads:
+            restante = prazo - time.monotonic()
+            if restante <= 0:
+                break
+            thread.join(timeout=restante)
 
     def _release_proxy_device(self, fallback: str | None) -> None:
         """Desfaz o proxy do aparelho em que ele foi ligado.
@@ -947,6 +1207,8 @@ class EngineServer:
                 with self._state_lock:
                     self._proxy_device = (sessao.device_id, self.proxy.port)
                     self._proxy_configured_once = True
+                    # A configuracao nova substitui o desmonte que estava pendente.
+                    self._proxy_pending.pop(sessao.device_id, None)
         return {"running": self.proxy.is_running(), "started": started, "device_configured": configured}
 
     def proxy_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -1004,6 +1266,107 @@ class EngineServer:
     def proxy_clear(self, _params: dict[str, Any]) -> dict[str, Any]:
         self.proxy.clear_history()
         return {"cleared": True}
+
+    # Janela sem trafego que ja conta como "nada chega".
+    _DIAGNOSE_QUIET_S = 30.0
+
+    def proxy_diagnose(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Por que nao vejo trafego? Causas prováveis, da mais a menos provável.
+
+        Cada causa so entra quando ha evidencia para ela: proxy parado, aparelho
+        sem o proxy aplicado, nenhuma conexao chegando (app que ignora o proxy do
+        sistema), so tuneis CONNECT (HTTPS sem MITM, ADR 0004), tuneis falhando
+        (rede do Mac), sessao iOS com proxy, ou "App em Debug" ligado sem eventos.
+        """
+        sessao = self._sessao()
+        agora = time.time()
+        eventos = self.proxy.events_history
+        running = self.proxy.is_running()
+        android = sessao.platform is Platform.ANDROID
+        netlog_running = bool(self.android_netlog.is_running() or self.ios_netlog.is_running())
+        device_configured: bool | None = None
+        if android and sessao.device_id and running:
+            device_configured = bool(self.adb.is_proxy_configured(sessao.device_id))
+
+        requests_total = sum(1 for e in eventos if not e.is_tunnel)
+        tunnels = [e for e in eventos if e.is_tunnel]
+        # Tunel com `error` e o proxy que nao alcancou o servidor (DNS, rede):
+        # o CONNECT e repassado sem abrir o TLS (ADR 0004), entao pinning nao
+        # derruba o tunel e nao se le daqui.
+        tunnels_failed = sum(1 for e in tunnels if e.error)
+        tunnels_active = int(getattr(self.proxy, "active_tunnels", 0) or 0)
+        last_age = (agora - max(e.timestamp for e in eventos)) if eventos else None
+        quiet = last_age is None or last_age > self._DIAGNOSE_QUIET_S
+        porta = self.proxy.port
+
+        causes: list[dict[str, str]] = []
+
+        def causa(code: str, title: str, detail: str, fix: str) -> None:
+            causes.append({"code": code, "title": title, "detail": detail, "fix": fix})
+
+        if not running and not netlog_running:
+            causa(
+                "proxy_stopped", "O proxy está desligado",
+                "Nenhuma captura ligada: nem o proxy nem o App em Debug.",
+                "Clique em Configurar Proxy. No iOS, ou em app que ignora o proxy, use o App em Debug.",
+            )
+        if running and not android:
+            causa(
+                "ios_no_proxy_support", "O proxy só configura aparelhos Android",
+                "A sessão está no iOS: o simulador não é apontado para o proxy automaticamente.",
+                "No iOS, leia o tráfego do app em debug pelo cabo (CFNETWORK_DIAGNOSTICS=3 no scheme) com o botão iPhone em Debug.",
+            )
+        if device_configured is False:
+            causa(
+                "proxy_not_on_device", "O aparelho não está apontando para o proxy",
+                "settings get global http_proxy não devolveu um proxy (ou o adb não respondeu à consulta).",
+                "Clique em Configurar Proxy de novo. Se o aparelho recusar, rode: "
+                f"adb shell settings put global http_proxy 127.0.0.1:{porta}",
+            )
+        if (running and android and device_configured is True and quiet
+                and not tunnels and tunnels_active == 0 and requests_total == 0):
+            causa(
+                "no_connections", "Nenhuma conexão chegou ao proxy",
+                f"O aparelho aponta para o proxy, mas nenhuma conexão foi aberta nos últimos {int(self._DIAGNOSE_QUIET_S)} s.",
+                "O app pode ignorar o proxy do sistema (Flutter/Dart, OkHttp com proxy próprio, WebSocket, gRPC). "
+                "Use o App em Debug (log do OkHttp) ou confirme no app que ele respeita o proxy do Android.",
+            )
+        if len(tunnels) >= 3 and requests_total == 0 and tunnels_failed / len(tunnels) >= 0.8:
+            erros = sorted({e.error for e in tunnels if e.error})
+            causa(
+                "tunnels_failing", "O proxy não está alcançando os servidores",
+                f"{tunnels_failed} de {len(tunnels)} túneis CONNECT falharam ao conectar ({', '.join(erros)}).",
+                "O Mac não resolve ou não alcança o host: confira DNS, VPN e rede do Mac. "
+                "Pinning não aparece aqui: o proxy repassa o TLS sem abrir (ADR 0004).",
+            )
+        elif tunnels and requests_total == 0:
+            causa(
+                "only_tunnels", "Só túneis HTTPS, sem conteúdo",
+                f"{len(tunnels)} túneis CONNECT e nenhuma requisição decodificada.",
+                "O proxy não abre HTTPS (não há MITM, ADR 0004): você vê host e tamanho, não o conteúdo. "
+                "Para ver o conteúdo, use o App em Debug.",
+            )
+        if netlog_running and quiet:
+            causa(
+                "netlog_running_no_events", "App em Debug ligado, mas sem eventos",
+                f"A leitura do log está ativa e nada chegou nos últimos {int(self._DIAGNOSE_QUIET_S)} s.",
+                "Android: o build de debug precisa do HttpLoggingInterceptor do OkHttp (nível BASIC ou mais). "
+                "iOS: o app precisa rodar com CFNETWORK_DIAGNOSTICS=3 no scheme.",
+            )
+
+        return {
+            "checked_at": agora,
+            "platform": sessao.platform.value,
+            "proxy_running": running,
+            "device_configured": device_configured,
+            "netlog_running": netlog_running,
+            "requests_total": requests_total,
+            "tunnels_total": len(tunnels),
+            "tunnels_failed": tunnels_failed,
+            "tunnels_active": tunnels_active,
+            "last_event_age_s": round(last_age, 1) if last_age is not None else None,
+            "causes": causes,
+        }
 
     # -------------------------------------------------------------- analytics
 
@@ -1085,10 +1448,14 @@ class EngineServer:
         # "auto" deixa o motor escolher pelo que e mais robusto e unico nesta
         # tela, em vez de aplicar uma estrategia fixa a todos os elementos.
         alternativas: list[dict] = []
+        valor_escolhido: str | None = None
         if strategy_raw == "auto":
             na_tela = UIHierarchyParser.parse_xml(xml)
             alternativas = self.codegen.rank_locators(element, na_tela)
             escolhido = alternativas[0]["strategy"]
+            # O passo grava o valor do candidato escolhido. Reconstruir pela
+            # estrategia trocava "texto unico" por "resource-id repetido".
+            valor_escolhido = alternativas[0]["value"]
             strategy_raw = {"accessibility_id": "id", "text": "xpath"}.get(escolhido, escolhido)
 
         try:
@@ -1096,14 +1463,17 @@ class EngineServer:
         except ValueError as exc:
             raise InvalidInputError(f"Estrategia invalida: {strategy_raw!r}") from exc
         var_name, object_code, action_code = self.codegen.generate_entry(
-            element, strategy=strategy, click_coord=(x, y)
+            element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido
         )
+        passos = self.codegen.get_steps()
         return {
             "var_name": var_name,
             "object_code": object_code,
             "action_code": action_code,
             "element": element.to_dict(),
-            "step_count": len(self.codegen.get_steps()),
+            "step_count": len(passos),
+            "step_num": passos[-1].step_num if passos else None,
+            "recorded_at": passos[-1].recorded_at if passos else None,
             "strategy": strategy.value,
             # Vazio quando a estrategia foi imposta pela interface; preenchido
             # no modo "auto", para a tela poder mostrar o que foi descartado e
@@ -1300,7 +1670,9 @@ class EngineServer:
             is_open = b"mInputShown=true" in saida
             self._keyboard_cache = (now, is_open)
             return is_open
-        except (InvalidInputError, ToolNotFoundError) as exc:
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+            # Um `dumpsys` acima do prazo (aparelho ocupado) nao pode derrubar a
+            # escuta passiva: o toque so segue como passo, sem a checagem.
             logger.debug("Nao foi possivel checar o teclado: %s", exc)
             return False
 
@@ -1364,6 +1736,11 @@ class EngineServer:
         except EngineError as exc:
             logger.warning("Toque passivo em (%s,%s) nao virou passo: %s", x, y, exc)
             self.notify("passive.skipped", {"x": x, "y": y, "reason": str(exc)})
+        except Exception as exc:
+            # Rede final: roda na thread do `getevent`. Uma excecao solta aqui
+            # encerrava a gravacao sem aviso, com a tela ainda em "Gravando".
+            logger.exception("Erro inesperado no toque passivo em (%s,%s).", x, y)
+            self.notify("passive.skipped", {"x": x, "y": y, "reason": f"erro inesperado: {exc}"})
 
     def _async_prefetch_hierarchy(self) -> None:
         """Pré-carrega a hierarquia da nova tela após um toque no aparelho.
@@ -1706,6 +2083,14 @@ class EngineServer:
             if sessao.platform is Platform.ANDROID and sessao.device_id and self.proxy.is_running():
                 fallback = sessao.device_id
             self._release_proxy_device(fallback)
+            # Ultima tentativa nos aparelhos cujo desmonte nao se confirmou,
+            # depois que as retentativas em voo terminam: senao o mesmo serial
+            # seria desmontado duas vezes, e a segunda apagaria o restaurado.
+            self._join_proxy_retries()
+            with self._state_lock:
+                pendentes = list(self._proxy_pending.items())
+            for serial, port in pendentes:
+                self._teardown_proxy_device(serial, port, only_if_pending=True)
         except Exception:
             logger.exception("Falha ao desfazer a configuracao de proxy do dispositivo.")
         try:

@@ -77,7 +77,7 @@ class TestTabelaDeMetodos(Base):
             contract.LANE_ENVIRONMENT: {"wda.start", "simulators.boot", "simulators.shutdown", "emulators.boot"},
             contract.LANE_QUERY: {"devices.list", "wda.status", "simulators.list", "emulators.list",
                                   "diagnostics.check", "analytics.ios_devices"},
-            contract.LANE_SERVICES: {"proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+            contract.LANE_SERVICES: {"proxy.start", "proxy.stop", "proxy.events", "proxy.clear", "proxy.diagnose",
                                      "netlog.start", "netlog.stop",
                                      "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
                                      "flow.run", "flow.stop", "flow.status", "recording.start", "recording.stop"},

@@ -80,6 +80,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "engine.info": _spec(),
     "engine.shutdown": _spec(LANE_INLINE, 5),
     "session.select_device": _spec(),
+    # Le listas em memoria: fila rapida.
+    "session.correlate": _spec(),
     "devices.list": _spec(LANE_QUERY),
     "devices.watch_start": _spec(),
     "devices.watch_stop": _spec(),
@@ -108,6 +110,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "input.tap": _spec(),
     "input.text": _spec(),
     # Espelho
+    # `format` (jpeg|png) e `quality` desde 3.6; o quadro sai com `format` e
+    # `image_base64` (e `png_base64` quando PNG).
     "stream.start": _spec(),
     "stream.stop": _spec(),
     "stream.stats": _spec(),
@@ -119,6 +123,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "proxy.stop": _spec(LANE_SERVICES, 60),
     "proxy.events": _spec(LANE_SERVICES),
     "proxy.clear": _spec(LANE_SERVICES),
+    # Le o estado do proxy no aparelho (adb) e o historico: fila de servicos.
+    "proxy.diagnose": _spec(LANE_SERVICES, 20),
     # Lista os iPhones (ate 15 s) e espera o log comecar (ate 20 s).
     "netlog.start": _spec(LANE_SERVICES, 45),
     "netlog.stop": _spec(LANE_SERVICES, 60),

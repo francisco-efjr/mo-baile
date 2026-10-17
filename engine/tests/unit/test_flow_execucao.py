@@ -119,5 +119,81 @@ class TestPrivacidadeDaEntrada(FluxoBase):
         self.assertNotIn("Exemplo", self.out.getvalue())
 
 
+class TestDigitacaoIOS(FluxoBase):
+    """F3: no iOS o passo de digitacao digitava nada e era dado como sucesso."""
+
+    def setUp(self):
+        super().setUp()
+        import os
+        from dataclasses import replace
+        from unittest.mock import patch
+
+        from aparelho_falso import UDID, WdaFalso, xcrun_falso
+
+        import mobaile.rpc.server as rpc_server
+        import mobaile.services.flows as flows_mod
+
+        self.wda = WdaFalso()
+        self.addCleanup(self.wda.fechar)
+        # A pre-condicao iOS lista os simuladores com `xcrun simctl`.
+        pasta = xcrun_falso(Path(self._pasta.name))
+        patcher = patch.dict(os.environ, {"PATH": f"{pasta}{os.pathsep}{os.environ.get('PATH', '')}"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        for modulo in (rpc_server, flows_mod):
+            patcher = patch.object(modulo, "settings", replace(modulo.settings, wda_url=self.wda.url))
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.ok("session.select_device", {"platform": "ios", "device_id": UDID})
+
+    def _passo_ios(self, action_type, texto=None):
+        from mobaile.domain.models import AutomationStep, LocatorStrategy
+
+        passos = self.server.codegen.steps
+        passos.append(AutomationStep(
+            step_num=len(passos) + 1, action_type=action_type, var_name="CAMPO_EMAIL",
+            element_name="email", class_name="XCUIElementTypeTextField", strategy=LocatorStrategy.ID,
+            locator_value='(AppiumBy.ACCESSIBILITY_ID, "email")', coords=(200, 300),
+            input_text=texto, package="", platform="ios",
+        ))
+
+    def _digitado(self) -> list[str]:
+        return ["".join(c.get("value") or []) for c in self.wda.posts("/wda/keys") if isinstance(c, dict)]
+
+    def test_texto_chega_ao_wda_e_nunca_ao_log(self):
+        self._passo_ios("input", SENTINELA)
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+        self.assertTrue(fim["success"], fim)
+        self.assertEqual(self._digitado(), [SENTINELA])
+        self.assertTrue(self.wda.posts("/wda/tap"), "o campo precisa receber o toque antes do texto")
+        self.assertNotIn(SENTINELA, self.out.getvalue(), "texto digitado vazou para o stdout do motor")
+        self.assertFalse([linha for linha in self.log.linhas if SENTINELA in linha])
+
+    def test_passo_sem_texto_falha_em_vez_de_virar_toque(self):
+        self._passo_ios("input")
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+        self.assertFalse(fim["success"], fim)
+        self.assertEqual(self._digitado(), [])
+        narrado = " ".join(n["line"] for n in self.notificacoes("flow.log")) + fim["message"]
+        self.assertIn("sem texto", narrado.lower())
+
+    def test_erro_semantico_do_wda_e_falha_sem_repetir_o_texto(self):
+        self.wda.falha_digitacao = "semantica"
+        self._passo_ios("input", SENTINELA)
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+        self.assertFalse(fim["success"], fim)
+        self.assertNotIn(SENTINELA, self.out.getvalue())
+
+    def test_clique_continua_funcionando(self):
+        self._passo_ios("click")
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+        self.assertTrue(fim["success"], fim)
+        self.assertEqual(self._digitado(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

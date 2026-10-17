@@ -13,6 +13,8 @@ struct AutomationStep: Identifiable, Equatable, Sendable {
     let inputText: String?
     let package: String
     let platform: Platform
+    /// Hora da gravação (relógio do Mac), base da correlação com Rede e Analytics.
+    var recordedAt: Date? = nil
     
     static func == (lhs: AutomationStep, rhs: AutomationStep) -> Bool {
         lhs.id == rhs.id

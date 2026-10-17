@@ -140,10 +140,10 @@ class TestSuperficie(ContractBase):
         "screen.capture", "screen.size", "hierarchy.dump", "hierarchy.element_at",
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",
         "scrcpy.start", "scrcpy.stop", "scrcpy.status",
-        "proxy.start", "proxy.stop", "proxy.events", "proxy.clear",
+        "proxy.start", "proxy.stop", "proxy.events", "proxy.clear", "proxy.diagnose",
         "netlog.start", "netlog.stop",
         "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
-        "codegen.record", "codegen.steps", "codegen.reset",
+        "codegen.record", "codegen.steps", "codegen.reset", "session.correlate",
     }
 
     def test_superficie_publica_nao_encolhe_sem_aviso(self):
@@ -444,7 +444,10 @@ class TestStreamingPorNotificacao(ContractBase):
         quadros = [n for n in self.notificacoes() if n.get("method") == "stream.frame"]
         self.assertGreaterEqual(len(quadros), 1)
         self.assertNotIn("id", quadros[0], "notificacao nao carrega id")
-        self.assertIn("png_base64", quadros[0]["params"])
+        # 3.6: o quadro do espelho e JPEG por padrao, em `image_base64`.
+        self.assertEqual(quadros[0]["params"]["format"], "jpeg")
+        self.assertIn("image_base64", quadros[0]["params"])
+        self.assertNotIn("png_base64", quadros[0]["params"])
 
         # As metricas viajam com o quadro. Sem isso o front precisava de uma ida
         # e volta de `stream.stats` por quadro, e o laco de notificacoes dele

@@ -29,15 +29,50 @@ enum Exporters {
     }
 
     /// `curl` equivalente à requisição, com os headers já redigidos pelo motor.
+    ///
+    /// Método, URL e nome de header vêm do tráfego do app sob teste, que não é
+    /// confiável, e o resultado é colado num terminal. Tudo passa pelo mesmo
+    /// escape de aspas simples; o método só fica sem aspas quando é um token
+    /// HTTP simples.
     static func curl(for event: NetworkEvent) -> String {
-        var partes = ["curl -X \(event.method) '\(event.url)'"]
+        let simples = event.method.range(of: "^[A-Z]+$", options: .regularExpression) != nil
+        let metodo = simples ? event.method : shellQuoted(event.method)
+        var partes = ["curl -X \(metodo) \(shellQuoted(event.url))"]
         for (nome, valor) in event.requestHeaders.sorted(by: { $0.key < $1.key }) {
-            partes.append("-H '\(nome): \(valor.replacingOccurrences(of: "'", with: "'\\''"))'")
+            partes.append("-H \(shellQuoted("\(nome): \(valor)"))")
         }
         if !event.requestBody.isEmpty {
-            partes.append("--data-raw '\(event.requestBody.replacingOccurrences(of: "'", with: "'\\''"))'")
+            partes.append("--data-raw \(shellQuoted(event.requestBody))")
         }
         return partes.joined(separator: " \\\n  ")
+    }
+
+    /// Texto entre aspas simples para o shell: `'` vira `'\''`.
+    static func shellQuoted(_ texto: String) -> String {
+        "'" + texto.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Literal Python entre aspas simples, com escape de barra, aspa e quebras
+    /// de linha. Usado para inserir caminho e texto vindos do tráfego capturado
+    /// no código gerado, sem permitir que fechem a string.
+    static func pythonStringLiteral(_ texto: String) -> String {
+        var saida = "'"
+        for c in texto.unicodeScalars {
+            switch c {
+            case "\\": saida += "\\\\"
+            case "'": saida += "\\'"
+            case "\n": saida += "\\n"
+            case "\r": saida += "\\r"
+            case "\t": saida += "\\t"
+            default:
+                if c.value < 0x20 || c.value == 0x7f {
+                    saida += String(format: "\\x%02x", c.value)
+                } else {
+                    saida.unicodeScalars.append(c)
+                }
+            }
+        }
+        return saida + "'"
     }
 
     // MARK: - Analytics

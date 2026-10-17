@@ -1170,6 +1170,35 @@ final class EngineSession {
 
     // MARK: - Rede
 
+    /// Liga a janela correlacionada de um passo: Rede e Analytics passam a
+    /// mostrar só o que caiu em volta do toque.
+    func correlate(step: AutomationStep) async {
+        guard let client else { return }
+        do {
+            let resultado: EngineDTO.Correlation = try await client.call(
+                "session.correlate", params: ["step_num": .int(step.stepNum)]
+            )
+            state.correlation = resultado
+            state.statusMessage = "Passo \(step.stepNum): \(resultado.requests.count) requisições e \(resultado.events.count) eventos na janela"
+        } catch {
+            state.correlation = nil
+            report(error)
+        }
+    }
+
+    /// "Por que não vejo tráfego?": pede o diagnóstico ao motor e abre o popover.
+    func diagnoseTraffic() async {
+        guard let client else { return }
+        do {
+            let resultado: EngineDTO.TrafficDiagnosis = try await client.call("proxy.diagnose")
+            state.trafficDiagnosis = resultado
+            state.trafficDiagnosisPresented = true
+            state.statusMessage = resultado.summary
+        } catch {
+            report(error)
+        }
+    }
+
     func toggleProxy() async {
         guard let client else { return }
         do {

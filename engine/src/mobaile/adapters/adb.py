@@ -42,6 +42,10 @@ class ADBBridge:
         # Nome de dump único por processo: evita corrida entre duas instâncias
         # do app e não deixa artefato previsível no dispositivo.
         self._dump_remote_path = f"/data/local/tmp/mobaile_dump_{os.getpid()}.xml"
+        # Valores que o aparelho tinha antes de o proxy ser ligado, por serial.
+        # O desmonte os devolve em vez de apagar: um proxy corporativo ou o
+        # `captive_portal_mode` do aparelho nao pertencem a este motor.
+        self._proxy_previous: dict[str, dict[str, str | None]] = {}
 
     # ------------------------------------------------------------------ setup
 
@@ -359,6 +363,14 @@ class ADBBridge:
 
     # ------------------------------------------------------------------ proxy
 
+    def _get_global_setting(self, args: list[str], key: str) -> str | None:
+        """Valor de `settings get global <key>`, ou `None` se nao ha valor."""
+        ret, stdout, _ = self._run_cmd([*args, "shell", "settings", "get", "global", key], timeout=5)
+        if ret != 0:
+            return None
+        value = stdout.decode("utf-8", errors="ignore").strip()
+        return None if value in ("", "null") else value
+
     def setup_reverse_proxy(self, device_id: str, proxy_port: int = 8082) -> bool:
         """Aponta o proxy global do aparelho para o host via `adb reverse`.
 
@@ -373,6 +385,17 @@ class ADBBridge:
                 logger.warning("adb reverse falhou em %r: %s", device_id, err_rev.decode(errors="ignore"))
                 return False
 
+            # Guarda o que o aparelho tinha, uma vez so: numa religacao o valor
+            # atual ja e o nosso, e guardar de novo perderia o original.
+            ours = f"127.0.0.1:{port}"
+            if device_id not in self._proxy_previous:
+                previous = {
+                    "http_proxy": self._get_global_setting(args, "http_proxy"),
+                    "captive_portal_mode": self._get_global_setting(args, "captive_portal_mode"),
+                }
+                if previous["http_proxy"] != ours:
+                    self._proxy_previous[device_id] = previous
+
             # Desativa temporariamente a checagem de captive portal para evitar
             # que o Android (especialmente Motorola/AOSP) marque a rede como
             # 'sem internet' e desligue o roteamento ou migre para dados móveis.
@@ -383,8 +406,16 @@ class ADBBridge:
             )
             if ret_set != 0:
                 logger.warning("Falha ao definir http_proxy em %r: %s", device_id, err_set.decode(errors="ignore"))
-                # Rollback defensivo: desfaz a rota reversa e o captive_portal_mode
-                self._run_cmd([*args, "shell", "settings", "delete", "global", "captive_portal_mode"], timeout=5)
+                # Rollback defensivo: desfaz a rota reversa e devolve o
+                # captive_portal_mode ao que era (ou o apaga, se nao tinha).
+                previous_portal = self._proxy_previous.pop(device_id, {}).get("captive_portal_mode")
+                if previous_portal is not None:
+                    self._run_cmd(
+                        [*args, "shell", "settings", "put", "global", "captive_portal_mode", previous_portal],
+                        timeout=5,
+                    )
+                else:
+                    self._run_cmd([*args, "shell", "settings", "delete", "global", "captive_portal_mode"], timeout=5)
                 self._run_cmd([*args, "reverse", "--remove", f"tcp:{port}"], timeout=5)
                 return False
 
@@ -403,13 +434,39 @@ class ADBBridge:
         try:
             port = validate_port(proxy_port)
             args = self._device_args(device_id)
-            self._run_cmd([*args, "shell", "settings", "put", "global", "http_proxy", ":0"], timeout=5)
-            self._run_cmd([*args, "shell", "settings", "delete", "global", "http_proxy"], timeout=5)
+            previous = self._proxy_previous.get(device_id, {})
+            previous_proxy = previous.get("http_proxy")
+            previous_portal = previous.get("captive_portal_mode")
+            ok = True
+
+            if previous_proxy and previous_proxy != ":0":
+                ret, _, _ = self._run_cmd(
+                    [*args, "shell", "settings", "put", "global", "http_proxy", previous_proxy], timeout=5
+                )
+                ok = ok and ret == 0
+            else:
+                self._run_cmd([*args, "shell", "settings", "put", "global", "http_proxy", ":0"], timeout=5)
+                ret, _, _ = self._run_cmd([*args, "shell", "settings", "delete", "global", "http_proxy"], timeout=5)
+                ok = ok and ret == 0
             self._run_cmd([*args, "shell", "settings", "delete", "global", "global_http_proxy_host"], timeout=5)
             self._run_cmd([*args, "shell", "settings", "delete", "global", "global_http_proxy_port"], timeout=5)
-            self._run_cmd([*args, "shell", "settings", "delete", "global", "captive_portal_mode"], timeout=5)
+
+            if previous_portal is not None:
+                ret, _, _ = self._run_cmd(
+                    [*args, "shell", "settings", "put", "global", "captive_portal_mode", previous_portal], timeout=5
+                )
+            else:
+                ret, _, _ = self._run_cmd(
+                    [*args, "shell", "settings", "delete", "global", "captive_portal_mode"], timeout=5
+                )
+            ok = ok and ret == 0
             self._run_cmd([*args, "reverse", "--remove", f"tcp:{port}"], timeout=5)
-            return True
+
+            if ok:
+                self._proxy_previous.pop(device_id, None)
+            else:
+                logger.warning("Desmonte do proxy em %r nao foi confirmado; o aparelho pode ter ficado configurado.", device_id)
+            return ok
         except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
             logger.warning("Remoção de proxy falhou em %r: %s", device_id, exc)
             return False

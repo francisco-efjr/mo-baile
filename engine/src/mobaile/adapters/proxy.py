@@ -211,6 +211,10 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
         remote_sock: socket.socket | None = None
         status_code, error_msg, bytes_transferred = 200, None, 0
 
+        # O evento do tunel so sai quando ele fecha; um tunel HTTP/2 ou com
+        # keep-alive fica aberto por minutos. O contador diz que ha trafego
+        # passando mesmo sem nada no historico.
+        server.tunnel_opened()
         try:
             remote_sock = socket.create_connection((host, port), timeout=10)
             client_sock.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
@@ -248,6 +252,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             except OSError:
                 pass
         finally:
+            server.tunnel_closed()
             if remote_sock:
                 self._safe_close(remote_sock)
             server.emit_event(
@@ -506,6 +511,7 @@ class MobileNetworkProxy:
         self._is_running = False
         self._event_counter = 0
         self._lock = threading.Lock()
+        self._active_tunnels = 0
         self._callbacks: list[Callable[[NetworkEvent], None]] = []
         self._slots = threading.Semaphore(MAX_CONCURRENT_CONNECTIONS)
 
@@ -526,6 +532,20 @@ class MobileNetworkProxy:
     def events_history(self) -> list[NetworkEvent]:
         with self._lock:
             return list(self._events)
+
+    def tunnel_opened(self) -> None:
+        with self._lock:
+            self._active_tunnels += 1
+
+    def tunnel_closed(self) -> None:
+        with self._lock:
+            self._active_tunnels = max(0, self._active_tunnels - 1)
+
+    @property
+    def active_tunnels(self) -> int:
+        """Tuneis CONNECT abertos agora (ainda sem evento no historico)."""
+        with self._lock:
+            return self._active_tunnels
 
     def get_next_event_id(self) -> int:
         with self._lock:

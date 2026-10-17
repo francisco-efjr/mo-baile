@@ -24,16 +24,16 @@ explicitamente.
 Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 
 ```json
-{"jsonrpc":"2.0","method":"stream.frame","params":{"png_base64":"...","width":900,"device_id":"emulator-5554",...}}
+{"jsonrpc":"2.0","method":"stream.frame","params":{"format":"jpeg","image_base64":"...","width":900,"device_id":"emulator-5554",...}}
 ```
 
 | Notificação | Quando chega |
 |---|---|
-| `stream.frame` | Um quadro novo, apenas quando a tela mudou. `device_id` diz de qual aparelho ele veio; quadro capturado antes de uma troca de aparelho não é emitido |
+| `stream.frame` | Um quadro novo, apenas quando a tela mudou. `device_id` diz de qual aparelho ele veio; quadro capturado antes de uma troca de aparelho não é emitido. Desde a 3.6 traz `format` (`jpeg`, o padrão, ou `png`) e `image_base64`; `png_base64` continua presente só quando o formato é PNG. No iOS, com o MJPEG do WebDriverAgent no ar (porta `WDA_MJPEG_PORT`, padrão 9100), o motor pede ao WDA quadros reduzidos (`mjpegScalingFactor`) para caberem no `max_width` e repassa o JPEG sem reencodar; se ainda vier maior, reduz e reencoda |
 | `stream.settled` | A tela parou de mudar. É o momento certo de reler a hierarquia |
 | `proxy.event` | Uma requisição HTTP foi observada |
 | `analytics.event` | Um evento de tagueamento foi capturado |
-| `device.changed` | Um alvo foi conectado ou desconectado. `device_id` nulo significa que sumiu |
+| `device.changed` | Um alvo foi conectado ou desconectado. `device_id` nulo significa que sumiu. Não é emitida pela escolha manual (`session.select_device`) nem ao ligar o vigia com um alvo já escolhido: só a chegada e a saída de um alvo geram a notificação (3.5.2) |
 | `passive.step` | A escuta passiva transformou um toque no aparelho em passo gravado. Mesmo formato de `codegen.record` |
 | `passive.skipped` | Um toque no aparelho não virou passo, com `x`, `y` e o motivo |
 | `passive.text` | O texto digitado num campo foi lido e guardado no último passo de entrada |
@@ -176,9 +176,10 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações |
 | `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos |
 | `engine.shutdown` | — | `{stopped}` na hora; o desmonte roda depois que a resposta sai. Fim do stdin e SIGTERM encerram pelo mesmo caminho, sem interromper o desmonte |
-| `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele |
+| `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele. O alvo escolhido fica fixo no vigia: a varredura seguinte não o troca pelo primeiro da lista, e não há `device.changed` redundante (3.5.2) |
+| `session.correlate` | `step_num`, `before_s` (padrão 1), `after_s` (padrão 4) | requisições (`requests`, ids de `proxy.event`) e eventos de analytics (`events`, ids de `analytics.event`) cuja hora cai na janela do passo: de `recorded_at - before_s` até `recorded_at + after_s` ou até o `recorded_at` do passo seguinte, o que vier antes. `window` é `[início, fim]` em epoch; `probable` é sempre `true` (atribuição por tempo, não causal). Todos os carimbos são do relógio do Mac na recepção. Passo inexistente ou sem hora: `invalid_input` (3.6) |
 | `devices.list` | `platform` | alvos conectados |
-| `devices.watch_start` | `poll_interval` | liga a detecção automática |
+| `devices.watch_start` | `poll_interval` | liga a detecção automática. Parte do alvo já escolhido na sessão, se houver; se ele não estiver conectado, a primeira varredura elege outro ou avisa que sumiu |
 | `devices.watch_stop` | — | desliga. Idempotente |
 
 ### Ambiente e inicialização
@@ -222,7 +223,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `stream.start` | `fps`, `max_width` | confirma o início |
+| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
 | `scrcpy.start` | `fps`, `max_size`, `title`, `always_on_top` | inicia janela nativa a 60 FPS com baixíssima latência |
@@ -237,6 +238,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `proxy.stop` | — | desfaz também a configuração de proxy no aparelho em que `proxy.start` a ligou, mesmo que a sessão tenha trocado de aparelho |
 | `proxy.events` | `limit` | histórico recente |
 | `proxy.clear` | — | limpa o histórico |
+| `proxy.diagnose` | — | "por que não vejo tráfego?": `proxy_running`, `device_configured` (Android com proxy ligado; `null` quando não se aplica), `netlog_running`, `platform`, `requests_total`, `tunnels_total`, `tunnels_failed` (túneis que o proxy não conseguiu conectar), `tunnels_active` (abertos agora, ainda sem evento), `last_event_age_s` e `causes` (lista de `{code, title, detail, fix}`, da causa mais à menos provável; vazia quando nada aponta problema). Códigos: `proxy_stopped`, `ios_no_proxy_support`, `proxy_not_on_device`, `no_connections`, `tunnels_failing`, `only_tunnels`, `netlog_running_no_events`. Pinning não é diagnosticado: o proxy repassa o TLS sem abrir (ADR 0004), então o app vê o certificado real. Lê o aparelho pelo adb: fila `services` (3.6) |
 | `netlog.start` | iOS: `udid` (opcional; sem ele, o primeiro iPhone confiado). Android: `device_id` (opcional; sem ele, o aparelho da sessão) | tráfego HTTPS do app em debug, sem proxy nem certificado, emitido como `proxy.event`. Escolhe pela plataforma da sessão. **iOS:** lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` (o app roda com `CFNETWORK_DIAGNOSTICS=3` no scheme; corpo normalmente indisponível). **Android:** lê do `adb logcat` o log do `HttpLoggingInterceptor` do OkHttp (o build de debug precisa do interceptor; BASIC traz a linha, HEADERS os headers, BODY os corpos), funciona com o debugger do Android Studio conectado; sem aparelho na sessão, `device_not_found`. Devolve `running`, `device_id`, `raw_log` (iOS: blocos brutos, headers sensíveis mascarados; Android: `null`) e `source` (`cfnetwork` ou `okhttp_logcat`) |
 | `netlog.stop` | — | para a leitura nas duas plataformas; devolve `running` |
 | `analytics.start` | `package` (opcional), `ios_source` (iOS: `auto`, `simulator` ou UDID do iPhone) | começa a escutar o tagueamento; no iOS sem simulador, `auto` usa o iPhone conectado por cabo. Devolve `running`, `source`, `device_id` |
@@ -250,7 +252,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | Método | Parâmetros | Devolve |
 |---|---|---|
 | `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object (`NOME = (AppiumBy.X, "valor")`), bloco da ação (`def` + `wait_to_be_visible(..., 15)` + `click(..., 2)` ou `send_keys`). A coordenada não entra no código: fica no passo, em `coords` |
-| `codegen.steps` | — | passos gravados |
+| `codegen.steps` | — | passos gravados. Desde a 3.6 cada passo traz `recorded_at` (epoch do Mac na gravação; `null` em passo antigo), e `codegen.record`/`passive.step` trazem `step_num` e `recorded_at` do passo criado |
 | `codegen.reset` | — | limpa a gravação |
 | `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos. `directory` precisa ficar dentro de `~/Documents/Mo baile` (link simbólico e `..` resolvidos); fora dele, `invalid_input` |
 
@@ -266,7 +268,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `passive.start` | — | liga a gravação do que é feito direto no aparelho. Os passos chegam por `passive.step` |
+| `passive.start` | — | liga a gravação do que é feito direto no aparelho. Os passos chegam por `passive.step`. No iOS responde erro (`adapter_error`) quando o Python do motor não tem o `pyobjc-framework-Quartz`; antes respondia `listening: true` sem ouvir nada (3.5.2) |
 | `passive.stop` | — | desliga. Idempotente |
 | `passive.status` | — | `{listening}` |
 

@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.5.1",
+      "version": "3.6.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -48,6 +48,7 @@
         "passive.status",
         "passive.stop",
         "proxy.clear",
+        "proxy.diagnose",
         "proxy.events",
         "proxy.start",
         "proxy.stop",
@@ -63,6 +64,7 @@
         "scrcpy.stop",
         "screen.capture",
         "screen.size",
+        "session.correlate",
         "session.select_device",
         "simulators.boot",
         "simulators.list",
@@ -80,7 +82,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.5.1",
+      "engine_version": "3.6.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -103,6 +105,11 @@
           "progress": false
         },
         "session.select_device": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "session.correlate": {
           "lane": "fast",
           "timeout_s": 15,
           "progress": false
@@ -255,6 +262,11 @@
         "proxy.clear": {
           "lane": "services",
           "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.diagnose": {
+          "lane": "services",
+          "timeout_s": 20,
           "progress": false
         },
         "netlog.start": {
@@ -484,6 +496,8 @@
         "display_name": "Continuar"
       },
       "step_count": 1,
+      "step_num": 1,
+      "recorded_at": 1757030000.0,
       "strategy": "position",
       "alternatives": []
     }
@@ -495,6 +509,7 @@
       "steps": [
         {
           "step_num": 1,
+          "recorded_at": 1757030000.0,
           "action_type": "click",
           "var_name": "BOTAO_CONTINUAR",
           "element_name": "Continuar",
@@ -510,6 +525,21 @@
           "platform": "android"
         }
       ]
+    }
+  },
+  "session.correlate": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "step_num": 1,
+      "recorded_at": 1757030000.0,
+      "window": [
+        1757029999.0,
+        1757030004.0
+      ],
+      "requests": [],
+      "events": [],
+      "probable": true
     }
   },
   "screen.capture": {
@@ -545,6 +575,30 @@
     "result": {
       "events": [],
       "total": 0
+    }
+  },
+  "proxy.diagnose": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "checked_at": 0,
+      "platform": "android",
+      "proxy_running": false,
+      "device_configured": null,
+      "netlog_running": false,
+      "requests_total": 0,
+      "tunnels_total": 0,
+      "tunnels_failed": 0,
+      "tunnels_active": 0,
+      "last_event_age_s": null,
+      "causes": [
+        {
+          "code": "proxy_stopped",
+          "title": "O proxy está desligado",
+          "detail": "Nenhuma captura ligada: nem o proxy nem o App em Debug.",
+          "fix": "Clique em Configurar Proxy. No iOS, ou em app que ignora o proxy, use o App em Debug."
+        }
+      ]
     }
   },
   "devices.list": {
@@ -734,6 +788,23 @@
       "token": "wda-1",
       "message": "Subindo o WebDriverAgent pelo Appium. Na primeira vez ele compila, o que leva minutos.",
       "percent": null
+    }
+  },
+  "notif_stream.frame": {
+    "jsonrpc": "2.0",
+    "method": "stream.frame",
+    "params": {
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "width": 30,
+      "height": 60,
+      "source_width": 60,
+      "source_height": 120,
+      "format": "png",
+      "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "device_id": "emulator-5554",
+      "fps": 0,
+      "capture_ms": 0,
+      "skipped": 0
     }
   },
   "notif_proxy.event": {

@@ -73,6 +73,7 @@ struct AppSidebar: View {
                 case .step(let id):
                     appState.selectedStepID = id
                     appState.workspaceTab = .pageObjects
+                    correlacionar(id)
                 case nil:
                     break
                 }
@@ -89,12 +90,34 @@ struct AppSidebar: View {
         }
     }
 
+    /// Pede ao motor a janela do passo; sem hora gravada (passo antigo) não há o que correlacionar.
+    private func correlacionar(_ id: UUID) {
+        guard let passo = appState.steps.first(where: { $0.id == id }), passo.recordedAt != nil else {
+            appState.correlation = nil
+            return
+        }
+        Task { await session.correlate(step: passo) }
+    }
+
     @ViewBuilder
     private func menu(do passo: AutomationStep) -> some View {
         Button("Mostrar no Código") {
             appState.selectedStepID = passo.id
             appState.workspaceTab = .pageObjects
+            correlacionar(passo.id)
         }
+        Button("Ver na Rede") {
+            appState.selectedStepID = passo.id
+            correlacionar(passo.id)
+            appState.workspaceTab = .network
+        }
+        .disabled(passo.recordedAt == nil)
+        Button("Ver em Analytics") {
+            appState.selectedStepID = passo.id
+            correlacionar(passo.id)
+            appState.workspaceTab = .analytics
+        }
+        .disabled(passo.recordedAt == nil)
         Button("Copiar Locator") {
             Exporters.copy(passo.varName)
             appState.statusMessage = "Locator \(passo.varName) copiado"

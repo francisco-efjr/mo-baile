@@ -126,6 +126,18 @@ private struct NetworkAccessoryBar: View {
             }
             .buttonStyle(PlainTextButtonStyle(theme: theme, destructive: true))
             .disabled(appState.httpRequests.isEmpty)
+
+            @Bindable var state = appState
+            Button {
+                Task { await session.diagnoseTraffic() }
+            } label: {
+                rotulo("Por que não vejo tráfego?", icone: "stethoscope", compacto: compacto)
+            }
+            .help("Pergunta ao motor o que está impedindo o tráfego de aparecer e como resolver")
+            .accessibilityLabel("Por que não vejo tráfego?")
+            .popover(isPresented: $state.trafficDiagnosisPresented, arrowEdge: .bottom) {
+                TrafficDiagnosisView()
+            }
         }
     }
 
@@ -147,12 +159,43 @@ struct HTTPTableView: View {
     /// Mais nova primeiro: com a mais nova embaixo, cada requisição que chegava
     /// saía da área visível.
     @State private var ordem = [KeyPathComparator(\NetworkEvent.id, order: .reverse)]
+    /// Largura, ordem e visibilidade das colunas sobrevivem ao reabrir (D8).
+    @SceneStorage("colunasRede") private var colunas: TableColumnCustomization<NetworkEvent>
 
     var body: some View {
         let theme = themeManager.current
         let linhas = appState.filteredHTTPRequests.sorted(using: ordem)
 
-        Table(linhas, selection: selecao, sortOrder: $ordem) {
+        VStack(spacing: 0) {
+            escopo
+            tabela(linhas, theme: theme)
+        }
+    }
+
+    /// Escopo acima da tabela: Todos · API · Mídia · Erros · Lentas (D7).
+    private var escopo: some View {
+        @Bindable var state = appState
+        return HStack {
+            Picker("Escopo", selection: $state.networkScope) {
+                ForEach(NetworkScope.allCases) { escopo in
+                    Text(escopo.title).tag(escopo)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(maxWidth: 360)
+            .help(appState.networkScope.help)
+            .accessibilityLabel("Escopo da tabela de Rede")
+            Spacer()
+            CorrelationChip()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func tabela(_ linhas: [NetworkEvent], theme: any ThemeTokens) -> some View {
+        Table(linhas, selection: selecao, sortOrder: $ordem, columnCustomization: $colunas) {
             TableColumn("Método", value: \.method) { event in
                 Text(event.method)
                     .font(DSFont.mono(11, weight: .medium))
@@ -160,6 +203,7 @@ struct HTTPTableView: View {
                     .accessibilityLabel(event.accessibilitySummary)
             }
             .width(min: 56, ideal: 72, max: 110)
+            .customizationID("metodo")
 
             TableColumn("Status", value: \.statusSortKey) { event in
                 Text(event.statusCode.map(String.init) ?? "—")
@@ -168,16 +212,19 @@ struct HTTPTableView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 44, ideal: 56, max: 80)
+            .customizationID("status")
 
             TableColumn("Host", value: \.host) { event in
                 Text(event.host).font(DSFont.mono(11)).lineLimit(1).truncationMode(.middle)
             }
             .width(min: 100, ideal: 180)
+            .customizationID("host")
 
             TableColumn("Caminho", value: \.path) { event in
                 Text(event.path).font(DSFont.mono(11)).lineLimit(1).truncationMode(.middle)
             }
             .width(min: 100, ideal: 240)
+            .customizationID("caminho")
 
             TableColumn("Tamanho", value: \.sizeBytes) { event in
                 Text(event.formattedSize)
@@ -185,6 +232,7 @@ struct HTTPTableView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 56, ideal: 68, max: 100)
+            .customizationID("tamanho")
 
             TableColumn("Tempo", value: \.durationSortKey) { event in
                 Text(event.formattedDuration)
@@ -193,6 +241,7 @@ struct HTTPTableView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 52, ideal: 64, max: 100)
+            .customizationID("tempo")
         }
         .alternatingRowBackgrounds()
         .contextMenu(forSelectionType: NetworkEvent.ID.self) { ids in
@@ -212,10 +261,13 @@ struct HTTPTableView: View {
         .overlay {
             if linhas.isEmpty {
                 EmptyState(
-                    icon: appState.httpFilterText.isEmpty ? "antenna.radiowaves.left.and.right" : "magnifyingglass",
-                    text: appState.httpFilterText.isEmpty
-                        ? "Aguardando tráfego do aparelho…"
-                        : "Nenhuma requisição corresponde ao filtro.",
+                    icon: appState.httpFilterText.isEmpty && appState.networkScope == .all && appState.correlation == nil
+                        ? "antenna.radiowaves.left.and.right" : "magnifyingglass",
+                    text: appState.correlation != nil
+                        ? "Nenhuma requisição na janela deste passo."
+                        : (appState.httpFilterText.isEmpty && appState.networkScope == .all
+                            ? "Aguardando tráfego do aparelho…"
+                            : "Nenhuma requisição corresponde ao filtro ou ao escopo."),
                     compact: true
                 )
                 .allowsHitTesting(false)

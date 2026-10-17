@@ -129,7 +129,11 @@ class TestEscolhaAutomaticaDeLocalizador(unittest.TestCase):
         porId = next(c for c in ordenados if c["strategy"] == "id")
         self.assertFalse(porId["unique"])
         self.assertEqual(porId["matches"], 2)
-        self.assertEqual(ordenados[-1]["strategy"], "id", "ambiguo tem de ir para o fim")
+        # Todo candidato unico vem antes de todo ambiguo. (Antes o xpath se
+        # dizia unico sem ser: `matches` fixo em 1, ver test_seletor_unico.)
+        flags = [c["unique"] for c in ordenados]
+        self.assertEqual(flags, sorted(flags, reverse=True), "ambiguo tem de ir para o fim")
+        self.assertEqual(ordenados[0]["strategy"], "position")
 
     def test_todo_candidato_explica_o_porque(self):
         """A tela mostra o motivo da escolha; sem isso o usuario nao tem como

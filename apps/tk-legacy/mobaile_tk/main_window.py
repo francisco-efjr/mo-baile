@@ -2434,10 +2434,15 @@ class MobileRecorderApp:
     def _on_passive_tap(self, target_x: int, target_y: int):
         self.event_queue.put(("passive_tap", (target_x, target_y)))
 
-    def _start_passive_listeners(self):
+    def _start_passive_listeners(self) -> bool:
+        """Liga a escuta da plataforma ativa. Devolve False se nao conseguiu.
+
+        Quem chama decide o que mostrar: antes a falha escrevia "indisponivel"
+        e o toggle sobrescrevia com "ativado" logo em seguida.
+        """
         self._stop_passive_listeners()
         if not self.passive_mode_var.get():
-            return
+            return False
         if self.active_platform == "android" and self.selected_device:
             self.android_listener = AndroidPassiveListener(
                 adb_path=self.adb.adb_path,
@@ -2445,9 +2450,17 @@ class MobileRecorderApp:
                 on_tap_callback=self._on_passive_tap,
             )
             self.android_listener.start()
-        elif self.active_platform == "ios":
+            return True
+        if self.active_platform == "ios":
             self.ios_listener = IOSPassiveListener(on_tap_callback=self._on_passive_tap)
-            self.ios_listener.start()
+            try:
+                self.ios_listener.start()
+            except Exception as exc:  # AdapterError: Python sem pyobjc-framework-Quartz
+                self.ios_listener = None
+                self._set_status(f"Modo Passivo indisponivel: {exc}")
+                return False
+            return True
+        return False
 
     def _stop_passive_listeners(self):
         if self.android_listener:
@@ -2459,8 +2472,13 @@ class MobileRecorderApp:
 
     def _on_passive_mode_toggled(self):
         if self.passive_mode_var.get():
-            self._start_passive_listeners()
-            self._set_status("Modo Passivo ativado.")
+            if self._start_passive_listeners():
+                self._set_status("Modo Passivo ativado.")
+            else:
+                # A flag volta a False so aqui, no clique: zera-la em silencio
+                # numa troca de plataforma deixava o passivo desligado depois,
+                # inclusive no Android.
+                self.passive_mode_var.set(False)
         else:
             self._stop_passive_listeners()
             self._set_status("Modo Passivo desativado.")

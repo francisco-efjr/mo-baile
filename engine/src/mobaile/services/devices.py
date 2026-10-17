@@ -41,10 +41,15 @@ class DeviceWatcher:
         on_device_changed: DeviceChangedHandler,
         target_platform: str = "ios",
         poll_interval: float | None = None,
+        on_targets_listed: Callable[[str, list[str]], None] | None = None,
     ):
         self.adb = adb_bridge
         self.ios = ios_bridge
         self.on_device_changed = on_device_changed
+        # Chamado em toda listagem bem-sucedida, com os ids prontos, mesmo
+        # quando nada mudou. `on_device_changed` so dispara na transicao, e um
+        # aparelho que volta sem ser o alvo da sessao nao gera transicao.
+        self.on_targets_listed = on_targets_listed
         self.target_platform = target_platform
         self.poll_interval = poll_interval or settings.poll_interval
 
@@ -93,6 +98,23 @@ class DeviceWatcher:
             self.target_platform = platform
             self.reset_current()
 
+    def set_target(self, platform: str, device_id: str | None) -> None:
+        """Fixa o alvo que a sessao escolheu, sem que a proxima varredura o troque.
+
+        `set_platform` zerava o estado e a varredura seguinte elegia sempre o
+        primeiro alvo: com emulador e aparelho fisico conectados, escolher o
+        segundo era desfeito em ate um intervalo, e ainda gerava um
+        `device.changed` que religava o espelho. Aqui o vigia passa a saber qual
+        e o alvo da sessao. Ele so volta a eleger sozinho se esse alvo sumir.
+        """
+        with self._lock:
+            # A geracao sobe sempre: uma listagem em voo foi pedida antes da
+            # escolha e pode descrever outra plataforma.
+            self._generation += 1
+            self.target_platform = platform
+            self.current_platform = platform if device_id else None
+            self.current_device_id = device_id or None
+
     def reset_current(self) -> None:
         self.current_device_id = None
         self.current_platform = None
@@ -120,21 +142,40 @@ class DeviceWatcher:
         """
         with self._lock:
             platform, generation = self.target_platform, self._generation
+        listed = True
         try:
             targets = self._list_targets(platform)
         except (EngineError, OSError) as exc:
             logger.warning("Falha ao consultar dispositivos: %s", exc)
             targets = []
+            listed = False
 
         with self._lock:
+            # Decidido antes do aviso: uma listagem que terminou depois do
+            # `stop()` nao pode disparar trabalho novo (retentativa de proxy
+            # durante o encerramento), e uma de outra plataforma nao vale.
             if self._stop_event.is_set():
                 return None
             if generation != self._generation:
                 logger.debug("Listagem de %s descartada: a plataforma mudou durante ela.", platform)
                 return None
 
+        if listed and self.on_targets_listed is not None:
+            try:
+                self.on_targets_listed(platform, [target[0] for target in targets])
+            except Exception:
+                logger.exception("Falha ao tratar a listagem de dispositivos.")
+
+        with self._lock:
+            if self._stop_event.is_set() or generation != self._generation:
+                return None
+
             if targets:
-                device_id = targets[0][0]
+                ids = [target[0] for target in targets]
+                if self.current_platform == platform and self.current_device_id in ids:
+                    # O alvo da sessao continua conectado: nao ha o que eleger.
+                    return self.current_device_id
+                device_id = ids[0]
                 if self.current_platform != platform or self.current_device_id != device_id:
                     self.current_platform = platform
                     self.current_device_id = device_id

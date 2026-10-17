@@ -49,7 +49,12 @@ class AppState {
     var httpRequests: [NetworkEvent] = []
     var selectedRequest: NetworkEvent? = nil
     var httpFilterText: String = ""
+    /// Escopo da tabela de Rede (Todos · API · Mídia · Erros · Lentas).
+    var networkScope: NetworkScope = .all
     var proxyRunning: Bool = false
+    /// Resposta do último `proxy.diagnose` e se o popover dela está aberto.
+    var trafficDiagnosis: EngineDTO.TrafficDiagnosis? = nil
+    var trafficDiagnosisPresented: Bool = false
     /// Tráfego do app em debug, sem proxy: no iOS, o log `CFNETWORK_DIAGNOSTICS`
     /// pelo cabo; no Android, o log do OkHttp pelo logcat.
     var debugNetActive: Bool = false
@@ -109,7 +114,7 @@ class AppState {
         guard let report else { return [] }
         let busca = SearchQuery(reportFilterText)
         return report.results.filter { result in
-            reportFilter.includes(result) && (busca.isEmpty || busca.matches(result.searchableFields))
+            reportFilter.includes(result) && (busca.isEmpty || busca.matchesLiteral(result.searchableFields))
         }
     }
 
@@ -119,7 +124,7 @@ class AppState {
         let busca = SearchQuery(reportFilterText)
         guard !busca.isEmpty else { return report.extras }
         return report.extras.filter {
-            busca.matches([$0.event, $0.screenText, $0.detailText, $0.componentText, $0.flowName ?? ""])
+            busca.matchesLiteral([$0.event, $0.screenText, $0.detailText, $0.componentText, $0.flowName ?? ""])
         }
     }
 
@@ -193,14 +198,19 @@ class AppState {
     /// correlação usam.
     var filteredHTTPRequests: [NetworkEvent] {
         let busca = SearchQuery(httpFilterText)
-        guard !busca.isEmpty else { return httpRequests.reversed() }
-        return httpRequests.reversed().filter { busca.matches($0.searchableFields) }
+        let escopo = networkScope
+        let janela = correlation.map { Set($0.requests) }
+        if busca.isEmpty && escopo == .all && janela == nil { return httpRequests.reversed() }
+        return httpRequests.reversed().filter {
+            (janela?.contains($0.id) ?? true) && escopo.includes($0) && (busca.isEmpty || busca.matches($0))
+        }
     }
 
     var filteredAnalyticsEvents: [AnalyticsEvent] {
         let busca = SearchQuery(analyticsFilterText)
-        guard !busca.isEmpty else { return analyticsEvents.reversed() }
-        return analyticsEvents.reversed().filter { busca.matches($0.searchableFields) }
+        let janela = correlation.map { Set($0.events) }
+        if busca.isEmpty && janela == nil { return analyticsEvents.reversed() }
+        return analyticsEvents.reversed().filter { (janela?.contains($0.id) ?? true) && (busca.isEmpty || busca.matches($0)) }
     }
     
     // MARK: - Actions
@@ -225,11 +235,13 @@ class AppState {
     
     func clearHTTPTraffic() {
         httpRequests.removeAll()
+        correlation = nil
         selectedRequest = nil
     }
     
     func clearAnalyticsEvents() {
         analyticsEvents.removeAll()
+        correlation = nil
         selectedAnalyticsEvent = nil
     }
     
@@ -238,6 +250,7 @@ class AppState {
         actionsCode = ""
         locatorsCode = ""
         selectedStepID = nil
+        correlation = nil
     }
 
     // MARK: - Janela (redesenho 3.0)
@@ -286,6 +299,19 @@ class AppState {
     }
     /// Passo escolhido na seção Fluxo da barra lateral. Destaca o código dele.
     var selectedStepID: UUID? = nil
+    /// Janela correlacionada de um passo (`session.correlate`): enquanto houver
+    /// uma, Rede e Analytics mostram só o que caiu nela. Independe da seleção
+    /// na barra lateral, para sobreviver à troca de área.
+    var correlation: EngineDTO.Correlation? = nil
+
+    var correlatedStep: AutomationStep? {
+        guard let correlation else { return nil }
+        return steps.first { $0.stepNum == correlation.stepNum }
+    }
+
+    func clearCorrelation() {
+        correlation = nil
+    }
     /// Confirmação de limpeza aberta (tráfego, eventos ou passos).
     var pendingClear: ClearKind? = nil
     /// Pedido de foco no campo de busca da hierarquia (⌘F em Page Objects).

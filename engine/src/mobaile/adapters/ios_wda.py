@@ -54,6 +54,29 @@ class IOSBridge:
 
         return None
 
+    def set_mjpeg_scaling(self, percent: int, quality: int = 80) -> bool:
+        """Pede ao WDA quadros MJPEG reduzidos (`mjpegScalingFactor`, em %).
+
+        Sem isso o fluxo vem em pixels nativos e cada quadro teria de ser
+        decodificado, reduzido e reencodado no motor. Melhor esforco: WDA
+        antigo sem a configuracao devolve erro e o motor segue.
+        """
+        import requests
+
+        sid = self._ensure_session()
+        if not sid:
+            return False
+        try:
+            res = requests.post(
+                f"{self.wda_url}/session/{sid}/appium/settings",
+                json={"settings": {"mjpegScalingFactor": max(1, min(100, int(percent))),
+                                   "mjpegServerScreenshotQuality": max(1, min(100, int(quality)))}},
+                timeout=4,
+            )
+            return res.status_code == 200
+        except Exception:
+            return False
+
     def list_booted_simulators(self) -> list[tuple[str, str]]:
         try:
             cmd = ["xcrun", "simctl", "list", "devices"]
@@ -100,12 +123,43 @@ class IOSBridge:
             pass
         return None
 
-    def tap(self, x: int, y: int) -> bool:
-        import requests
+    @staticmethod
+    def _sessao_invalida(res) -> bool:
+        """O WDA disse que o id de sessao em cache nao existe mais.
 
-        sid = self._ensure_session()
-        if not sid:
+        Um 404 sozinho nao basta: no W3C ele tambem e "unknown command" e "no
+        such element". Tratar qualquer 404 como sessao caduca pulava o
+        fallback `/actions` de um WDA sem a rota `/wda/tap`.
+        """
+        if res.status_code != 404:
             return False
+        try:
+            erro = ((res.json() or {}).get("value") or {}).get("error", "")
+        except (ValueError, AttributeError):
+            erro = ""
+        return "invalid session" in str(erro).lower()
+
+    def tap(self, x: int, y: int) -> bool:
+        """Toca em (x, y). Se o id de sessao caducou, abre outro e tenta uma vez.
+
+        O 404 do WDA e uma resposta HTTP, nao excecao: antes o id velho ficava
+        em cache e todo toque falhava ate reiniciar o motor. So o 404 refaz; um
+        500 nao e id caduco, e repetir poderia tocar duas vezes.
+        """
+        for _tentativa in range(2):
+            sid = self._ensure_session()
+            if not sid:
+                return False
+            resultado = self._tap_na_sessao(sid, x, y)
+            if resultado is not None:
+                return resultado
+            if self.session_id == sid:
+                self.session_id = None
+        return False
+
+    def _tap_na_sessao(self, sid: str, x: int, y: int) -> bool | None:
+        """`True`/`False` pelo resultado, `None` se a sessao `sid` caducou."""
+        import requests
 
         try:
             res = requests.post(
@@ -115,6 +169,8 @@ class IOSBridge:
             )
             if res.status_code == 200:
                 return True
+            if self._sessao_invalida(res):
+                return None
         except Exception:
             pass
 
@@ -139,6 +195,8 @@ class IOSBridge:
                 json=action_payload,
                 timeout=4,
             )
+            if self._sessao_invalida(res):
+                return None
             return res.status_code == 200
         except Exception:
             self.session_id = None

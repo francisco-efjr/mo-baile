@@ -222,14 +222,25 @@ def build() -> dict:
         with patch.object(server.adb, "get_ui_hierarchy", return_value=HIERARCHY_XML):
             fixtures["hierarchy.dump"] = call("hierarchy.dump")
         fixtures["hierarchy.element_at"] = call("hierarchy.element_at", {"x": 60, "y": 45})
-        fixtures["codegen.record"] = call("codegen.record", {"x": 60, "y": 45, "strategy": "position"})
+        # Hora de gravacao fixa: `recorded_at` e relogio, nao contrato.
+        from types import SimpleNamespace
+
+        from mobaile.services import codegen as codegen_mod
+
+        with patch.object(codegen_mod, "time", SimpleNamespace(time=lambda: 1757030000.0)):
+            fixtures["codegen.record"] = call("codegen.record", {"x": 60, "y": 45, "strategy": "position"})
         fixtures["codegen.steps"] = call("codegen.steps")
+        fixtures["session.correlate"] = call("session.correlate", {"step_num": 1})
         with patch.object(server.adb, "take_screenshot", return_value=Image.new("RGB", (60, 120), "black")):
             fixtures["screen.capture"] = call("screen.capture", {"max_width": 30})
         with patch.object(server.adb, "get_screen_size", return_value=(1080, 2400)):
             fixtures["screen.size"] = call("screen.size")
         fixtures["stream.stats"] = call("stream.stats")
         fixtures["proxy.events"] = call("proxy.events")
+        with patch.object(server.adb, "is_proxy_configured", return_value=False):
+            fixtures["proxy.diagnose"] = call("proxy.diagnose")
+        # Carimbo de relogio nao e contrato: fixo, para a conferencia nao oscilar.
+        fixtures["proxy.diagnose"]["result"]["checked_at"] = 0
         fixtures["devices.list"] = call("devices.list")
         fixtures["erro_dominio"] = call("input.tap", {"x": -1, "y": 0})
 
@@ -266,6 +277,29 @@ def build() -> dict:
         call("wda.start", {"udid": SIMULADORES[0]["udid"], "progress_token": "wda-1"})
         avisos = [json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip()]
         fixtures["notif_$/progress"] = next(m for m in avisos if m.get("method") == contract.PROGRESS)
+
+        # `stream.frame` capturado da emissao real do espelho, em PNG: o JPEG
+        # muda de bytes entre versoes da libjpeg e a conferencia e por pixel.
+        out.seek(0)
+        out.truncate()
+        with patch.object(server.adb, "take_screenshot", return_value=Image.new("RGB", (60, 120), "black")):
+            call("stream.start", {"fps": 30, "max_width": 30, "format": "png"})
+            import time as _time
+
+            prazo = _time.monotonic() + 3
+            quadro = None
+            while quadro is None and _time.monotonic() < prazo:
+                _time.sleep(0.05)
+                quadro = next(
+                    (json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip() and '"stream.frame"' in linha),
+                    None,
+                )
+            call("stream.stop")
+        if quadro is None:
+            raise RuntimeError("o espelho nao emitiu quadro para a fixture")
+        for chave in ("fps", "capture_ms", "skipped"):
+            quadro["params"][chave] = 0
+        fixtures["notif_stream.frame"] = quadro
 
     traffic = NetworkEvent(
         id=7, timestamp=1757030000.5, time_str="14:32:10.123", method="POST",
@@ -324,7 +358,7 @@ def _pixels(valor: str) -> str:
 def _normalizar(valor):
     if isinstance(valor, dict):
         return {
-            k: _pixels(v) if k.endswith("png_base64") and isinstance(v, str) and v else _normalizar(v)
+            k: _pixels(v) if k in ("png_base64", "image_base64") and isinstance(v, str) and v else _normalizar(v)
             for k, v in valor.items()
         }
     if isinstance(valor, list):

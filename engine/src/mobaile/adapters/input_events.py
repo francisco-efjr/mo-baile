@@ -5,6 +5,8 @@ import threading
 import time
 from collections.abc import Callable
 
+from mobaile.domain.errors import AdapterError
+
 try:
     import Quartz
     QUARTZ_AVAILABLE = True
@@ -201,10 +203,15 @@ class AndroidPassiveListener:
 
                             last_tap_time = now
                             tap_committed = True
-                            self.on_tap_callback(target_x, target_y)
+                            try:
+                                self.on_tap_callback(target_x, target_y)
+                            except Exception:
+                                # Um toque que falha nao pode matar a escuta dos
+                                # seguintes: a thread morria e ninguem sabia.
+                                logger.exception("Falha ao tratar o toque em (%s,%s).", target_x, target_y)
 
         except Exception:
-            pass
+            logger.exception("A leitura do getevent terminou por erro.")
         finally:
             if self._proc:
                 try:
@@ -293,7 +300,14 @@ class IOSPassiveListener:
         self._thread: threading.Thread | None = None
 
     def start(self):
-        if not QUARTZ_AVAILABLE or (self._thread and self._thread.is_alive()):
+        if not QUARTZ_AVAILABLE:
+            # Sem isto o servidor respondia "listening: true" e nenhum toque
+            # virava passo. O Python do app precisa do pyobjc-framework-Quartz.
+            raise AdapterError(
+                "A escuta passiva no iOS precisa do pyobjc-framework-Quartz, que nao esta neste Python.",
+                detail="Instale com: python3 -m pip install pyobjc-framework-Quartz",
+            )
+        if self._thread and self._thread.is_alive():
             return
 
         self._stop_event.clear()

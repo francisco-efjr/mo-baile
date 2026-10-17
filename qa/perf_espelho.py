@@ -47,7 +47,7 @@ def _consumir(m, duracao, com_roundtrip=False, sondar_comando=False):
             intervalos.append((agora - anterior) * 1000)
         anterior = agora
         chegadas.append(agora)
-        tamanhos.append(len(msg["params"]["png_base64"]))
+        tamanhos.append(len(msg["params"].get("image_base64") or msg["params"]["png_base64"]))
         if com_roundtrip:
             m.ok("stream.stats", timeout=20)
     return chegadas, tamanhos, intervalos, latencias, time.time() - inicio

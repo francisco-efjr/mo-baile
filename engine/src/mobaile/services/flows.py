@@ -291,29 +291,59 @@ def execute_ios_step(step):
         log("❌ Falha ao obter Session ID do WebDriverAgent.")
         return False
 
-    log(f"-> Clicando em {{var_name}} via WDA em ({{x}}, {{y}})...")
-    res = requests.post(f"{{WDA_URL}}/session/{{sid}}/wda/tap", json={{"x": x, "y": y}}, timeout=5)
-    if res.status_code == 200:
-        return True
+    def wda_ok(res):
+        # O WDA real devolve 200 com o erro dentro de `value`; so o status nao basta.
+        if res.status_code != 200:
+            return False
+        try:
+            valor = res.json().get("value")
+        except ValueError:
+            return True
+        return not (isinstance(valor, dict) and valor.get("error"))
 
-    # Fallback para /actions
-    action_payload = {{
-        "actions": [
-            {{
-                "type": "pointer",
-                "id": "finger1",
-                "parameters": {{"pointerType": "touch"}},
-                "actions": [
-                    {{"type": "pointerMove", "duration": 0, "x": x, "y": y}},
-                    {{"type": "pointerDown", "button": 0}},
-                    {{"type": "pause", "duration": 80}},
-                    {{"type": "pointerUp", "button": 0}},
-                ],
-            }}
-        ]
-    }}
-    res2 = requests.post(f"{{WDA_URL}}/session/{{sid}}/actions", json=action_payload, timeout=5)
-    return res2.status_code == 200
+    def tocar(rotulo):
+        log(f"-> Clicando em {{rotulo}} via WDA em ({{x}}, {{y}})...")
+        res = requests.post(f"{{WDA_URL}}/session/{{sid}}/wda/tap", json={{"x": x, "y": y}}, timeout=5)
+        if wda_ok(res):
+            return True
+        # Fallback para /actions
+        action_payload = {{
+            "actions": [
+                {{
+                    "type": "pointer",
+                    "id": "finger1",
+                    "parameters": {{"pointerType": "touch"}},
+                    "actions": [
+                        {{"type": "pointerMove", "duration": 0, "x": x, "y": y}},
+                        {{"type": "pointerDown", "button": 0}},
+                        {{"type": "pause", "duration": 80}},
+                        {{"type": "pointerUp", "button": 0}},
+                    ],
+                }}
+            ]
+        }}
+        res2 = requests.post(f"{{WDA_URL}}/session/{{sid}}/actions", json=action_payload, timeout=5)
+        return wda_ok(res2)
+
+    if step.get("action_type", "click") != "input":
+        return tocar(var_name)
+
+    # Digitacao: antes este passo virava so um toque e era dado como sucesso.
+    text = step.get("input_text")
+    if not isinstance(text, str) or not text:
+        log(f"❌ Passo {{var_name}} de digitação sem texto gravado; nada foi digitado.")
+        return False
+    if not tocar(f"campo {{var_name}}"):
+        return False
+    time.sleep(0.3)
+    # Nunca o valor: o log vira `flow.log` na interface e pode conter senha.
+    log(f"-> Digitando {{len(text)}} caracteres em {{var_name}} via WDA...")
+    res = requests.post(f"{{WDA_URL}}/session/{{sid}}/wda/keys", json={{"value": list(text)}}, timeout=10)
+    if not wda_ok(res):
+        # Sem a mensagem do WDA: ela pode repetir o texto do campo.
+        log(f"❌ O WebDriverAgent recusou a digitação em {{var_name}} (HTTP {{res.status_code}}).")
+        return False
+    return True
 
 def main():
     # SIGTERM apenas pede a parada: a ação atual pode terminar, e o próximo
