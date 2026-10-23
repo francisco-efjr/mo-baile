@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.6.2",
+      "version": "3.7.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -56,6 +56,8 @@
         "recording.status",
         "recording.stop",
         "report.audit",
+        "report.card",
+        "report.card_update",
         "report.export",
         "report.import",
         "report.spec",
@@ -82,7 +84,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.6.2",
+      "engine_version": "3.7.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -373,6 +375,16 @@
           "lane": "report",
           "timeout_s": 600,
           "progress": true
+        },
+        "report.card": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.card_update": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
         }
       },
       "notifications": [
@@ -956,6 +968,16 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:home"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:00:00.000",
@@ -1011,6 +1033,24 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:pessoal:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-pessoal"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:01:00.000",
@@ -1043,6 +1083,24 @@
           "variation": "click:[numero]-parcela-sem-seguro",
           "status": "missing",
           "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:pessoal:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-pessoal"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
           "matched": null,
           "occurrences": 0,
           "older_divergent": 0,
@@ -1089,6 +1147,24 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:02:00.000",
@@ -1120,6 +1196,24 @@
           "variation": "click:[numero]-parcela-sem-seguro",
           "status": "missing",
           "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
           "matched": null,
           "occurrences": 0,
           "older_divergent": 0,
@@ -1176,6 +1270,28 @@
               "expected": "pedido-pessoal",
               "obtained": "pedido-pessoal",
               "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:pessoal:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-pessoal"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"14063\", \"item_name\": \"pedido-pessoal\"}]"
             }
           ],
           "matched": {
@@ -1253,6 +1369,28 @@
               "expected": "pedido-empresa",
               "obtained": "pedido-empresa",
               "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"[preenchido]\", \"item_name\": \"pedido-empresa\"}]"
             }
           ],
           "matched": {
@@ -1417,6 +1555,120 @@
       "data": {
         "code": "invalid_input",
         "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log."
+      }
+    }
+  },
+  "report.card": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "card_index": 2,
+      "cards": 3,
+      "secao": "Simulação",
+      "titulo": null,
+      "evento": "add_to_cart",
+      "print": null,
+      "params": [
+        {
+          "key": "screen_name",
+          "value": "app:pedido:{fluxo}:simulacao"
+        },
+        {
+          "key": "flow_name",
+          "value": "pedido-{fluxo}"
+        },
+        {
+          "key": "insurance",
+          "value": "[0|1]"
+        },
+        {
+          "key": "value",
+          "value": "[numero]"
+        },
+        {
+          "key": "items",
+          "value": [
+            {
+              "item_id": "[preenchido]",
+              "item_name": "pedido-{fluxo}"
+            }
+          ]
+        }
+      ],
+      "variacoes": [],
+      "obs": null,
+      "obs_por_fluxo": false,
+      "params_por_fluxo": [
+        "pessoal"
+      ]
+    }
+  },
+  "report.card_update": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "pessoal",
+            "label": "PDP · pedido-pessoal"
+          },
+          {
+            "key": "empresa",
+            "label": "PDE · pedido-empresa"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "card": {
+        "card_index": 1,
+        "cards": 3,
+        "secao": "Simulação",
+        "titulo": "Parcelas",
+        "evento": "interaction_pedido_{fluxo}",
+        "print": null,
+        "params": [
+          {
+            "key": "screen_name",
+            "value": "app:pedido:{fluxo}:simulacao"
+          },
+          {
+            "key": "flow_name",
+            "value": "pedido-{fluxo}"
+          },
+          {
+            "key": "component",
+            "value": "button"
+          }
+        ],
+        "variacoes": [
+          [
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          [
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ]
+        ],
+        "obs": "Conferido com produto",
+        "obs_por_fluxo": false,
+        "params_por_fluxo": []
       }
     }
   },

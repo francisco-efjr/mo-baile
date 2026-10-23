@@ -12,4 +12,4 @@ Camadas (dependências apontam sempre para dentro):
 Nada aqui importa Tkinter, SwiftUI ou qualquer camada de apresentação.
 """
 
-__version__ = "3.6.2"
+__version__ = "3.7.0"

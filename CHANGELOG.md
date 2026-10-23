@@ -5,6 +5,29 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.7.0] - 2026-10-22
+
+### Adicionado
+
+- **Copiar Bug no Relatório.** Numa validação divergente ou não disparada, o
+  botão "Copiar Bug" do painel Validação (ou o menu de contexto da linha)
+  copia o bug no modelo do time: Resultado Obtido com obtido × esperado de
+  cada parâmetro que diverge (ou o esperado, no não disparado), passos para
+  reproduzir com fluxo, tela e ação, anexos e a tag `automacao`. Usuário,
+  base e versão ficam em branco para preencher. Vão junto duas imagens: o
+  painel Validação desenhado em claro e o print do card do Figma. O clipboard
+  leva RTFD, HTML com as imagens embutidas e texto puro, e cada destino usa o
+  que entende. "Copiar Imagens do Bug" põe só as duas imagens lado a lado.
+- **Editar o card da spec no app.** O botão "Editar" do inspector abre um
+  formulário com seção, título, evento, parâmetros, variações e observação.
+  Salvar (⌘S) grava no `.json` da spec e audita de novo, mantendo a linha
+  escolhida. Só esses campos mudam: o print, `por_fluxo`,
+  `params_por_fluxo`, observação por fluxo e chaves desconhecidas ficam como
+  estavam. A spec inteira é validada antes, e o arquivo é trocado de uma vez.
+- Métodos `report.card` e `report.card_update`, e o campo `expected` em cada
+  resultado de `report.audit` (o que a variação espera, com o fluxo
+  aplicado). Tudo aditivo: `PROTOCOL_VERSION` continua 2.
+
 ## [3.6.2] - 2026-10-22
 
 ### Corrigido
