@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import MoBaile
 
 /// Splash de abertura: fica até o app estar pronto, com mínimo e teto.
@@ -61,5 +62,46 @@ final class SplashTimingTests: XCTestCase {
         XCTAssertEqual(sessao.launchPhase, .startingEngine)
         await sessao.connect()
         XCTAssertEqual(sessao.launchPhase, .failed)
+    }
+
+    // MARK: - Janela principal atrás do splash
+
+    private func janela() -> NSWindow {
+        let janela = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+                              styleMask: [.titled], backing: .buffered, defer: true)
+        janela.isReleasedWhenClosed = false
+        return janela
+    }
+
+    /// Defeito que cobre: a cena abria a janela principal junto com o app, e o
+    /// splash aparecia por cima com a tela inteira já desenhada atrás.
+    func testNaAberturaAJanelaEsperaOSplashSair() {
+        let splash = SplashController()
+        let principal = janela()
+        splash.prepareLaunch()
+        splash.hold(principal)
+        XCTAssertEqual(principal.alphaValue, 0, "escondida enquanto o splash está na tela")
+        splash.revealHeld(animated: false)
+        XCTAssertEqual(principal.alphaValue, 1)
+        XCTAssertFalse(splash.holdingLaunch)
+    }
+
+    /// Testes, capturas e Janela › Mostrar Splash não passam pela abertura: a
+    /// janela não pode sumir, senão a captura sai vazia.
+    func testForaDaAberturaNadaFicaEscondido() {
+        let splash = SplashController()
+        let principal = janela()
+        splash.hold(principal)
+        XCTAssertEqual(principal.alphaValue, 1)
+    }
+
+    /// Janela que entra depois de o splash sair (reabrir a cena) aparece direto.
+    func testJanelaDepoisDaAberturaApareceDireto() {
+        let splash = SplashController()
+        splash.prepareLaunch()
+        splash.revealHeld(animated: false)
+        let nova = janela()
+        splash.hold(nova)
+        XCTAssertEqual(nova.alphaValue, 1)
     }
 }

@@ -75,6 +75,51 @@ final class SplashController {
     private var window: NSWindow?
     private var timer: Timer?
 
+    /// Abertura em andamento: a janela principal espera o splash sair.
+    private(set) var holdingLaunch = false
+    /// Janelas escondidas até o splash sair. Fraco: a cena pode fechar antes.
+    private var held: [WeakWindow] = []
+
+    /// Chamado antes de a cena criar a janela principal
+    /// (`applicationWillFinishLaunching`).
+    ///
+    /// A cena `Window` abre a janela junto com o app, e o splash ficava por cima
+    /// com a tela inteira já desenhada atrás. A janela não pode deixar de
+    /// existir, porque é ela que sobe o motor (`ContentView.task`); fica
+    /// transparente e aparece quando o splash sai. Sem esta chamada (testes,
+    /// capturas, Janela › Mostrar Splash), nada é escondido.
+    func prepareLaunch() {
+        holdingLaunch = true
+    }
+
+    /// Esconde `window` até o splash de abertura sair. Fora da abertura, não faz nada.
+    func hold(_ window: NSWindow) {
+        guard holdingLaunch, !held.contains(where: { $0.window === window }) else { return }
+        window.alphaValue = 0
+        held.append(WeakWindow(window: window))
+    }
+
+    /// Devolve as janelas escondidas, com o mesmo esmaecer da saída do splash.
+    func revealHeld(animated: Bool = true) {
+        holdingLaunch = false
+        let janelas = held.compactMap(\.window)
+        held.removeAll()
+        guard !janelas.isEmpty else { return }
+        if animated {
+            NSAnimationContext.runAnimationGroup { contexto in
+                contexto.duration = 0.24
+                for janela in janelas { janela.animator().alphaValue = 1 }
+            }
+        } else {
+            for janela in janelas { janela.alphaValue = 1 }
+        }
+        janelas.first?.makeKeyAndOrderFront(nil)
+    }
+
+    private struct WeakWindow {
+        weak var window: NSWindow?
+    }
+
     /// Mostra o splash. Com `phase`, acompanha a abertura do app; sem, fica
     /// `SplashTiming.minimum` e sai (Janela › Mostrar Splash).
     func show(phase: (@MainActor () -> LaunchPhase)? = nil) {
@@ -117,6 +162,7 @@ final class SplashController {
     private func dismiss(_ window: NSWindow) {
         timer?.invalidate()
         timer = nil
+        revealHeld()
         NSAnimationContext.runAnimationGroup { contexto in
             contexto.duration = 0.24
             window.animator().alphaValue = 0

@@ -30,6 +30,8 @@ struct MoBaileApp: App {
                 )
                 .preferredColorScheme(themeManager.preferredColorScheme)
                 .onAppear { delegate.session = session }
+                // A janela espera o splash de abertura sair (SplashController).
+                .background(WindowReader { SplashController.shared.hold($0) })
         }
         .defaultSize(DesignMetrics.Window.defaultSize)
         .windowToolbarStyle(.unified)
