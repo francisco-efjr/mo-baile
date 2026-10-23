@@ -5,6 +5,32 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.8.0] - 2026-10-23
+
+### Adicionado
+
+- **Relatório HTML interativo com a identidade do Mo baile.** O
+  `relatorio.html` do Exportar agora é a aba Relatório fora do app: toolbar
+  de vidro com o ícone, barra lateral com as seções da spec, anel de
+  conformidade, filtro igual ao do app (Todas, Pedem Ação, Divergentes, Não
+  Disparadas, OK, Fora da Spec), busca, cards com o print ampliável e a
+  tabela Parâmetro · Obtido · Esperado por fluxo, o "Bloco" com Copiar,
+  visão em tabela ordenável e "Fora da spec" em tabelas. Segue o claro e o
+  escuro do sistema (com seletor), Aumentar contraste, Reduzir movimento e
+  Reduzir transparência. Rodapé em letras miúdas: "Gerado pelo Mo baile".
+- O design system inteiro vai embutido no HTML (tokens, vidro, molas e
+  componentes `.mb-*`), copiado de `docs/design/design-system` por
+  `tools/sync_report_assets.py`; um teste falha se a cópia ficar para trás.
+- Animações com Motion 13.5.1 (MIT, embutido, sem internet) nas molas do
+  design system. Toda animação termina em até 1,5 s, e sem JavaScript ou na
+  impressão o conteúdo aparece inteiro.
+
+### Segurança
+
+- O HTML exportado tem política de conteúdo: nenhuma requisição de rede e só
+  os três scripts embutidos rodam, autorizados pelo hash. Texto da spec e do
+  log continua sempre escapado.
+
 ## [3.7.0] - 2026-10-22
 
 ### Adicionado

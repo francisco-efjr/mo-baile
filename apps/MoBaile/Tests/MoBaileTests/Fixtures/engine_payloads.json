@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.7.0",
+      "version": "3.8.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -84,7 +84,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.7.0",
+      "engine_version": "3.8.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -1477,7 +1477,7 @@
           "kind": "html",
           "name": "relatorio_auditoria.html",
           "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.html",
-          "bytes": 6444
+          "bytes": 353151
         },
         {
           "kind": "markdown",
