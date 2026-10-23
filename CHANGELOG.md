@@ -5,6 +5,17 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.9.0] - 2026-10-23
+
+### Adicionado
+
+- **Período do log no cabeçalho do relatório.** Ao lado da plataforma, em
+  destaque, o HTML exportado mostra a data e a hora do primeiro ao último
+  evento do log auditado, com a duração: "Log 08/10 10:00:00 até 10:06:00 ·
+  6 min". A data aparece quando o log a tem (o logcat traz dia e mês; o log
+  do iOS, o ano também) e só se repete no fim se o dia mudou. O Markdown
+  ganhou a linha "Período do log".
+
 ## [3.8.0] - 2026-10-23
 
 ### Adicionado

@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.8.0",
+      "version": "3.9.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -84,7 +84,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.8.0",
+      "engine_version": "3.9.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -1457,7 +1457,7 @@
         }
       ],
       "observations": "Eventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_pessoal · app:pedido:pessoal:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.",
-      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- 3 cards · 7 validações · OK: 3 · Erro: 4 (sendo 2 não disparadas) · Conformidade: 42.9%\n- Plataforma: ANDROID · 10 eventos únicos (1 duplicados removidos de 11 da plataforma; 12 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:pedido:home | OK |  | 10:00:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:parcelas | OK |  | 10:01:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:parcelas | ERRO | component: obtido toggle, esperado button | 10:02:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | PDP · pedido-pessoal | add_to_cart | app:pedido:pessoal:simulacao | OK | ⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado | 10:04:00.000 | 2 |\n| Simulação | add_to_cart | PDE · pedido-empresa | add_to_cart | app:pedido:empresa:simulacao | ERRO | screen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao | 10:01:45.000 | 1 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_pessoal · app:pedido:pessoal:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
+      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- Período do log: 08/10 10:00:00 até 10:06:00 (6 min)\n- 3 cards · 7 validações · OK: 3 · Erro: 4 (sendo 2 não disparadas) · Conformidade: 42.9%\n- Plataforma: ANDROID · 10 eventos únicos (1 duplicados removidos de 11 da plataforma; 12 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:pedido:home | OK |  | 10:00:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:parcelas | OK |  | 10:01:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:parcelas | ERRO | component: obtido toggle, esperado button | 10:02:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | PDP · pedido-pessoal | add_to_cart | app:pedido:pessoal:simulacao | OK | ⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado | 10:04:00.000 | 2 |\n| Simulação | add_to_cart | PDE · pedido-empresa | add_to_cart | app:pedido:empresa:simulacao | ERRO | screen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao | 10:01:45.000 | 1 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_pessoal · app:pedido:pessoal:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
       "tsv": "Seção\tCard\tFluxo\tEvento\tVariação\tStatus\tDivergências\tHorário\tDisparos\nHome\tscreen_view\t-\tscreen_view\tapp:pedido:home\tOK\t\t10:00:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDP · pedido-pessoal\tinteraction_pedido_pessoal\tclick:parcelas\tOK\t\t10:01:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDP · pedido-pessoal\tinteraction_pedido_pessoal\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:parcelas\tERRO\tcomponent: obtido toggle, esperado button\t10:02:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tadd_to_cart\tPDP · pedido-pessoal\tadd_to_cart\tapp:pedido:pessoal:simulacao\tOK\t⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado\t10:04:00.000\t2\nSimulação\tadd_to_cart\tPDE · pedido-empresa\tadd_to_cart\tapp:pedido:empresa:simulacao\tERRO\tscreen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao\t10:01:45.000\t1\n"
     }
   },
@@ -1477,13 +1477,13 @@
           "kind": "html",
           "name": "relatorio_auditoria.html",
           "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.html",
-          "bytes": 353151
+          "bytes": 354915
         },
         {
           "kind": "markdown",
           "name": "relatorio_auditoria.md",
           "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.md",
-          "bytes": 2166
+          "bytes": 2222
         },
         {
           "kind": "tsv",
