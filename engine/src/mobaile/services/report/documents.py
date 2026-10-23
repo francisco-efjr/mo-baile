@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from mobaile.domain.report import AuditReport, VariantResult, VariantStatus
-from mobaile.services.report.board import observation_lines, summary_lines
+from mobaile.services.report.board import log_period, observation_lines, summary_lines
 from mobaile.services.report.html_report import generate_interactive_html
 
 HEADERS = ["Seção", "Card", "Fluxo", "Evento", "Variação", "Status", "Divergências", "Horário", "Disparos"]
@@ -64,6 +64,9 @@ def generate_markdown(report: AuditReport) -> str:
     md = [f"# Auditoria de Tagueamento — {spec.projeto} ({report.platform.upper()})", ""]
     if spec.versao_especificacao:
         md.append(f"Spec: {spec.versao_especificacao}")
+    period = log_period(report)
+    if period:
+        md.append(f"- Período do log: {period.text()}")
     md += [f"- {line}" for line in summary_lines(report)] + [""]
     md.append("| " + " | ".join(HEADERS) + " |")
     md.append("|" + "|".join("---" for _ in HEADERS) + "|")

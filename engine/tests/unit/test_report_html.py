@@ -19,12 +19,13 @@ from datetime import datetime
 from pathlib import Path
 
 from PIL import Image
-from relatorio_dados import AUSENTES, DIVERGENTES, LOG, OK, SPEC, TOTAL, android
+from relatorio_dados import AUSENTES, DIVERGENTES, LOG, OK, SPEC, TOTAL, android, ios
 
 from mobaile import __version__
 from mobaile.domain.report import SpecTemplate
 from mobaile.services.report.audit import run_audit
-from mobaile.services.report.documents import generate_html
+from mobaile.services.report.board import log_period
+from mobaile.services.report.documents import generate_html, generate_markdown
 from mobaile.services.report.firebase_log import events_from_items
 from mobaile.services.report.html_report import MOTION_VERSION, generate_interactive_html
 
@@ -32,9 +33,9 @@ ROOT = Path(__file__).resolve().parents[3]
 QUANDO = datetime(2026, 10, 23, 14, 30)
 
 
-def relatorio(spec=None, log=None):
-    events, stats = events_from_items(LOG if log is None else log, "android")
-    return run_audit(SpecTemplate.from_dict(SPEC if spec is None else spec), events, "android", stats)
+def relatorio(spec=None, log=None, platform="android"):
+    events, stats = events_from_items(LOG if log is None else log, platform)
+    return run_audit(SpecTemplate.from_dict(SPEC if spec is None else spec), events, platform, stats)
 
 
 class TestRelatorioInterativo(unittest.TestCase):
@@ -98,6 +99,43 @@ class TestRelatorioInterativo(unittest.TestCase):
 
     def test_documents_usa_o_html_interativo(self):
         self.assertIn('class="rp-toolbar"', generate_html(self.report))
+
+
+class TestPeriodoDoLog(unittest.TestCase):
+    """Data e hora do primeiro ao último evento, no cabeçalho do HTML e no Markdown."""
+
+    def test_logcat_traz_dia_e_mes_e_a_duracao(self):
+        periodo = log_period(relatorio())
+        self.assertEqual((periodo.start, periodo.end, periodo.duration), ("08/10 10:00:00", "10:06:00", "6 min"))
+        self.assertEqual(periodo.text(), "08/10 10:00:00 até 10:06:00 (6 min)")
+
+    def test_destaque_ao_lado_da_plataforma(self):
+        html = generate_interactive_html(relatorio(), generated_at=QUANDO)
+        meta = re.search(r'<div class="rp-hero__meta">(.*?)</div>', html, re.S).group(1)
+        self.assertRegex(meta, r'rp-chip--android.*?</span><span class="rp-period"')
+        self.assertIn("<time>08/10 10:00:00</time><span class=\"rp-period__to\">até</span><time>10:06:00</time>", meta)
+        self.assertIn('<span class="rp-period__dur">6 min</span>', meta)
+
+    def test_markdown_tambem_traz_o_periodo(self):
+        self.assertIn("- Período do log: 08/10 10:00:00 até 10:06:00 (6 min)", generate_markdown(relatorio()))
+
+    def test_ios_com_ano_e_virada_de_dia(self):
+        log = [ios("2026-10-08 23:58:10.000", "screen_view", {"ga_screen": "app:pedido:home"}),
+               ios("2026-10-09 00:03:40.500", "screen_view", {"ga_screen": "app:pedido:home"})]
+        periodo = log_period(relatorio(log=log, platform="ios"))
+        self.assertEqual((periodo.start, periodo.end, periodo.duration),
+                         ("08/10/2026 23:58:10", "09/10/2026 00:03:40", "5 min"))
+
+    def test_sem_data_mostra_so_a_hora(self):
+        log = [ios("09:15:00.000", "screen_view", {"ga_screen": "a"}), ios("11:20:30.000", "screen_view", {"ga_screen": "b"})]
+        periodo = log_period(relatorio(log=log, platform="ios"))
+        self.assertEqual((periodo.start, periodo.end, periodo.duration), ("09:15:00", "11:20:30", "2 h 05 min"))
+
+    def test_sem_eventos_ou_sem_horario_nao_inventa_periodo(self):
+        self.assertIsNone(log_period(relatorio(log=[], platform="ios")))
+        sem_hora = [ios("", "screen_view", {"ga_screen": "a"})]
+        self.assertIsNone(log_period(relatorio(log=sem_hora, platform="ios")))
+        self.assertNotIn('class="rp-period"', generate_interactive_html(relatorio(log=[], platform="ios")))
 
 
 class TestTextoDeFora(unittest.TestCase):

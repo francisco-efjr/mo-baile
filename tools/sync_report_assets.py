@@ -34,7 +34,7 @@ ICON_SOURCE = ROOT / "assets" / "icon.png"
 ICON_SIZE = 128
 GLYPHS = (
     "braces", "check", "chevron-down", "circle-alert", "circle-check", "circle-x", "contrast", "copy",
-    "info", "layers", "list-filter", "minus", "moon", "scan-search", "search", "smartphone", "sun",
+    "info", "layers", "list-filter", "minus", "moon", "radio-tower", "scan-search", "search", "smartphone", "sun",
     "triangle-alert", "x",
 )
 

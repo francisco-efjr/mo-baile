@@ -30,7 +30,13 @@ from typing import Any
 
 from mobaile import __version__
 from mobaile.domain.report import AuditReport, ExtraEvent, VariantResult, VariantStatus
-from mobaile.services.report.board import flow_short_label, read_image, summary_lines, variant_block_text
+from mobaile.services.report.board import (
+    flow_short_label,
+    log_period,
+    read_image,
+    summary_lines,
+    variant_block_text,
+)
 
 ASSETS = Path(__file__).with_name("html")
 MOTION_VERSION = "13.5.1"
@@ -348,6 +354,17 @@ def _tile(filter_: str, value: int, kind: str, glyph: str, word: str) -> str:
             f'<span class="mb-status mb-status--{kind}">{_icon(glyph, 12, 2.2)}<span>{word}</span></span></button>')
 
 
+def _period(report: AuditReport) -> str:
+    """Destaque do cabeçalho: data e hora do primeiro ao último evento do log."""
+    period = log_period(report)
+    if period is None:
+        return ""
+    duration = f'<span class="rp-period__dur">{_e(period.duration)}</span>' if period.duration else ""
+    return (f'<span class="rp-period" title="Primeiro e último evento do log auditado">{_icon("radio-tower", 13, 1.8)}'
+            f'<span class="rp-period__label">Log</span><time>{_e(period.start)}</time>'
+            f'<span class="rp-period__to">até</span><time>{_e(period.end)}</time>{duration}</span>')
+
+
 def _csp(scripts: list[str]) -> str:
     hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(s.encode()).digest()).decode() + "'" for s in scripts)
     return (f"default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src {hashes}; "
@@ -382,7 +399,8 @@ def generate_interactive_html(report: AuditReport, prints_dir: str | Path | None
                         f'<span class="rp-nav__name">{_e(name)}</span><span class="mb-count">{n}</span></a></li>'
                         for sid, name, n, worst in nav)
     extras_n = len(report.extras) + len(report.alerts)
-    meta = [f'<span class="rp-chip rp-chip--{_e(platform)}">{_icon("smartphone", 11, 2)}{_e(report.platform.upper())}</span>']
+    meta = [f'<span class="rp-chip rp-chip--{_e(platform)}">{_icon("smartphone", 11, 2)}{_e(report.platform.upper())}</span>',
+            _period(report)]
     if spec.versao_especificacao:
         meta.append(f"<span>spec {_e(spec.versao_especificacao)}</span>")
     meta += [f"<span>{len(spec.cards)} cards</span>", f"<span>{report.total} validações</span>",

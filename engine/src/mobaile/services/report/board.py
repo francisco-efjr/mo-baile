@@ -19,13 +19,16 @@ import base64
 import hashlib
 import json
 import logging
+import re
 import textwrap
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
-from mobaile.domain.report import AuditReport, VariantResult, VariantStatus
+from mobaile.domain.report import AuditReport, TagEvent, VariantResult, VariantStatus
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +199,88 @@ def observation_lines(report: AuditReport) -> list[str]:
     lines += ["", "Regra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores "
                   "com divergência diferente."]
     return lines
+
+
+# Horário de um evento: "10:00:00.000", "10-08 10:00:00.000" (logcat) ou
+# "2026-10-08 10:00:00.123" (log do iOS). A data, quando há, também pode vir
+# só no começo da linha bruta do logcat.
+_STAMP = re.compile(r"^\s*(?:(?:(\d{4})-)?(\d{2})-(\d{2})[ T]+)?(\d{2}):(\d{2}):(\d{2})")
+
+
+@dataclass(frozen=True)
+class LogPeriod:
+    """Primeiro e último evento do log auditado, prontos para mostrar."""
+
+    start: str
+    end: str
+    duration: str | None
+
+    def text(self) -> str:
+        return f"{self.start} até {self.end}" + (f" ({self.duration})" if self.duration else "")
+
+
+def _stamp(event: TagEvent) -> tuple[str | None, str | None, str | None, str] | None:
+    """(ano, mês, dia, HH:MM:SS) do evento; ano, mês e dia podem faltar."""
+    own = _STAMP.match(event.time_str or "")
+    raw = _STAMP.match(event.raw_log or "")
+    found = own or raw
+    if found is None:
+        return None
+    year, month, day = found.group(1, 2, 3)
+    if month is None and raw is not None:
+        year, month, day = raw.group(1, 2, 3)
+    return year, month, day, ":".join(found.group(4, 5, 6))
+
+
+def _duration(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds} s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} min"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours} h {minutes:02d} min"
+    days, hours = divmod(hours, 24)
+    return f"{days} d {hours} h"
+
+
+def log_period(report: AuditReport) -> LogPeriod | None:
+    """Período do log: data e hora do primeiro e do último evento útil.
+
+    A data aparece quando o log a tem (o logcat traz dia e mês; o log do iOS,
+    o ano também). No fim, a data só se repete se o dia mudou. A duração sai
+    quando dá para calcular sem adivinhar o dia.
+    """
+    if report.first_event is None or report.last_event is None:
+        return None
+    first, last = _stamp(report.first_event), _stamp(report.last_event)
+    if first is None or last is None:
+        return None
+
+    def date(stamp: tuple[str | None, str | None, str | None, str]) -> str | None:
+        year, month, day, _ = stamp
+        if month is None:
+            return None
+        return f"{day}/{month}" + (f"/{year}" if year else "")
+
+    start = f"{date(first)} {first[3]}" if date(first) else first[3]
+    same_day = date(first) == date(last) or date(last) is None
+    end = last[3] if same_day else f"{date(last)} {last[3]}"
+
+    duration = None
+    if (first[1] is None) == (last[1] is None):
+        year = first[0] or last[0] or "2000"
+        try:
+            begin = datetime.strptime(f"{first[0] or year}-{first[1] or '01'}-{first[2] or '01'} {first[3]}",
+                                      "%Y-%m-%d %H:%M:%S")
+            finish = datetime.strptime(f"{last[0] or year}-{last[1] or '01'}-{last[2] or '01'} {last[3]}",
+                                       "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            begin = finish = None
+        if begin is not None and finish is not None and finish >= begin:
+            duration = _duration(int((finish - begin).total_seconds()))
+    return LogPeriod(start=start, end=end, duration=duration)
 
 
 def flow_short_label(report: AuditReport, flow: str | None) -> str | None:

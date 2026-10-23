@@ -71,6 +71,10 @@ app, num arquivo único que abre em qualquer navegador e sem internet
 - **Aparência**: segue o sistema (claro, escuro, Aumentar contraste, Reduzir
   movimento e Reduzir transparência) e tem o seletor Automático/Claro/Escuro
   na toolbar, lembrado no navegador.
+- **Período do log** (3.9.0): ao lado da plataforma, em destaque, a data e
+  a hora do primeiro ao último evento do log auditado, com a duração ("Log
+  08/10 10:00:00 até 10:06:00 · 6 min"). O logcat traz dia e mês; o log do
+  iOS, o ano também; sem data, fica só a hora. O Markdown leva a mesma linha.
 - **Resumo**: anel de conformidade com OK, divergentes e não disparadas; os
   quadros de contagem também filtram.
 - **Filtro e busca**: o mesmo segmentado do app (Todas, Pedem Ação,

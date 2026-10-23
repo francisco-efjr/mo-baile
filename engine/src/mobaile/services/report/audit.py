@@ -179,4 +179,5 @@ def run_audit(
     extras, alerts = find_extras(variants, events)
     return AuditReport(
         spec=spec, platform=platform, results=results, log_stats=dict(log_stats or {}), extras=extras, alerts=alerts,
+        first_event=events[0] if events else None, last_event=events[-1] if events else None,
     )
