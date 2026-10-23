@@ -165,7 +165,10 @@ final class WindowSnapshotTests: XCTestCase {
 
     // MARK: - Captura
 
-    private func fotografar<V: View>(_ view: V, tamanho: CGSize, nome: String, escuro: Bool = false, tema: ThemeManager? = nil) throws {
+    /// `partindoDe`: abre a janela nesse tamanho e só depois encolhe, como quem
+    /// arrasta a borda; sem ele a janela já nasce no tamanho pedido.
+    private func fotografar<V: View>(_ view: V, tamanho: CGSize, nome: String, escuro: Bool = false, tema: ThemeManager? = nil,
+                                     partindoDe inicial: CGSize? = nil) throws {
         let pasta = try destino()
         tema?.setMode(escuro ? .dark : .light)
         let controller = NSHostingController(rootView: view.preferredColorScheme(escuro ? .dark : .light))
@@ -174,21 +177,23 @@ final class WindowSnapshotTests: XCTestCase {
         // não mostra a largura pedida.
         controller.sizingOptions = [.minSize]
         let janela = NSWindow(
-            contentRect: NSRect(origin: NSPoint(x: 40, y: 40), size: tamanho),
+            contentRect: NSRect(origin: NSPoint(x: 40, y: 40), size: inicial ?? tamanho),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
         janela.appearance = NSAppearance(named: escuro ? .darkAqua : .aqua)
         janela.toolbarStyle = .unified
         janela.contentViewController = controller
-        janela.setContentSize(tamanho)
+        janela.setContentSize(inicial ?? tamanho)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         janela.makeKeyAndOrderFront(nil)
         RunLoop.main.run(until: Date().addingTimeInterval(1.0))
         // O SwiftUI ajusta a janela ao tamanho mínimo do conteúdo depois do
         // primeiro layout; reaplicar o tamanho deixa as capturas comparáveis.
-        janela.setContentSize(tamanho)
+        // Abaixo do mínimo, a janela para no mínimo, como no arraste da borda.
+        janela.setContentSize(inicial == nil ? tamanho : CGSize(width: max(tamanho.width, janela.contentMinSize.width),
+                                                                height: max(tamanho.height, janela.contentMinSize.height)))
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
         if ProcessInfo.processInfo.environment["MOBAILE_MEDIR"] != nil {
             print("MEDIDA \(nome): pedido=\(tamanho) janela=\(janela.frame.size) minimo=\(janela.contentMinSize) "
@@ -364,6 +369,37 @@ final class WindowSnapshotTests: XCTestCase {
         e.selectedStepID = e.steps[1].id
         t.setPalette("salvia")
         try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "11-janela-salvia")
+    }
+
+    // MARK: - Telas pequenas
+
+    /// Todas as áreas no tamanho mínimo e num notebook de 13" (1280×720 úteis),
+    /// com o inspector aberto. Com MOBAILE_MEDIR, imprime o mínimo da janela.
+    func testTelasPequenas() throws {
+        let tamanhos = [CGSize(width: 980, height: 600), CGSize(width: 1280, height: 720)]
+        let areas: [(String, () throws -> (AppState, EngineSession, ThemeManager))] = [
+            ("page-objects", { self.ambiente() }),
+            ("rede", { self.ambiente(area: .network) }),
+            ("analytics", { self.ambiente(area: .analytics) }),
+            ("sem-dispositivo", { self.ambiente(conectado: false) }),
+            ("relatorio-vazio", { self.ambiente(conectado: false, area: .report) }),
+            ("relatorio-spec", { try self.ambienteDoRelatorio(comRelatorio: false) }),
+            ("relatorio", { try self.ambienteDoRelatorio() }),
+            ("relatorio-fora-da-spec", {
+                let (e, s, t) = try self.ambienteDoRelatorio()
+                e.reportFilter = .outOfSpec
+                e.selectedReportExtraID = e.report?.extras.first?.id
+                return (e, s, t)
+            }),
+        ]
+        for tamanho in tamanhos {
+            for (nome, montar) in areas {
+                let (e, s, t) = try montar()
+                try fotografar(janela(e, s, t), tamanho: tamanho,
+                               nome: "pequena-\(Int(tamanho.width))x\(Int(tamanho.height))-\(nome)", tema: t,
+                               partindoDe: CGSize(width: 1440, height: 900))
+            }
+        }
     }
 }
 

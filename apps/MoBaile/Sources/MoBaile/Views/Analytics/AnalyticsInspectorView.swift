@@ -30,11 +30,11 @@ struct AnalyticsInspectorView: View {
                     action: { Task { await session.toggleAnalytics() } }
                 )
             } else {
-                VSplitView {
+                VerticalSplit(storageKey: "alturaTabelaAnalytics", topHeight: 100...640,
+                              idealTopHeight: 260, minBottomHeight: 120) {
                     tabela
-                        .frame(minHeight: 100, idealHeight: 260)
+                } bottom: {
                     detalhe
-                        .frame(minHeight: 120, idealHeight: 260)
                 }
             }
         }

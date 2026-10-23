@@ -166,18 +166,18 @@ final class ToolbarLayoutTests: XCTestCase {
         XCTAssertFalse(RunAutomationButton.podeRodar(estado), "sem aparelho não roda")
     }
 
-    // MARK: - Largura mínima (D1, Q4)
+    // MARK: - Tamanho mínimo (D1, Q4)
 
-    /// Mede a largura mínima que a janela aceita com barra lateral e inspector
+    /// Mede o tamanho mínimo que a janela aceita com barra lateral e inspector
     /// abertos. O mínimo declarado (980) não dizia nada: a soma das colunas
-    /// chegava a 1.885 pt e, numa janela menor, o conteúdo era desenhado nessa
-    /// largura e cortado nas bordas (sem barra lateral nem inspector à vista).
+    /// chegou a 1.885 pt e, numa janela menor, o conteúdo era desenhado nessa
+    /// largura e cortado nas bordas.
     ///
-    /// O HSplitView interno respondia por 529 pt e saiu. Sobram 248 pt que a
-    /// NavigationSplitView soma em dobro quando há um `.inspector` aninhado
-    /// (a barra lateral conta duas vezes; com o inspector por fora, é ele que
-    /// conta duas vezes). O teto é a tela do MacBook Air de 13" (1.440 pt).
-    private func larguraMinima(_ estado: AppState, _ sessao: EngineSession, _ tema: ThemeManager) throws -> CGFloat {
+    /// Três causas, todas fora daqui agora: o HSplitView do espelho (529 pt), o
+    /// `.inspector` aninhado na NavigationSplitView (a barra lateral contava em
+    /// dobro e as colunas eram medidas pela largura ideal: o Relatório com
+    /// resultado pedia 1.743 pt) e os VSplitView de Rede, Analytics e Relatório.
+    private func tamanhoMinimo(_ estado: AppState, _ sessao: EngineSession, _ tema: ThemeManager) throws -> CGSize {
         let controller = NSHostingController(
             rootView: ContentView().environment(estado).environment(sessao).environment(tema)
         )
@@ -197,20 +197,103 @@ final class ToolbarLayoutTests: XCTestCase {
         guard janela.toolbar != nil else {
             throw XCTSkip("O SwiftUI não instalou a toolbar neste ambiente (sem sessão gráfica?)")
         }
-        return janela.contentMinSize.width
+        return janela.contentMinSize
     }
 
-    func testJanelaCabeNumMacBookEmTodasAsAreas() throws {
+    /// Mínimo de uma view solta, numa janela sem toolbar.
+    private func minimoDaView<V: View>(_ view: V) -> CGSize {
+        let controller = NSHostingController(rootView: view)
+        controller.sizingOptions = [.minSize]
+        let janela = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false
+        )
+        janela.isReleasedWhenClosed = false
+        janela.contentViewController = controller
+        janela.orderFront(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        defer { janela.close() }
+        return janela.contentMinSize
+    }
+
+    /// As áreas com o conteúdo que mais pesa: requisição aberta em Rede,
+    /// evento em Analytics, auditoria com uma divergência no Relatório.
+    private func ambienteComConteudo(_ aba: WorkspaceTab) throws -> (AppState, EngineSession, ThemeManager) {
+        let (estado, sessao, tema) = ambiente()
+        estado.workspaceTab = aba
+        estado.sidebarVisibility = .all
+        estado.inspectorVisible = true
+        estado.proxyRunning = true
+        let requisicao = NetworkEvent(
+            id: 1, timestamp: Date(), timeStr: "13:02:11", method: "POST",
+            url: "https://api.demoapp.test/v2/pedido/simulacao", host: "api.demoapp.test", path: "/v2/pedido/simulacao",
+            statusCode: 201, statusText: "Created",
+            requestHeaders: ["Content-Type": "application/json", "User-Agent": "DemoApp/5.42.0 (iPhone; iOS 18.6; Scale/3.00)"],
+            requestBody: "{\"valor\": 5000}", responseHeaders: ["Content-Type": "application/json"],
+            responseBody: "{\"simulacao_id\": \"sim_8f2c\"}", durationMs: 812, protocol: "HTTP/1.1", isTunnel: false
+        )
+        estado.httpRequests = [requisicao]
+        estado.selectedRequest = requisicao
+        estado.analyticsListenerActive = true
+        let evento = AnalyticsEvent(
+            id: 1, timestamp: Date(), timeStr: "13:02:14.920", tag: "iOS (Firebase)", eventName: "simulacao_pedido_iniciada",
+            params: ["canal": "app_ios", "parcelas": "12"], rawLog: "Logging event: simulacao_pedido_iniciada", platform: .ios
+        )
+        estado.analyticsEvents = [evento]
+        estado.selectedAnalyticsEvent = evento
+        let dados = try XCTUnwrap(try resultadosDasFixtures()["report.audit"])
+        let relatorio = try JSONDecoder().decode(EngineDTO.ReportAuditPayload.self, from: dados).toModel()
+        estado.reportSpec = relatorio.spec
+        estado.report = relatorio
+        estado.selectedReportResultID = relatorio.results.first { $0.status == .error }?.id
+        return (estado, sessao, tema)
+    }
+
+    /// O teto cabe num monitor de 1.280 × 720 pt com folga para o Dock.
+    func testJanelaCabeNumMonitorPequenoEmTodasAsAreas() throws {
         var medidas: [String] = []
         for aba in WorkspaceTab.allCases {
-            let (estado, sessao, tema) = ambiente()
-            estado.workspaceTab = aba
-            estado.sidebarVisibility = .all
-            estado.inspectorVisible = true
-            let largura = try larguraMinima(estado, sessao, tema)
-            medidas.append("\(aba)=\(Int(largura))")
-            XCTAssertLessThanOrEqual(largura, 1440, "\(aba): mínimo \(largura) pt com barra lateral e inspector")
+            for comConteudo in [false, true] {
+                let (estado, sessao, tema): (AppState, EngineSession, ThemeManager)
+                if comConteudo {
+                    (estado, sessao, tema) = try ambienteComConteudo(aba)
+                } else {
+                    (estado, sessao, tema) = ambiente()
+                    estado.workspaceTab = aba
+                    estado.sidebarVisibility = .all
+                    estado.inspectorVisible = true
+                }
+                let minimo = try tamanhoMinimo(estado, sessao, tema)
+                let nome = "\(aba)\(comConteudo ? "+conteudo" : "")"
+                medidas.append("\(nome)=\(Int(minimo.width))x\(Int(minimo.height))")
+                XCTAssertLessThanOrEqual(minimo.width, 1100, "\(nome): largura mínima \(minimo.width) pt com barra lateral e inspector")
+                XCTAssertLessThanOrEqual(minimo.height, 600, "\(nome): altura mínima \(minimo.height) pt")
+            }
         }
-        print("LARGURA MINIMA: \(medidas.joined(separator: " "))")
+        print("TAMANHO MINIMO: \(medidas.joined(separator: " "))")
+    }
+
+    /// O workspace declara 360 pt à janela com `.frame(minWidth:maxWidth:)`, que
+    /// não repassa o mínimo do conteúdo. Se o conteúdo pedir mais, ele
+    /// transborda a coluna: o espelho vai para baixo da barra lateral e o
+    /// inspector sai pela borda (Rede pedia 564 pt com Request e Response lado
+    /// a lado). O mesmo vale para o inspector.
+    func testConteudoDasColunasCabeNoMinimoDeclarado() throws {
+        for aba in WorkspaceTab.allCases {
+            let (estado, sessao, tema) = try ambienteComConteudo(aba)
+            // O Relatório ocupa a coluna inteira, fora do workspace, e declara o
+            // próprio mínimo; o teste da janela já o cobre.
+            if aba.needsDevice {
+                let area = minimoDaView(WorkspacePane().environment(estado).environment(sessao).environment(tema))
+                XCTAssertLessThanOrEqual(area.width, DesignMetrics.Widths.workspaceMin, "\(aba): workspace pede \(area.width) pt")
+            }
+            let inspector: CGSize
+            if aba == .report {
+                inspector = minimoDaView(ReportCardInspector().environment(estado).environment(sessao).environment(tema))
+            } else {
+                inspector = minimoDaView(InspectorPane().environment(estado).environment(sessao).environment(tema))
+            }
+            XCTAssertLessThanOrEqual(inspector.width, DesignMetrics.Widths.inspectorMin, "\(aba): inspector pede \(inspector.width) pt")
+        }
     }
 }

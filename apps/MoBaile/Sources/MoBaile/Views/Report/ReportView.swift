@@ -31,13 +31,16 @@ struct ReportView: View {
                 if let report = appState.report {
                     VStack(spacing: 0) {
                         ReportSummaryBar(report: report)
-                        VSplitView {
+                        VerticalSplit(storageKey: "alturaTabelaRelatorio", topHeight: 120...640,
+                                      idealTopHeight: 300, minBottomHeight: 140) {
                             ReportResultsTable()
-                                .frame(minHeight: 120, idealHeight: 300)
+                        } bottom: {
                             ReportDetailPane()
-                                .frame(minHeight: 140, idealHeight: 260)
                         }
                     }
+                    // Sem largura mínima, a altura mínima da janela era medida
+                    // com o resumo espremido, uma contagem por linha.
+                    .frame(minWidth: 440)
                 } else if let spec = appState.reportSpec {
                     ReportSpecCard(spec: spec)
                 } else {
@@ -229,34 +232,25 @@ struct ReportSummaryBar: View {
         let theme = themeManager.current
         let s = report.summary
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(percentual)
-                        .font(DSFont.title1.monospacedDigit())
-                        .foregroundStyle(theme.labelPrimary)
-                    Text("conforme")
-                        .font(DSFont.callout)
-                        .foregroundStyle(theme.labelSecondary)
+            // Numa linha quando cabe; em janela estreita (monitor pequeno com
+            // barra lateral e inspector), a origem sobe para a linha da
+            // conformidade e as contagens quebram linha. Antes a linha única
+            // exigia uns 500 pt e empurrava a largura mínima da janela.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    conformidade
+                    contagens
+                    Spacer(minLength: 8)
+                    origemTexto
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Conformidade \(percentual)")
-
-                StatusIndicator(status: .ok, label: "\(s.ok) OK", mono: false)
-                StatusIndicator(status: .error, label: plural(s.divergent, "divergente", "divergentes"), mono: false)
-                StatusIndicator(status: .warn, label: plural(s.missing, "não disparada", "não disparadas"), mono: false)
-                if s.extras > 0 {
-                    StatusIndicator(status: .off, label: "\(s.extras) fora da spec", mono: false)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        conformidade
+                        Spacer(minLength: 8)
+                        origemTexto
+                    }
+                    FlowRow(spacing: 12, lineSpacing: 4) { contagens }
                 }
-                if s.alerts > 0 {
-                    StatusIndicator(status: .error, label: plural(s.alerts, "alerta", "alertas"), mono: false)
-                }
-                Spacer(minLength: 8)
-                Text(origem)
-                    .font(DSFont.callout)
-                    .foregroundStyle(theme.labelSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(ajudaOrigem)
             }
 
             ProgressBar(value: s.total == 0 ? 0 : Double(s.ok) / Double(s.total), tint: theme.success)
@@ -270,6 +264,44 @@ struct ReportSummaryBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.separator).frame(height: 1) }
+    }
+
+    private var conformidade: some View {
+        let theme = themeManager.current
+        return HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(percentual)
+                .font(DSFont.title1.monospacedDigit())
+                .foregroundStyle(theme.labelPrimary)
+            Text("conforme")
+                .font(DSFont.callout)
+                .foregroundStyle(theme.labelSecondary)
+        }
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Conformidade \(percentual)")
+    }
+
+    @ViewBuilder
+    private var contagens: some View {
+        let s = report.summary
+        StatusIndicator(status: .ok, label: "\(s.ok) OK", mono: false)
+        StatusIndicator(status: .error, label: plural(s.divergent, "divergente", "divergentes"), mono: false)
+        StatusIndicator(status: .warn, label: plural(s.missing, "não disparada", "não disparadas"), mono: false)
+        if s.extras > 0 {
+            StatusIndicator(status: .off, label: "\(s.extras) fora da spec", mono: false)
+        }
+        if s.alerts > 0 {
+            StatusIndicator(status: .error, label: plural(s.alerts, "alerta", "alertas"), mono: false)
+        }
+    }
+
+    private var origemTexto: some View {
+        Text(origem)
+            .font(DSFont.callout)
+            .foregroundStyle(themeManager.current.labelSecondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .help(ajudaOrigem)
     }
 
     private var filtro: some View {
@@ -463,5 +495,61 @@ struct ReportResultsTable: View {
             get: { appState.selectedReportExtraID },
             set: { appState.selectedReportExtraID = $0 }
         )
+    }
+}
+
+// MARK: - Quebra de linha
+
+/// Itens lado a lado que descem para a linha seguinte quando falta largura.
+/// O mínimo é o item mais largo, e não a soma de todos.
+private struct FlowRow: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let linhas = quebrar(largura: proposal.width ?? .infinity, subviews: subviews)
+        let largura = linhas.map(\.largura).max() ?? 0
+        let altura = linhas.map(\.altura).reduce(0, +) + lineSpacing * CGFloat(max(linhas.count - 1, 0))
+        return CGSize(width: largura, height: altura)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for linha in quebrar(largura: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for indice in linha.indices {
+                let tamanho = subviews[indice].sizeThatFits(.unspecified)
+                subviews[indice].place(at: CGPoint(x: x, y: y + (linha.altura - tamanho.height) / 2),
+                                       proposal: ProposedViewSize(tamanho))
+                x += tamanho.width + spacing
+            }
+            y += linha.altura + lineSpacing
+        }
+    }
+
+    private struct Linha {
+        var indices: [Int] = []
+        var largura: CGFloat = 0
+        var altura: CGFloat = 0
+    }
+
+    private func quebrar(largura: CGFloat, subviews: Subviews) -> [Linha] {
+        var linhas: [Linha] = []
+        var atual = Linha()
+        for (indice, subview) in subviews.enumerated() {
+            let tamanho = subview.sizeThatFits(.unspecified)
+            let nova = atual.indices.isEmpty ? tamanho.width : atual.largura + spacing + tamanho.width
+            if !atual.indices.isEmpty && nova > largura {
+                linhas.append(atual)
+                atual = Linha()
+                atual.largura = tamanho.width
+            } else {
+                atual.largura = nova
+            }
+            atual.indices.append(indice)
+            atual.altura = max(atual.altura, tamanho.height)
+        }
+        if !atual.indices.isEmpty { linhas.append(atual) }
+        return linhas
     }
 }

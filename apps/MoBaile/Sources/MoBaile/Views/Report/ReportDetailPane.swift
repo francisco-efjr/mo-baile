@@ -15,7 +15,6 @@ struct ReportDetailPane: View {
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
-        let theme = themeManager.current
         if appState.reportFilter == .outOfSpec {
             if let extra = appState.selectedReportExtra {
                 ReportExtraDetail(extra: extra)
@@ -23,12 +22,10 @@ struct ReportDetailPane: View {
                 EmptyState(icon: "info.circle", text: "Selecione um evento para ver os detalhes.", compact: true)
             }
         } else if let result = appState.selectedReportResult {
-            HStack(spacing: 0) {
+            AdaptivePair(labels: ("Validação", "Bloco e Disparo"), minSideBySide: 640) {
                 ReportChecksPanel(result: result)
-                    .frame(maxWidth: .infinity)
-                Rectangle().fill(theme.separator).frame(width: 1)
+            } second: {
                 ReportEvidencePanel(result: result)
-                    .frame(maxWidth: .infinity)
             }
         } else {
             EmptyState(icon: "info.circle", text: "Selecione uma validação para ver os parâmetros.", compact: true)

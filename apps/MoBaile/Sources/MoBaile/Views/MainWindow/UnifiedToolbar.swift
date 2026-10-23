@@ -41,6 +41,11 @@ struct MainToolbar: ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             HierarchySearchButton()
         }
+        // O inspector é um painel da área, não mais o `.inspector` do SwiftUI,
+        // e o botão dele vem para o fim da barra principal.
+        ToolbarItem(placement: .primaryAction) {
+            InspectorToggleButton()
+        }
     }
 }
 
