@@ -44,6 +44,10 @@ mobaile-engine = "mobaile.rpc.server:serve"
 where = ["src"]
 include = ["mobaile*"]
 
+[tool.setuptools.package-data]
+# HTML do Relatório: design system, ícones, ícone do app e Motion embutidos.
+"mobaile.services.report" = ["html/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

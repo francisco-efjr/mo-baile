@@ -34,6 +34,7 @@ arquivos e mostra o resultado.
 | Leitura dos cards (OCR → spec) | `services/report/card_reader.py` | `importers/card_reader.py` |
 | Board Excalidraw | `services/report/board.py` | `exporters/board.py` |
 | Markdown, TSV e HTML | `services/report/documents.py` | `exporters/variant_reports.py` |
+| HTML interativo (3.8.0) | `services/report/html_report.py` + `html/` | — (novo; substitui o HTML portado) |
 | Caso de uso | `services/report/service.py` | `pipeline.py` |
 | OCR do Vision | `adapters/vision_ocr.py` | `importers/vision_ocr.py` |
 | Porta do OCR | `ports/protocols.py` (`TextRecognizer`) | — |
@@ -78,6 +79,10 @@ As regras de casamento não mudaram. A paridade foi conferida com os arquivos
 reais do `bold-kepler` (duas specs, quatro logs, Android e iOS): Markdown, TSV
 e HTML saíram idênticos byte a byte ao original, e o board com a mesma
 geometria e os mesmos textos.
+
+Na 3.8.0 o HTML deixou de ser o do `tag_audit` e passou a ser o relatório
+interativo com a identidade do app (ver `docs/design/relatorio.md`, "HTML
+exportado"). Markdown, TSV e board continuam com o formato portado.
 
 ## O que ficou de fora
 
