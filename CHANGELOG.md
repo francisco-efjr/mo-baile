@@ -5,11 +5,16 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
-## [3.6.1] - 2026-10-22
+## [3.6.2] - 2026-10-22
 
-### Adicionado
+### Corrigido
 
-- 
+- **A janela principal não aparece mais atrás do splash.** A cena `Window`
+  abria a janela junto com o app, e o splash de abertura ficava por cima com a
+  tela inteira já desenhada no fundo. A janela continua sendo criada na
+  abertura (é ela que sobe o motor), mas nasce transparente e aparece com o
+  mesmo esmaecer da saída do splash. Janela › Mostrar Splash não esconde nada.
+  Coberto em `SplashTimingTests`.
 
 ## [3.6.1] - 2026-10-22
 
