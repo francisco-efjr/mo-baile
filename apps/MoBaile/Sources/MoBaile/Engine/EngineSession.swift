@@ -1430,6 +1430,61 @@ final class EngineSession {
         await openReportSpec(at: URL(fileURLWithPath: importado.specPath))
     }
 
+    /// O card como está no JSON da spec, para o formulário do inspector.
+    func loadReportCard(_ index: Int) async -> ReportCardDraft? {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return nil }
+        state.reportError = nil
+        do {
+            let payload: EngineDTO.ReportCardPayload = try await client.call(
+                "report.card", params: ["spec_path": .string(spec.path), "card_index": .int(index)]
+            )
+            return payload.toModel()
+        } catch {
+            reportFailure(error)
+            return nil
+        }
+    }
+
+    /// Grava o card editado na spec e audita de novo, se já havia auditoria.
+    ///
+    /// A linha escolhida continua a mesma validação (card, fluxo e variação):
+    /// o `id` dos resultados é a posição, e mudar as variações desloca as linhas.
+    @discardableResult
+    func saveReportCard(_ draft: ReportCardDraft) async -> Bool {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return false }
+        let card: JSONValue
+        do {
+            card = try draft.rpcCard()
+        } catch {
+            state.reportError = error.localizedDescription
+            return false
+        }
+        let anterior = state.selectedReportResult
+        state.reportOperation = .savingCard
+        state.reportError = nil
+        do {
+            let payload: EngineDTO.ReportCardUpdatePayload = try await client.call(
+                "report.card_update",
+                params: ["spec_path": .string(spec.path), "card_index": .int(draft.cardIndex), "card": card]
+            )
+            state.reportSpec = payload.spec.toModel()
+        } catch {
+            endReportOperation()
+            reportFailure(error)
+            return false
+        }
+        endReportOperation()
+        if state.report != nil {
+            await runReport()
+            if let anterior, let resultados = state.report?.results {
+                let mesmoCard = resultados.filter { $0.cardIndex == anterior.cardIndex && $0.flow == anterior.flow }
+                state.selectedReportResultID = (mesmoCard.first { $0.variation == anterior.variation } ?? mesmoCard.first)?.id
+            }
+        }
+        state.statusMessage = "Card \(draft.cardIndex + 1) gravado em \(spec.fileName)"
+        return true
+    }
+
     private func endReportOperation() {
         state.reportOperation = nil
         state.reportProgressMessage = nil

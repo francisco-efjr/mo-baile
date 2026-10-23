@@ -66,6 +66,12 @@ struct ReportCheck: Identifiable, Equatable, Sendable {
     var id: String { field }
 }
 
+/// Par chave e valor na ordem em que o card da spec lista.
+struct ReportParam: Equatable, Sendable {
+    let key: String
+    let value: String
+}
+
 /// O disparo do log que foi avaliado (o mais recente entre os candidatos).
 struct ReportMatchedEvent: Equatable, Sendable {
     let time: String?
@@ -94,6 +100,9 @@ struct ReportResult: Identifiable, Equatable, Sendable {
     let divergences: String
     /// Bloco JSON com ✓/✗, o mesmo do board Excalidraw e do HTML.
     let block: String
+    /// O que a variação espera, já com o fluxo aplicado e na ordem do card. Na
+    /// não disparada é a única fonte dos valores (não há `checks`).
+    var expected: [ReportParam] = []
 
     // Chaves de ordenação da tabela (precisam ser `Comparable`).
     var statusRank: Int { status.sortRank }
@@ -252,7 +261,7 @@ enum ReportFilter: String, CaseIterable, Identifiable, Sendable {
 /// Operação longa da aba em andamento. Uma de cada vez: o motor roda todas na
 /// mesma fila (`report`), em ordem.
 enum ReportOperation: Equatable, Sendable {
-    case loadingSpec, auditing, exporting, importing
+    case loadingSpec, auditing, exporting, importing, savingCard
 
     var message: String {
         switch self {
@@ -260,6 +269,92 @@ enum ReportOperation: Equatable, Sendable {
         case .auditing: return "Auditando o tagueamento…"
         case .exporting: return "Gerando o board e os relatórios…"
         case .importing: return "Lendo os prints com o OCR do macOS…"
+        case .savingCard: return "Gravando o card na spec…"
         }
+    }
+}
+
+// MARK: - Edição do card
+
+/// Card da spec aberto no formulário do inspector (`report.card`).
+///
+/// Os valores viram texto para editar. O que era texto no JSON volta como
+/// texto; o que era lista, objeto ou número (`items`, por exemplo) volta como
+/// JSON, e um JSON inválido é recusado antes de ir ao motor.
+struct ReportCardDraft: Equatable, Sendable {
+    struct Field: Identifiable, Equatable, Sendable {
+        let id: UUID
+        var key: String
+        var value: String
+        var isJSON: Bool
+
+        init(key: String, value: String, isJSON: Bool = false) {
+            self.id = UUID()
+            self.key = key
+            self.value = value
+            self.isJSON = isJSON
+        }
+
+        init(key: String, json: JSONValue) {
+            if case .string(let texto) = json {
+                self.init(key: key, value: texto)
+            } else {
+                self.init(key: key, value: json.jsonText, isJSON: true)
+            }
+        }
+    }
+
+    struct Variation: Identifiable, Equatable, Sendable {
+        let id = UUID()
+        var fields: [Field]
+    }
+
+    let cardIndex: Int
+    let totalCards: Int
+    var secao: String
+    var titulo: String
+    var evento: String
+    let printName: String?
+    var params: [Field]
+    var variacoes: [Variation]
+    var obs: String
+    /// A `obs` do JSON é um objeto por fluxo: não vai para o formulário.
+    let obsPerFlow: Bool
+    /// Fluxos com parâmetros próprios (`params_por_fluxo`), que ficam no JSON.
+    let paramsPerFlow: [String]
+
+    enum Problem: LocalizedError, Equatable {
+        case emptyEvent
+        case invalidJSON(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyEvent: return "O evento não pode ficar vazio."
+            case .invalidJSON(let campo): return "O valor de \(campo) precisa ser um JSON válido (lista ou objeto)."
+            }
+        }
+    }
+
+    /// O `card` de `report.card_update`.
+    func rpcCard() throws -> JSONValue {
+        guard !evento.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Problem.emptyEvent }
+        var card: [String: JSONValue] = [
+            "secao": .string(secao),
+            "titulo": .string(titulo),
+            "evento": .string(evento),
+            "params": .array(try params.map(Self.pair)),
+            "variacoes": .array(try variacoes.map { .array(try $0.fields.map(Self.pair)) }),
+        ]
+        if !obsPerFlow { card["obs"] = .string(obs) }
+        return .object(card)
+    }
+
+    private static func pair(_ field: Field) throws -> JSONValue {
+        let chave = field.key.trimmingCharacters(in: .whitespaces)
+        guard field.isJSON else { return .object(["key": .string(chave), "value": .string(field.value)]) }
+        guard let valor = try? JSONDecoder().decode(JSONValue.self, from: Data(field.value.utf8)) else {
+            throw Problem.invalidJSON(chave.isEmpty ? "um parâmetro" : chave)
+        }
+        return .object(["key": .string(chave), "value": valor])
     }
 }

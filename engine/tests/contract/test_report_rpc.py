@@ -67,7 +67,8 @@ class Base(unittest.TestCase):
 
 class TestRelatorioPeloContrato(Base):
     def test_metodos_estao_na_fila_de_relatorio(self):
-        for nome in ("report.spec", "report.audit", "report.export", "report.import"):
+        for nome in ("report.spec", "report.audit", "report.export", "report.import", "report.card",
+                     "report.card_update"):
             self.assertEqual(contract.lane_of(nome), contract.LANE_REPORT)
 
     def test_spec(self):
@@ -97,6 +98,15 @@ class TestRelatorioPeloContrato(Base):
         self.assertIsNone(relatorio["log_path"])
         self.assertEqual(relatorio["log_stats"]["uteis"], 10)
 
+    def test_le_e_grava_um_card(self):
+        card = self.ok("report.card", {"spec_path": str(self.spec_path), "card_index": 1})
+        self.assertEqual(card["evento"], "interaction_pedido_{fluxo}")
+        resposta = self.ok("report.card_update", {
+            "spec_path": str(self.spec_path), "card_index": 1, "card": {"titulo": "Parcelas"},
+        })
+        self.assertEqual(resposta["card"]["titulo"], "Parcelas")
+        self.assertEqual(resposta["spec"]["variants"], TOTAL)
+
     def test_sessao_sem_eventos_e_recusada(self):
         mensagem = self.invalido("report.audit", {"spec_path": str(self.spec_path), "source": "session"})
         self.assertIn("Nenhum evento capturado", mensagem)
@@ -112,6 +122,10 @@ class TestRelatorioPeloContrato(Base):
             ("report.export", {}),
             ("report.import", {"prints_dir": str(self.pasta / "nao-existe")}),
             ("report.import", {"prints_dir": str(self.pasta), "projeto": ["x"]}),
+            ("report.card", {"spec_path": str(self.spec_path)}),
+            ("report.card", {"spec_path": str(self.spec_path), "card_index": "1"}),
+            ("report.card_update", {"spec_path": str(self.spec_path), "card_index": 1}),
+            ("report.card_update", {"spec_path": str(self.spec_path), "card_index": 1, "card": {"evento": ""}}),
         ]
         for metodo, params in casos:
             with self.subTest(metodo=metodo, params=params):

@@ -156,6 +156,9 @@ METHODS: dict[str, dict[str, Any]] = {
     "report.audit": _spec(LANE_REPORT, 60, progress=True),
     "report.export": _spec(LANE_REPORT, 120, progress=True),
     "report.import": _spec(LANE_REPORT, 600, progress=True),
+    # Edição de um card: lê ou grava um arquivo pequeno, sem progresso.
+    "report.card": _spec(LANE_REPORT),
+    "report.card_update": _spec(LANE_REPORT),
 }
 
 # Tudo que o motor empurra sem `id`. O teste de deriva confere esta lista contra

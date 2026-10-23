@@ -327,6 +327,8 @@ class EngineServer:
             "report.audit": self.report_audit,
             "report.export": self.report_export,
             "report.import": self.report_import,
+            "report.card": self.report_card,
+            "report.card_update": self.report_card_update,
         }
 
     # -------------------------------------------------------------- transporte
@@ -1909,6 +1911,14 @@ class EngineServer:
             params.get("prints_dir"), projeto=projeto, platform=platform, spec_path=params.get("spec_path"),
             progress=self._progress, check_cancelled=self._check_cancelled,
         )
+
+    def report_card(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Um card da spec como está no JSON, para editar no app."""
+        return self.report.card(params.get("spec_path"), params.get("card_index"))
+
+    def report_card_update(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Grava os textos editados de um card na spec e devolve o resumo relido."""
+        return self.report.update_card(params.get("spec_path"), params.get("card_index"), params.get("card"))
 
     # ------------------------------------------------------------------- loop
 

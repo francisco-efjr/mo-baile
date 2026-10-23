@@ -35,6 +35,7 @@ struct ReportDetailPane: View {
 
 /// Campo, obtido e esperado, com ✓ e ✗ como ícone e texto, nunca só cor.
 private struct ReportChecksPanel: View {
+    @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     let result: ReportResult
 
@@ -48,7 +49,15 @@ private struct ReportChecksPanel: View {
             ) {
                 StatusIndicator(status: result.status.daemonState, label: result.status.displayName, mono: false)
             } tabs: {
-                EmptyView()
+                if ReportBug.canCreate(for: result) {
+                    Button {
+                        appState.statusMessage = ReportBug.copy(result)
+                    } label: {
+                        Label("Copiar Bug", systemImage: "ladybug")
+                    }
+                    .controlSize(.mini)
+                    .help("Copia o bug no modelo do time, com a validação e o print do Figma, para colar no Jira ou no Azure")
+                }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {

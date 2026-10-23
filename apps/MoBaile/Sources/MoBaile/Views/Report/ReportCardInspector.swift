@@ -7,17 +7,31 @@ import SwiftUI
 /// linha que o motor devolveu; a imagem é lida do disco só para exibição.
 struct ReportCardInspector: View {
     @Environment(AppState.self) private var appState
+    @Environment(EngineSession.self) private var session
     @Environment(ThemeManager.self) private var themeManager
+
+    /// Card aberto no formulário. Trocar de linha fecha a edição sem gravar.
+    @State private var rascunho: ReportCardDraft?
 
     var body: some View {
         let theme = themeManager.current
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                Text("Card do Figma")
+                Text(rascunho == nil ? "Card do Figma" : "Editar Card")
                     .font(DSFont.headline)
                     .foregroundStyle(theme.labelPrimary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
+                if rascunho == nil, let result = appState.selectedReportResult {
+                    Button {
+                        Task { rascunho = await session.loadReportCard(result.cardIndex) }
+                    } label: {
+                        Label("Editar", systemImage: "pencil")
+                    }
+                    .controlSize(.small)
+                    .disabled(appState.reportOperation != nil)
+                    .help("Corrige os textos do card na spec, sem abrir o JSON")
+                }
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
@@ -25,7 +39,18 @@ struct ReportCardInspector: View {
 
             Rectangle().fill(theme.separator).frame(height: 1)
 
-            if let result = appState.selectedReportResult {
+            if let atual = rascunho {
+                ReportCardEditor(
+                    draft: Binding(get: { rascunho ?? atual }, set: { rascunho = $0 }),
+                    onCancel: { rascunho = nil },
+                    onSave: {
+                        guard let editado = rascunho else { return }
+                        Task {
+                            if await session.saveReportCard(editado) { rascunho = nil }
+                        }
+                    }
+                )
+            } else if let result = appState.selectedReportResult {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         KeyValueGrid(rows: linhas(result))
@@ -51,6 +76,9 @@ struct ReportCardInspector: View {
                     compact: true
                 )
             }
+        }
+        .onChange(of: appState.selectedReportResult?.cardIndex) { _, novo in
+            if let rascunho, rascunho.cardIndex != novo { self.rascunho = nil }
         }
     }
 

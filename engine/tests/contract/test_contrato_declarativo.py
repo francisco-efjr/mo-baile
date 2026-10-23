@@ -85,7 +85,8 @@ class TestTabelaDeMetodos(Base):
                                     "passive.stop"},
             contract.LANE_INLINE: {"engine.hello", "engine.shutdown"},
             # Relatorio nao toca aparelho: nem espera o espelho nem o segura.
-            contract.LANE_REPORT: {"report.spec", "report.audit", "report.export", "report.import"},
+            contract.LANE_REPORT: {"report.spec", "report.audit", "report.export", "report.import",
+                                   "report.card", "report.card_update"},
         }
         for fila, metodos in filas.items():
             for nome in metodos:

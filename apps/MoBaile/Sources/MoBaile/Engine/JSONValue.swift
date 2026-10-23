@@ -57,6 +57,16 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, Ex
 }
 
 extension JSONValue {
+    /// JSON compacto com as chaves em ordem: o mesmo texto a cada leitura, para
+    /// editar e comparar.
+    var jsonText: String {
+        if case .string(let text) = self { return text }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(self) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// Valor de tipo livre (parametro de analytics) como texto de tabela.
     var displayText: String {
         switch self {

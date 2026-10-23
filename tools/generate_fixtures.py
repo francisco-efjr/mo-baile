@@ -194,6 +194,12 @@ def relatorio(server: EngineServer, call) -> dict:
                 "prints_dir": str(prints), "projeto": "Demanda", "platform": "android",
             }),
             "erro_report_sessao_vazia": call("report.audit", {"spec_path": str(spec_path), "source": "session"}),
+            # Depois da auditoria e do export: a edição regrava a spec.
+            "report.card": call("report.card", {"spec_path": str(spec_path), "card_index": 2}),
+            "report.card_update": call("report.card_update", {
+                "spec_path": str(spec_path), "card_index": 1,
+                "card": {"titulo": "Parcelas", "obs": "Conferido com produto"},
+            }),
         }
         return _trocar_caminhos(saida, (str(pasta), tmp), PASTA_RELATORIO)
 

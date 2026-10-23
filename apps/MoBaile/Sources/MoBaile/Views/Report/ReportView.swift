@@ -418,6 +418,13 @@ struct ReportResultsTable: View {
             .width(min: 54, ideal: 64, max: 80)
         }
         .alternatingRowBackgrounds()
+        .contextMenu(forSelectionType: ReportResult.ID.self) { ids in
+            // Bug só de divergente ou não disparado: OK não tem o que reportar.
+            if let id = ids.first, let linha = linhas.first(where: { $0.id == id }), ReportBug.canCreate(for: linha) {
+                Button("Copiar Bug") { appState.statusMessage = ReportBug.copy(linha) }
+                Button("Copiar Imagens do Bug") { appState.statusMessage = ReportBug.copyImages(linha) }
+            }
+        }
         .overlay {
             if linhas.isEmpty {
                 EmptyState(
