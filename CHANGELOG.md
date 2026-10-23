@@ -5,6 +5,45 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.6.1] - 2026-10-22
+
+### Adicionado
+
+- 
+
+## [3.6.1] - 2026-10-22
+
+Layout em monitores pequenos. A janela declarava 980 × 600 pt de mínimo, mas
+pedia de verdade 1.743 pt de largura no Relatório com uma auditoria aberta
+(mais que a tela de um MacBook Air), 1.337 a 1.357 pt nas outras áreas e 838 pt
+de altura com uma spec aberta. Num monitor menor, o conteúdo era cortado nas
+bordas.
+
+### Corrigido
+
+- **Inspector próprio.** O `.inspector` aninhado na `NavigationSplitView`
+  media as colunas pela largura ideal e contava a barra lateral em dobro. O
+  inspector virou um painel da área, com divisória arrastável e a largura
+  guardada por janela; o botão de mostrar e ocultar foi para o fim da toolbar.
+- **Tabela e detalhe sem `VSplitView`** em Rede, Analytics e Relatório: o
+  NSSplitView aninhado somava largura à janela e não repassava o mínimo do
+  conteúdo. Agora é uma divisória própria (`VerticalSplit`), também arrastável.
+- **Request | Response e Validação | Bloco viram abas** quando a coluna fica
+  estreita (`AdaptivePair`). Lado a lado, Rede pedia 564 pt para um workspace
+  que declarava 360, e o excesso empurrava o espelho para baixo da barra
+  lateral e o inspector para fora da janela.
+- **Espelho e inspector cedem até o mínimo** antes de a área transbordar
+  (`layoutPriority`); com folga, voltam à largura arrastada.
+- **Resumo do Relatório quebra linha** no estreito: a origem sobe para a linha
+  da conformidade e as contagens descem para a seguinte.
+
+Mínimos medidos com barra lateral e inspector abertos: Page Objects 1.090 ×
+565, Rede e Analytics 1.070 × 552, Relatório 949 × 548 (com auditoria) e 909 ×
+361 (vazio). `ToolbarLayoutTests` passa a medir as áreas com conteúdo, com teto
+de 1.100 × 600, e confere que o conteúdo do workspace e do inspector cabe no
+mínimo declarado. `WindowSnapshotTests.testTelasPequenas` fotografa todas as
+áreas em 980 × 600 e 1.280 × 720.
+
 ## [3.6.0] - 2026-10-15
 
 Rodada 2 do orquestrador: cinco funcionalidades escolhidas na mesa de
