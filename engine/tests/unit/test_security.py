@@ -21,7 +21,9 @@ from mobaile.security import (
     secure_runtime_dir,
     validate_coordinate,
     validate_device_id,
+    validate_integer,
     validate_keycode,
+    validate_number,
     validate_port,
     write_executable_script,
 )
@@ -85,9 +87,18 @@ class TestValidacaoNumerica(unittest.TestCase):
     def test_coordenadas(self):
         self.assertEqual(validate_coordinate(10), 10)
         self.assertEqual(validate_coordinate(10.7), 10)
-        for invalida in (-1, 999999, "10", None, True):
+        for invalida in (-1, 999999, "10", None, True, float("nan"), float("inf")):
             with self.subTest(valor=invalida), self.assertRaises(InvalidInputError):
                 validate_coordinate(invalida)
+
+    def test_numero_e_inteiro_dos_parametros_do_rpc(self):
+        self.assertEqual(validate_number(0.5, "fps", minimum=0.1, maximum=60), 0.5)
+        self.assertEqual(validate_integer(200, "limit", minimum=1, maximum=1000), 200)
+        self.assertEqual(validate_integer(3.0, "limit", minimum=1, maximum=1000), 3)
+        for invalido in ("5", None, True, float("nan"), float("inf"), -1, 10**400, 3.5):
+            with self.subTest(valor=invalido), self.assertRaises(InvalidInputError) as ctx:
+                validate_integer(invalido, "limit", minimum=1, maximum=1000)
+            self.assertIn("limit", ctx.exception.message)
 
     def test_keycode_e_porta(self):
         self.assertEqual(validate_keycode(224), 224)

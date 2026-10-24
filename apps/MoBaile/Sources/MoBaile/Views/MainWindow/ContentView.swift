@@ -91,6 +91,17 @@ struct ContentView: View {
             // permanentemente no estado vazio.
             await session.connect()
         }
+        // Onde a janela abre: no Início na primeira vez, com o motor parado ou
+        // sem aparelho; em Page Objects com aparelho (`LaunchDestination`).
+        .onChange(of: session.launchPhase) { _, fase in
+            let destino = LaunchDestination.pick(
+                firstRun: !UserDefaults.standard.bool(forKey: LaunchDestination.seenKey),
+                phase: fase,
+                deviceConnected: appState.isDeviceConnected,
+                current: appState.workspaceTab
+            )
+            if let destino, appState.selectedStepID == nil { appState.workspaceTab = destino }
+        }
         .onDisappear {
             Task { await session.disconnect() }
         }
@@ -107,6 +118,7 @@ struct ContentView: View {
     }
 
     private var windowSubtitle: String {
+        if appState.workspaceTab == .home { return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected) }
         if appState.workspaceTab == .report { return reportSubtitle }
         guard appState.isDeviceConnected else { return "Nenhum dispositivo" }
         switch appState.workspaceTab {
@@ -125,6 +137,8 @@ struct ContentView: View {
             return n == 1 ? "1 evento" : "\(n) eventos"
         case .report:
             return reportSubtitle
+        case .home:
+            return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected)
         }
     }
 
@@ -193,7 +207,9 @@ struct DetailColumn: View {
             EngineStatusBanner()
 
             Group {
-                if !appState.workspaceTab.needsDevice {
+                if appState.workspaceTab == .home {
+                    HomeView()
+                } else if !appState.workspaceTab.needsDevice {
                     // Relatório ocupa a coluna inteira: o espelho não ajuda a
                     // ler uma auditoria, e a aba funciona sem aparelho.
                     ReportView()

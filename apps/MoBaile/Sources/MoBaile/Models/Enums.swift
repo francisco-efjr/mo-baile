@@ -45,10 +45,11 @@ enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
 }
 
 enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
-    case pageObjects, network, analytics, report
+    case home, pageObjects, network, analytics, report
     var id: String { rawValue }
     var displayName: String {
         switch self {
+        case .home: return "Início"
         case .pageObjects: return "Page Objects"
         case .network: return "Rede HTTP"
         case .analytics: return "Analytics"
@@ -56,9 +57,20 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// O Relatório trabalha com arquivos (spec e log) e funciona sem aparelho;
-    /// as outras áreas precisam de um conectado.
-    var needsDevice: Bool { self != .report }
+    /// Início e Relatório funcionam sem aparelho: um mostra o ambiente, o
+    /// outro trabalha com arquivos (spec e log). As outras áreas precisam de
+    /// um conectado.
+    var needsDevice: Bool { self != .report && self != .home }
+
+    /// As áreas de trabalho, sem o Início: a seção Workspace da barra lateral.
+    static var workspaceAreas: [WorkspaceTab] { allCases.filter { $0 != .home } }
+
+    /// Atalho de teclado: ⌘0 no Início e ⌘1 a ⌘4 nas áreas, na ordem da
+    /// barra lateral. O Início entrou depois e ficou com o 0 para as áreas
+    /// manterem os atalhos que as pessoas já usam.
+    var shortcutDigit: Character {
+        Character("\(WorkspaceTab.allCases.firstIndex(of: self) ?? 0)")
+    }
 }
 
 enum RunState: Equatable, Sendable {
@@ -82,32 +94,6 @@ enum ThemeMode: String, CaseIterable, Identifiable, Codable, Sendable {
     var id: String { rawValue }
 }
 
-
-/// O que um clique no espelho significa.
-///
-/// Eram tres modos. "Inspecionar" saiu: o painel de atributos ja e preenchido
-/// em qualquer modo, entao ele nao fazia nada que os outros dois nao fizessem,
-/// e ocupava espaco na barra obrigando a trocar de modo a toa.
-enum InteractionMode: String, CaseIterable, Identifiable, Sendable {
-    case forward
-    case record
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .forward: return "Repassar toque"
-        case .record: return "Gravar passo"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .forward: return "hand.tap"
-        case .record: return "record.circle"
-        }
-    }
-}
 
 /// O que uma confirmação de limpeza apaga.
 enum ClearKind: String, Identifiable, Sendable {

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import logging
 import re
@@ -54,7 +55,8 @@ def read_image(path: Path) -> tuple[bytes, str, tuple[int, int]] | None:
         if not path.is_file() or path.stat().st_size > MAX_IMAGE_BYTES:
             return None
         data = path.read_bytes()
-        with Image.open(path) as image:
+        # Abre a partir dos bytes já lidos: o arquivo é lido uma vez só.
+        with Image.open(io.BytesIO(data)) as image:
             size = image.size
     except (OSError, Image.DecompressionBombError) as exc:
         logger.info("Print %s ignorado: %s", path.name, exc)

@@ -128,16 +128,6 @@ struct MoBaileCommands: Commands {
 
             Divider()
 
-            ForEach(InteractionMode.allCases) { modo in
-                Toggle(modo.menuTitle, isOn: Binding(
-                    get: { appState.interactionMode == modo },
-                    set: { if $0 { performer.perform(.interaction(modo)) } }
-                ))
-                .disabled(!c.deviceConnected)
-            }
-
-            Divider()
-
             item(.passive, c)
             item(.screenRecording, c)
             Toggle("Espelho 60 FPS (scrcpy)", isOn: Binding(
@@ -176,16 +166,6 @@ struct MoBaileCommands: Commands {
             } else {
                 botao
             }
-        }
-    }
-}
-
-extension InteractionMode {
-    /// Título no menu Dispositivo, com maiúscula em cada palavra principal.
-    var menuTitle: String {
-        switch self {
-        case .forward: return "Repassar Toque"
-        case .record: return "Gravar Passo"
         }
     }
 }

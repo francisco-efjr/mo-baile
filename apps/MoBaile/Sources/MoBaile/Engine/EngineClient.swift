@@ -102,7 +102,11 @@ actor EngineClient {
 
         let process = Process()
         process.executableURL = configuration.pythonURL
-        process.arguments = ["-m", "mobaile.rpc"]
+        // -S: o Python não lê os `.pth` do site-packages. Um `.pth` de
+        // instalação editável com a pasta em ~/Documents fazia o macOS pedir
+        // acesso a Documentos a cada subida do motor. As bibliotecas entram
+        // pelo próprio motor (`mobaile._site`), sem seguir `.pth`.
+        process.arguments = ["-S", "-m", "mobaile.rpc"]
 
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONPATH"] = configuration.sourcePath

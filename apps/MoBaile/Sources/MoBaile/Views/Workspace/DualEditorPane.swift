@@ -37,11 +37,10 @@ struct PageObjectsView: View {
                 EmptyState(
                     icon: "chevron.left.forwardslash.chevron.right",
                     title: "Nenhum passo gravado",
-                    text: "Com “Gravar passo” ativo, clique em um elemento no espelho. Cada toque vira um locator e um método do Page Object.",
+                    text: "Clique em um elemento no espelho. O toque vai para o aparelho e vira um locator e um método do Page Object.",
                     actionLabel: appState.isDeviceConnected ? "Gravar Passo" : nil,
                     action: {
-                        appState.interactionMode = .record
-                        appState.statusMessage = "Gravar passo ativo: clique em um elemento no espelho"
+                        appState.statusMessage = "Clique em um elemento no espelho: ele vira um passo"
                     }
                 )
             } else {

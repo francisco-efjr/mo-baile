@@ -32,7 +32,7 @@ def secure_runtime_dir() -> Path:
 def write_executable_script(content: str, filename: str = "flow_runner.py") -> Path:
     """Grava o script com 0600 e devolve o caminho absoluto."""
     target = secure_runtime_dir() / filename
-    # O_EXCL evita seguir um symlink plantado por outro processo.
+    # O_NOFOLLOW evita seguir um symlink plantado por outro processo.
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
     fd = os.open(target, flags, 0o600)
     # fdopen assume a posse do descritor: o `with` fecha em erro e em sucesso.

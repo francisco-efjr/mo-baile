@@ -139,6 +139,9 @@ def _search_text(report: AuditReport, result: VariantResult) -> str:
 
 
 _KEY = re.compile(r"^(\s*)(&quot;[^&]*&quot;)(:)")
+_MARK_OK = re.compile(r"  ✓$")
+_MARK_BAD = re.compile(r"  ✗$")
+_COMMENT = re.compile(r"  // (.*)$")
 
 
 def _highlight_block(text: str) -> str:
@@ -149,9 +152,9 @@ def _highlight_block(text: str) -> str:
             out.append(f'<span class="c">{_e(line)}</span>')
             continue
         safe = _KEY.sub(r'\1<span class="k">\2</span>\3', _e(line))
-        safe = re.sub(r"  ✓$", '  <span class="ok">✓</span>', safe)
-        safe = re.sub(r"  ✗$", '  <span class="bad">✗</span>', safe)
-        safe = re.sub(r"  // (.*)$", r'  <span class="c">// \1</span>', safe)
+        safe = _MARK_OK.sub('  <span class="ok">✓</span>', safe)
+        safe = _MARK_BAD.sub('  <span class="bad">✗</span>', safe)
+        safe = _COMMENT.sub(r'  <span class="c">// \1</span>', safe)
         out.append(safe)
     return "\n".join(out)
 

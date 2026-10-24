@@ -23,6 +23,14 @@ enum EngineLocator {
     static let minimumPython = (major: 3, minor: 10)
     static let requiredModules = [("PIL", "Pillow"), ("requests", "requests")]
 
+    /// Python só do Mo baile, em `~/Library/Application Support/Mo baile/python`.
+    /// O mesmo caminho de `tools/setup/instalar-mac.sh` e de
+    /// `tools/verify_native_app.sh`: se mudar aqui, muda lá.
+    static var appPython: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Mo baile/python/bin/python3")
+    }
+
     /// Ordem de busca, do mais específico ao mais genérico. A mesma de
     /// `tools/verify_native_app.sh`: se mudar aqui, muda lá.
     static func pythonCandidates(repositoryRoot root: URL? = repositoryRoot()) -> [String] {
@@ -32,6 +40,10 @@ enum EngineLocator {
         if let root {
             candidates.append(root.appendingPathComponent(".venv/bin/python3").path)
         }
+        // O Python do Mo baile, criado pela tela Início
+        // (`tools/setup/instalar-mac.sh python`). Vem antes dos do sistema:
+        // quem o criou quer que o app use ele.
+        candidates.append(appPython.path)
         candidates += [
             "/opt/homebrew/bin/python3",
             "/usr/local/bin/python3",
@@ -68,18 +80,28 @@ enum EngineLocator {
         throw EngineError.pythonUnsuitable(unsuitableMessage(found: achados))
     }
 
+    /// Começo da mensagem de Python que não serve. A tela Início reconhece
+    /// por ele que o motor está parado por falta de Python, e não por outro motivo.
+    static let unsuitablePrefix = "O motor precisa do Python"
+
+    static func isPythonProblem(_ mensagem: String?) -> Bool {
+        mensagem?.hasPrefix(unsuitablePrefix) ?? false
+    }
+
     /// Erro que diz o que houve, o que foi achado e o que fazer.
     static func unsuitableMessage(found: [String]) -> String {
         let versao = "\(minimumPython.major).\(minimumPython.minor)"
         let pacotes = requiredModules.map(\.1).joined(separator: " ")
-        var texto = "O motor precisa do Python \(versao) ou mais novo com \(requiredModules.map(\.1).joined(separator: " e ")). "
+        var texto = "\(unsuitablePrefix) \(versao) ou mais novo com \(requiredModules.map(\.1).joined(separator: " e ")). "
         if found.isEmpty {
             texto += "Nenhum Python 3 foi encontrado. "
         } else {
             texto += "Nenhum dos encontrados serve: \(found.joined(separator: "; ")). "
         }
-        texto += "Instale com `brew install python` e depois `python3 -m pip install \(pacotes)`, "
-            + "ou defina \(pythonOverrideKey) com o caminho de um Python que já tenha os dois. "
+        // `pip install` direto no Python do Homebrew é recusado (PEP 668): o
+        // caminho que funciona é o Python só do Mo baile, que a tela Início cria.
+        texto += "Na tela Início, use Instalar no Terminal…: ele cria um Python só do Mo baile com \(pacotes). "
+            + "Ou defina \(pythonOverrideKey) com o caminho de um Python que já tenha os dois. "
             + "Depois, use Reiniciar Motor."
         return texto
     }
@@ -183,8 +205,13 @@ enum PythonProbe {
     static var script: String {
         let minimo = "(\(EngineLocator.minimumPython.major), \(EngineLocator.minimumPython.minor))"
         let modulos = EngineLocator.requiredModules.map { "(\"\($0.0)\", \"\($0.1)\")" }.joined(separator: ", ")
+        // Roda com -S (ver `run`): as pastas site-packages entram aqui, sem
+        // seguir os `.pth`, como o motor faz em `mobaile._site`.
         return """
-        import sys, importlib.util
+        import sys, os, site, importlib.util
+        for d in site.getsitepackages():
+            if d not in sys.path and os.path.isdir(d):
+                sys.path.append(d)
         v = "%d.%d.%d" % sys.version_info[:3]
         if sys.version_info[:2] < \(minimo):
             print("OLD", v)
@@ -248,8 +275,10 @@ enum PythonProbe {
         let processo = Process()
         processo.executableURL = URL(fileURLWithPath: path)
         // -I: não lê PYTHONPATH nem o diretório atual, só o que o interpretador
-        // tem instalado. -S não, porque o site-packages é justamente o que se mede.
-        processo.arguments = ["-I", "-c", script]
+        // tem instalado. -S: não segue os `.pth` (um deles apontava para
+        // ~/Documents e fazia o macOS pedir acesso); o script põe o
+        // site-packages no caminho por conta própria.
+        processo.arguments = ["-I", "-S", "-c", script]
         let saida = Pipe()
         processo.standardOutput = saida
         processo.standardError = FileHandle.nullDevice

@@ -29,10 +29,6 @@ struct CommandPerformer {
             Task { await session.switchPlatform(to: plataforma) }
             return
         }
-        for modo in InteractionMode.allCases where id == .interaction(modo) {
-            appState.interactionMode = modo
-            return
-        }
 
         switch id {
         case .palette:

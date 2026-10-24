@@ -125,7 +125,7 @@ struct ScreenCanvas: View {
             .accessibilityValue(
                 appState.currentFrame == nil
                     ? "Sem imagem"
-                    : "\(appState.hierarchyElements.count) elementos na tela. Clique: \(appState.interactionMode.displayName)"
+                    : "\(appState.hierarchyElements.count) elementos na tela. Clique: toca no aparelho e grava o passo"
             )
         }
     }
@@ -146,15 +146,10 @@ struct ScreenCanvas: View {
         appState.selectedElement = target
 
         let devicePoint = projection.toDevice(location)
-        switch appState.interactionMode {
-        case .forward:
-            Task { await session.tap(at: devicePoint) }
-        case .record:
-            // Gravar tambem toca no aparelho: gravar um fluxo exige navegar
-            // por ele, e alternar de modo a cada passo tornava a gravacao
-            // inviavel na pratica.
-            Task { await session.record(at: devicePoint) }
-        }
+        // Todo clique toca no aparelho e grava o passo. Eram dois modos
+        // (Repassar toque | Gravar passo); gravar um fluxo exige navegar por
+        // ele, e trocar de modo a cada clique só atrapalhava.
+        Task { await session.record(at: devicePoint) }
     }
 
     private func element(at location: CGPoint, projection: Projection) -> UIElement? {

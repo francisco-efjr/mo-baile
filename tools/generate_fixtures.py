@@ -44,6 +44,7 @@ from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
 from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
 from mobaile.services.report import ReportService  # noqa: E402
+from mobaile.services.setup import Probe, SetupService  # noqa: E402
 
 FIXTURE_PATH = REPO_ROOT / "apps/MoBaile/Tests/MoBaileTests/Fixtures/engine_payloads.json"
 
@@ -91,6 +92,7 @@ def ambiente_fixo(server: EngineServer):
     que e o que ela deveria estar medindo.
     """
     server.adb.adb_path = "adb"
+    server.adb.emulator_path = "/Users/qa/Library/Android/sdk/emulator/emulator"
     with contextlib.ExitStack() as stack:
         fixar = stack.enter_context
         fixar(patch.object(server.adb, "is_available", return_value=True))
@@ -113,6 +115,23 @@ def ambiente_fixo(server: EngineServer):
             server.appium, "ensure_wda",
             return_value=(True, "WebDriverAgent respondendo em http://localhost:8100."),
         ))
+        # Tela Inicio: Android pronto e iOS sem o driver XCUITest, o caso que
+        # mostra item faltando, proximo passo e area parcial de uma vez.
+        server.setup = SetupService(
+            adb=server.adb, appium=server.appium, scrcpy=server.scrcpy, system="macos",
+            probe=Probe(
+                which=lambda nome: f"/opt/homebrew/bin/{nome}" if nome in ("xcrun", "node", "swiftc") else None,
+                is_file=lambda caminho: caminho.endswith("/usr/bin/simctl"),
+                realpath=lambda c: "/opt/homebrew/lib/node_modules/appium/index.js" if c.endswith("/appium") else c,
+                find_spec=lambda nome: object() if nome == "Quartz" else None,
+                version_of={"Pillow": "11.3.0", "requests": "2.32.3"}.get,
+                read_text=lambda caminho: '{"version": "2.11.0"}' if caminho.endswith("appium/package.json") else None,
+                home="/Users/qa",
+                environ={},
+                python_version="3.12.7",
+                python_path="/opt/homebrew/bin/python3",
+            ),
+        )
         yield
 
 
@@ -253,6 +272,7 @@ def build() -> dict:
         # Ambiente e inicializacao. Estes sete decodificam nos DTOs novos do
         # front, que ate agora compilavam sem nunca terem visto saida do motor.
         fixtures["diagnostics.check"] = call("diagnostics.check")
+        fixtures["setup.check"] = call("setup.check")
         fixtures["simulators.list"] = call("simulators.list")
         fixtures["simulators.boot"] = call("simulators.boot", {"udid": SIMULADORES[0]["udid"]})
         fixtures["emulators.list"] = call("emulators.list")

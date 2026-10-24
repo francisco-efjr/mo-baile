@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
+from functools import lru_cache
 from typing import Any
 
 from mobaile.domain.report import SpecCard, SpecTemplate, Variant
@@ -50,6 +52,10 @@ NOISE_EVENT_PATTERNS: tuple[str, ...] = (
     r"^smartstream_.*",
     r"^swipe_.*",
 )
+# Uma regex só para todos os padrões de ruído: um `match` por nome, e não quinze.
+_NOISE = re.compile("|".join(f"(?:{pattern})" for pattern in NOISE_EVENT_PATTERNS), re.IGNORECASE)
+_COLON_SPACING = re.compile(r"\s*:\s*")
+_SDK_SUFFIX = re.compile(r"\(_[a-zA-Z0-9]+\)$")
 
 
 # --------------------------------------------------------------- normalização
@@ -59,21 +65,26 @@ def clean_colon_spacing(value: Any) -> str:
     """``app: pedido: home `` vira ``app:pedido:home``."""
     if not isinstance(value, str):
         return str(value)
-    return re.sub(r"\s*:\s*", ":", value.strip())
+    value = value.strip()
+    return _COLON_SPACING.sub(":", value) if ":" in value else value
 
 
 def strip_event_suffixes(event_name: Any) -> str:
     """Tira o sufixo técnico do SDK: ``screen_view(_vs)`` vira ``screen_view``."""
     if not isinstance(event_name, str):
         return str(event_name)
-    return re.sub(r"\(_[a-zA-Z0-9]+\)$", "", event_name.strip())
+    return _strip_sdk_suffix(event_name.strip())
 
 
 def strip_param_key_suffixes(key: Any) -> str:
     """``ga_screen(_sn)`` vira ``ga_screen``."""
     if not isinstance(key, str):
         return str(key)
-    return re.sub(r"\(_[a-zA-Z0-9]+\)$", "", key.strip())
+    return _strip_sdk_suffix(key.strip())
+
+
+def _strip_sdk_suffix(text: str) -> str:
+    return _SDK_SUFFIX.sub("", text) if text.endswith(")") else text
 
 
 def is_noise_event(event_name: str, params: dict[str, Any]) -> bool:
@@ -86,10 +97,7 @@ def is_noise_event(event_name: str, params: dict[str, Any]) -> bool:
     clean_name = strip_event_suffixes(event_name)
     if clean_name == "user_engagement" and origin != "app":
         return True
-    return any(
-        re.match(pattern, event_name, re.IGNORECASE) or re.match(pattern, clean_name, re.IGNORECASE)
-        for pattern in NOISE_EVENT_PATTERNS
-    )
+    return bool(_NOISE.match(event_name) or _NOISE.match(clean_name))
 
 
 # ---------------------------------------------------------------- placeholders
@@ -97,31 +105,59 @@ def is_noise_event(event_name: str, params: dict[str, Any]) -> bool:
 
 def value_matches(expected: Any, obtained: Any) -> bool:
     """O valor do log atende o valor da spec (com placeholders)?"""
-    if obtained is None or str(obtained).strip() == "":
+    if obtained is None:
         return False
     got = str(obtained).strip()
-    exp = str(expected).strip()
-    if exp == NUMBER:
-        return re.fullmatch(_TOKEN_REGEX[NUMBER], got) is not None
-    if exp == DATE:
-        return re.fullmatch(_TOKEN_REGEX[DATE], got) is not None
+    if not got:
+        return False
+    return _compiled(str(expected).strip())[1](got)
+
+
+def literal_value(expected: Any) -> str | None:
+    """O texto exato que o valor da spec exige, ou `None` se ele tem placeholder.
+
+    Valor literal casa por igualdade com o valor do log sem espaços nas pontas:
+    é o que deixa a auditoria buscar por dicionário em vez de varrer o log.
+    """
+    return _compiled(str(expected).strip())[0]
+
+
+@lru_cache(maxsize=8192)
+def _compiled(exp: str) -> tuple[str | None, Callable[[str], bool]]:
+    """(texto literal ou `None`, função que confere o valor do log), uma vez por valor.
+
+    A auditoria compara o mesmo valor da spec com milhares de eventos; montar e
+    procurar a regex a cada comparação era o grosso do custo.
+    """
     if exp == FILLED:
-        return True
-    if exp.startswith("re:"):
-        return re.fullmatch(exp[3:], got) is not None
-    if _TOKEN.search(exp):
-        pattern, last = "", 0
-        for match in _TOKEN.finditer(exp):
-            pattern += re.escape(exp[last:match.start()])
-            token = match.group(0)
-            if token in _TOKEN_REGEX:
-                pattern += _TOKEN_REGEX[token]
-            else:
-                pattern += "(?:" + "|".join(re.escape(o.strip()) for o in token[1:-1].split("|")) + ")"
-            last = match.end()
-        pattern += re.escape(exp[last:])
-        return re.fullmatch(pattern, got) is not None
-    return got == exp
+        return None, _always
+    if exp in (NUMBER, DATE):
+        pattern = re.compile(_TOKEN_REGEX[exp])
+    elif exp.startswith("re:"):
+        pattern = re.compile(exp[3:])
+    elif _TOKEN.search(exp):
+        pattern = re.compile(_token_pattern(exp))
+    else:
+        return exp, exp.__eq__
+    return None, lambda got: pattern.fullmatch(got) is not None
+
+
+def _always(_got: str) -> bool:
+    return True
+
+
+def _token_pattern(exp: str) -> str:
+    """Regex de um valor com trechos ``[a|b]``, ``[numero]``, ``[data]`` ou ``[preenchido]``."""
+    pattern, last = "", 0
+    for match in _TOKEN.finditer(exp):
+        pattern += re.escape(exp[last:match.start()])
+        token = match.group(0)
+        if token in _TOKEN_REGEX:
+            pattern += _TOKEN_REGEX[token]
+        else:
+            pattern += "(?:" + "|".join(re.escape(o.strip()) for o in token[1:-1].split("|")) + ")"
+        last = match.end()
+    return pattern + re.escape(exp[last:])
 
 
 def display_expected(expected: Any) -> str:

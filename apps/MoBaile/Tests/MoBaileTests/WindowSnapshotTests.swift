@@ -491,6 +491,26 @@ extension WindowSnapshotTests {
                      self.esperar { await s.refreshEnvironment() }
                      return (AnyView(self.janela(e, s, t)), t)
                  }),
+            Cena(id: "02c-inicio-falta-instalar", titulo: "Início, falta instalar um item",
+                 conferir: "Próximo passo com Instalar no Terminal e o comando, áreas com estado por plataforma, Ambiente por grupo",
+                 tamanho: CGSize(width: 1280, height: 1100),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .home)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02d-inicio-sem-python", titulo: "Início, Mac sem Python que sirva",
+                 conferir: "O motor não sobe: o Início ainda diz o que falta e oferece instalar e reiniciar",
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .home)
+                     let mensagem = EngineLocator.unsuitableMessage(found: ["/usr/bin/python3 (Python 3.9.6, antigo demais)"])
+                     let s = EngineSession(state: e, restartPolicy: .init(delays: [0], maxAttempts: 0)) {
+                         throw EngineError.pythonUnsuitable(mensagem)
+                     }
+                     self.esperar { await s.connect() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
             Cena(id: "03-page-objects-inicial", titulo: "Page Objects, aparelho conectado sem passos",
                  conferir: "Espelho, editores vazios, inspector com a hierarquia, toolbar completa",
                  montar: janelaPronta({ e, _ in

@@ -12,10 +12,15 @@ final class EngineLocatorTests: XCTestCase {
 
     private let candidatos = ["/repo/.venv/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
 
+    /// O Python do Mo baile (criado pela tela Início) entra logo depois do
+    /// `.venv` do repositório e antes dos do sistema.
     func testOrdemDosCandidatosNaoMudou() {
         let raiz = URL(fileURLWithPath: "/repo")
-        XCTAssertEqual(EngineLocator.pythonCandidates(repositoryRoot: raiz), candidatos)
-        XCTAssertEqual(EngineLocator.pythonCandidates(repositoryRoot: nil), Array(candidatos.dropFirst()))
+        var esperados = candidatos
+        esperados.insert(EngineLocator.appPython.path, at: 1)
+        XCTAssertEqual(EngineLocator.pythonCandidates(repositoryRoot: raiz), esperados)
+        XCTAssertEqual(EngineLocator.pythonCandidates(repositoryRoot: nil), Array(esperados.dropFirst()))
+        XCTAssertTrue(EngineLocator.appPython.path.hasSuffix("Library/Application Support/Mo baile/python/bin/python3"))
     }
 
     func testPulaOAntigoEOSemDependenciaEPegaOPrimeiroQueServe() throws {
@@ -47,7 +52,9 @@ final class EngineLocatorTests: XCTestCase {
             }
             XCTAssertTrue(mensagem.contains("/usr/bin/python3 (Python 3.9.6, antigo demais)"), mensagem)
             XCTAssertTrue(mensagem.contains("3.10"), mensagem)
-            XCTAssertTrue(mensagem.contains("pip install Pillow requests"), mensagem)
+            XCTAssertTrue(mensagem.contains("Instalar no Terminal"), "aponta o caminho da tela Início: \(mensagem)")
+            XCTAssertTrue(mensagem.contains("Pillow requests"), mensagem)
+            XCTAssertTrue(EngineLocator.isPythonProblem(mensagem), "a tela Início reconhece a falta de Python")
             XCTAssertTrue(mensagem.contains("MOBAILE_PYTHON"), mensagem)
             XCTAssertTrue((erro as? EngineError)?.isRecoverableBySetup == true)
         }

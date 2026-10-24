@@ -33,7 +33,10 @@ falha() { echo "FALHOU: $*"; echo "Rode 'make build-native' (com o app fechado) 
 # import e nome de pacote no pip.
 MODULOS_DO_MOTOR="PIL requests"
 PACOTES_DO_MOTOR="Pillow requests"
-CANDIDATOS_PYTHON="${VERIFY_PYTHON_CANDIDATES:-/opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3}"
+# O Python do Mo baile (tools/setup/instalar-mac.sh python) vem antes dos do
+# sistema. O caminho dele tem espaco, entao a lista padrao e separada por "|";
+# VERIFY_PYTHON_CANDIDATES aceita "|" ou espaco.
+CANDIDATOS_PYTHON="${VERIFY_PYTHON_CANDIDATES:-$HOME/Library/Application Support/Mo baile/python/bin/python3|/opt/homebrew/bin/python3|/usr/local/bin/python3|/usr/bin/python3}"
 # Escrita para rodar ate em Python antigo: sai com 3 se a versao nao serve e
 # com 4 se falta dependencia.
 SONDA='import sys
@@ -54,8 +57,13 @@ escolher_python() {
     if [ -n "${MOBAILE_PYTHON:-}" ] && [ -x "$MOBAILE_PYTHON" ]; then
         echo "$MOBAILE_PYTHON"; return 0
     fi
-    # shellcheck disable=SC2086 # a lista e separada por espaco de proposito
-    for candidato in $CANDIDATOS_PYTHON; do
+    local lista=()
+    if [[ "$CANDIDATOS_PYTHON" == *"|"* ]]; then
+        IFS='|' read -r -a lista <<< "$CANDIDATOS_PYTHON"
+    else
+        read -r -a lista <<< "$CANDIDATOS_PYTHON"
+    fi
+    for candidato in "${lista[@]}"; do
         [ -n "$candidato" ] || continue
         if [ ! -x "$candidato" ]; then
             motivos+="  - $candidato: nao existe"$'\n'
@@ -140,7 +148,7 @@ conferir_build_e_assinatura
 python="$(escolher_python)" || exit 1
 
 resposta="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"engine.hello","params":{"protocol_version":2}}' \
-    | PYTHONPATH="$ENGINE_SRC" PYTHONNOUSERSITE=1 "$python" -m mobaile.rpc 2>/dev/null | head -n 1 || true)"
+    | PYTHONPATH="$ENGINE_SRC" PYTHONNOUSERSITE=1 "$python" -S -m mobaile.rpc 2>/dev/null | head -n 1 || true)"
 echo "$resposta" | grep -q "\"engine_version\":\"$ESPERADA\"" \
     || falha "o motor embutido nao respondeu ao engine.hello com $python (resposta: ${resposta:-vazia})."
 

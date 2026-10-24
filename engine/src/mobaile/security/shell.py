@@ -12,6 +12,7 @@ em código gerado, então passa por allowlist.
 
 from __future__ import annotations
 
+import math
 import re
 
 from mobaile.domain.errors import InvalidInputError
@@ -44,6 +45,9 @@ def validate_device_id(device_id: str) -> str:
 def validate_coordinate(value: object, axis: str = "x") -> int:
     """Coordenada de toque: precisa ser inteiro finito dentro de uma tela plausível."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidInputError(f"Coordenada {axis} inválida: {value!r}")
+    # `NaN` e `Infinity` são JSON válido para o Python; `int()` deles estoura.
+    if isinstance(value, float) and not math.isfinite(value):
         raise InvalidInputError(f"Coordenada {axis} inválida: {value!r}")
     coord = int(value)
     if coord < 0 or coord > _MAX_COORD:

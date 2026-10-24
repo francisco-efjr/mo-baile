@@ -24,8 +24,10 @@
 #   DEST_DIR       destino do .app (padrao /Applications). O workflow de release
 #                  usa um diretorio do runner.
 #   APP_NAME       nome do bundle (padrao "Mo baile (nativo)").
-#   SIGN_IDENTITY  identidade do codesign (padrao "-", ad-hoc). Outra identidade
-#                  liga hardened runtime e timestamp (docs/RELEASE.md).
+#   SIGN_IDENTITY  identidade do codesign. Sem ela: "Mo baile Local", se existir
+#                  no Keychain (tools/create_local_signing_identity.sh), senao
+#                  "-" (ad-hoc). Outra identidade liga hardened runtime e
+#                  timestamp (docs/RELEASE.md).
 #
 # Para instalar a interface Python, use tools/install_tk_app.sh.
 set -euo pipefail
@@ -34,7 +36,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="${APP_NAME:-Mo baile (nativo)}"
 DEST_DIR="${DEST_DIR:-/Applications}"
 DEST_DIR="${DEST_DIR%/}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+# Identidade local estavel: com ela o macOS lembra as permissoes dadas ao app
+# (pasta Documentos e outras) entre um build e outro. Ad-hoc muda a cada build.
+LOCAL_IDENTITY="Mo baile Local"
+if [ -z "${SIGN_IDENTITY:-}" ]; then
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$LOCAL_IDENTITY\""; then
+        SIGN_IDENTITY="$LOCAL_IDENTITY"
+    else
+        SIGN_IDENTITY="-"
+    fi
+fi
 APP_DIR="$DEST_DIR/$APP_NAME.app"
 # Fonte unica da versao (docs/VERSIONAMENTO.md). Sem ela, nao empacota: um app
 # com versao inventada nao diz qual codigo esta rodando.
@@ -153,6 +164,13 @@ mkdir -p "$CONTENTS/Resources/engine"
 cp -R "$REPO_ROOT/engine/src" "$CONTENTS/Resources/engine/src"
 find "$CONTENTS/Resources/engine" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
+echo "==> Embutindo os scripts de instalacao"
+# A tela Inicio roda Contents/Resources/setup/instalar-mac.sh no Terminal. O
+# script acha o motor em ../engine/src, como no repositorio.
+mkdir -p "$CONTENTS/Resources/setup"
+cp "$REPO_ROOT/tools/setup/instalar-mac.sh" "$CONTENTS/Resources/setup/"
+chmod 755 "$CONTENTS/Resources/setup/instalar-mac.sh"
+
 echo "==> Gerando Info.plist"
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -197,7 +215,14 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
     echo "==> Assinando (ad-hoc)"
     # Ad-hoc serve para rodar na propria maquina. Para distribuir sem o aviso do
     # Gatekeeper: Developer ID + notarizacao (docs/RELEASE.md).
+    echo "    dica: tools/create_local_signing_identity.sh cria uma identidade local, e o"
+    echo "    macOS para de pedir de novo as permissoes do app a cada build."
     codesign --force --deep --sign - "$NOVO"
+elif [ "$SIGN_IDENTITY" = "$LOCAL_IDENTITY" ]; then
+    echo "==> Assinando com $SIGN_IDENTITY (identidade local, estavel entre builds)"
+    # Sem hardened runtime, como no ad-hoc, e sem timestamp: o servidor de
+    # timestamp da Apple so atende certificado emitido por ela.
+    codesign --force --deep --timestamp=none --sign "$SIGN_IDENTITY" "$NOVO"
 else
     echo "==> Assinando com $SIGN_IDENTITY (hardened runtime)"
     codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$NOVO"

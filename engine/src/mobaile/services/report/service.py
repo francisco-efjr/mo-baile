@@ -187,6 +187,7 @@ class ReportService:
         self, report: AuditReport, spec_path: Path, *, source: str, log_path: Path | None = None,
     ) -> dict[str, Any]:
         stats = report.log_stats
+        prints = _print_paths(report.spec)
         return {
             "spec": self.spec_summary(report.spec, spec_path),
             "platform": report.platform,
@@ -202,7 +203,7 @@ class ReportService:
                 "extras": len(report.extras),
                 "alerts": len(report.alerts),
             },
-            "results": [self._result_payload(report, i, r) for i, r in enumerate(report.results)],
+            "results": [self._result_payload(report, i, r, prints) for i, r in enumerate(report.results)],
             "extras": [e.to_dict() for e in report.extras],
             "alerts": [a.to_dict() for a in report.alerts],
             "observations": "\n".join(observation_lines(report)),
@@ -211,18 +212,18 @@ class ReportService:
         }
 
     @staticmethod
-    def _result_payload(report: AuditReport, index: int, result: VariantResult) -> dict[str, Any]:
+    def _result_payload(
+        report: AuditReport, index: int, result: VariantResult, prints: list[str | None],
+    ) -> dict[str, Any]:
         spec = report.spec
         card = spec.cards[result.variant.card_index]
         flow = result.variant.flow
-        prints_dir = Path(spec.prints_dir) if spec.prints_dir else None
-        print_path = prints_dir / card.print_name if prints_dir and card.print_name else None
         return {
             "id": index,
             "card_index": result.variant.card_index,
             "section": card.secao,
             "card_title": card.titulo or card.evento,
-            "print_path": str(print_path) if print_path and print_path.is_file() else None,
+            "print_path": prints[result.variant.card_index],
             "flow": flow,
             "flow_label": spec.fluxos.get(flow, flow) if flow else None,
             "event": result.variant.event,
@@ -483,6 +484,17 @@ def validate_spec_destination(raw: object) -> Path:
     if path.suffix.lower() != ".json":
         raise InvalidInputError(f"O rascunho da spec precisa terminar em .json: {path.name}")
     return unique_path(path)
+
+
+def _print_paths(spec: SpecTemplate) -> list[str | None]:
+    """Caminho do print de cada card, quando o arquivo existe. Um card tem várias
+    variações: o disco é consultado uma vez por card, e não uma por variação."""
+    prints_dir = Path(spec.prints_dir) if spec.prints_dir else None
+    out: list[str | None] = []
+    for card in spec.cards:
+        path = prints_dir / card.print_name if prints_dir and card.print_name else None
+        out.append(str(path) if path and path.is_file() else None)
+    return out
 
 
 def _matched_payload(event: TagEvent | None) -> dict[str, Any] | None:

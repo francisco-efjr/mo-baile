@@ -103,7 +103,7 @@ serial por domínio**. Uma chamada lenta numa fila não atrasa as outras filas.
 | `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
 | `capture` | leitura de tela e árvore, que pode levar segundos, e a escuta passiva | `hierarchy.dump`, `screen.capture`, `screen.size`, `passive.start`, `passive.stop` |
 | `services` | serviços de fundo que o motor liga e desliga | `proxy.*`, `analytics.*` (menos `analytics.ios_devices`), `flow.*`, `recording.start`, `recording.stop` |
-| `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `analytics.ios_devices` |
+| `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `setup.check`, `analytics.ios_devices` |
 | `environment` | preparo de ambiente, que pode levar minutos | `wda.start`, `simulators.boot`, `simulators.shutdown`, `emulators.boot` |
 | `report` | aba Relatório: ler spec e log, auditar, gravar arquivos e OCR dos prints. Não toca aparelho | `report.spec`, `report.audit`, `report.export`, `report.import` |
 
@@ -187,6 +187,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | Método | Parâmetros | Devolve |
 |---|---|---|
 | `diagnostics.check` | — | estado medido do ambiente nas duas plataformas, com detalhe e ação sugerida por checagem |
+| `setup.check` | — | o que está instalado (tela Início): `system`, `python` (`version`, `path`), `groups` (`motor`, `android`, `ios`, `extras`, cada um com `components`: `id`, `label`, `state`, `detail`, `required`, `install` = alvo de `tools/setup/instalar-mac.sh`, `link`, `needed_for`), `features` (`page_objects`, `network`, `analytics`, `report`, com o estado por plataforma), `pending` (obrigatórios que faltam) e `next_step`. Só procura arquivos: responde em décimos de segundo. Desde a 3.10.0 |
 | `simulators.list` | — | todos os simuladores instalados, ligados ou não, com os ligados primeiro |
 | `simulators.boot` | `udid`, `open_app` | liga o simulador e traz a janela do Simulator para a frente. Sem `udid`, escolhe o primeiro (preferindo um já ligado) |
 | `simulators.shutdown` | `udid` | desliga |
@@ -263,6 +264,14 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `flow.run` | — | roda os passos gravados no alvo ativo. O andamento chega por `flow.log` e `flow.finished` |
 | `flow.stop` | — | pede a interrupção após o passo atual. Idempotente |
 | `flow.status` | — | `{running, cancelled}` |
+| `flow.maestro_check` | `yaml` ou `path`, `env?` | valida um flow no formato do Maestro sem tocar o aparelho: `{valid, app_id, name, tags, steps}`. Comando fora do subconjunto suportado, JavaScript e comandos de IA/nuvem dão `invalid_input` com o motivo |
+| `flow.maestro_export` | `app_id?`, `name?`, `save?` | os passos gravados como flow do Maestro: `{yaml, variables, steps, path?}`. Texto digitado não vai para o YAML: vira `${VARIAVEL}`, listada em `variables`. Com `save`, grava em `~/Documents/Mo baile/flows/` sem sobrescrever |
+| `flow.maestro_run` | `yaml` ou `path`, `env?` | roda o flow no alvo ativo com as esperas do Maestro (elemento até 17 s, 7 s se `optional`; hierarquia assentada após cada ação). Divide trava, `flow.stop`, `flow.log` e `flow.finished` com `flow.run`. Devolve `{running, app_id, name, tags, steps}` |
+
+O formato e o que fica de fora estão em
+[research/maestro-modelo-de-automacao.md](research/maestro-modelo-de-automacao.md).
+Ler YAML pede o PyYAML no Python do motor; sem ele, os três métodos devolvem
+`invalid_input` explicando o que instalar, e o resto do motor segue igual.
 
 ### Escuta passiva
 
@@ -306,6 +315,23 @@ proporção descartada.
 
 **Credencial já chega redigida.** A interface nunca recebe o token. Ver
 `docs/SEGURANCA.md`.
+
+**Parâmetro numérico fora da faixa é `invalid_input`** (desde a 3.10.0). Texto,
+`true`, `NaN`, `Infinity` e valor fora da faixa são recusados com o nome do
+parâmetro na mensagem, em vez de virar erro interno ou passar adiante. Ausente
+ou `0` continua valendo o padrão.
+
+| Parâmetro | Métodos | Faixa |
+|---|---|---|
+| `limit` | `proxy.events`, `analytics.events` | inteiro, 1 a 1.000.000 (padrão 200) |
+| `poll_interval` | `devices.watch_start` | 0,01 a 3.600 s |
+| `max_width` | `screen.capture`, `stream.start` | inteiro, 16 a 16.384 |
+| `fps` | `stream.start` | 0,1 a 120; em `scrcpy.start`, inteiro de 1 a 240 |
+| `quality` | `stream.start` | inteiro, 10 a 95 |
+| `max_size` | `scrcpy.start` | inteiro, 16 a 16.384 |
+| `step_num` | `session.correlate` | inteiro, 0 a 1.000.000 |
+| `before_s`, `after_s` | `session.correlate` | 0 a 60 s |
+| `x`, `y` | `input.tap`, `hierarchy.element_at`, `codegen.record` | 0 a 20.000; `NaN` e `Infinity` recusados |
 
 ## Mudou o contrato?
 

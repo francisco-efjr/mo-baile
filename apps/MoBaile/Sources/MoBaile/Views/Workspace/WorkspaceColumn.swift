@@ -15,6 +15,8 @@ struct WorkspacePane: View {
     var body: some View {
         ZStack {
             switch appState.workspaceTab {
+            case .home:
+                HomeView().transition(.opacity)
             case .pageObjects:
                 PageObjectsView().transition(.opacity)
             case .network:

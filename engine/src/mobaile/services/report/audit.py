@@ -11,11 +11,18 @@ Portado do `tag_audit` (core/variant_audit) sem mudar as regras:
 - Sem candidato: não disparado. Com candidato e algum parâmetro divergente: erro.
 - Eventos dos fluxos da spec que nenhuma variação cobre vão para "fora da
   spec"; ``app_exception`` e ``error_view`` nas telas da spec viram alertas.
+
+Desempenho: os eventos são indexados por nome e, sob demanda, pelo valor exato
+de ``flow_name``, ``detail`` e da tela. Cada variação começa pelo recorte mais
+estreito do índice e só confere placeholders nele, em vez de varrer o log
+inteiro; os candidatos de cada variação são calculados uma vez e servem tanto
+para o resultado quanto para "fora da spec" (ver docs/DESEMPENHO_RELATORIO.md).
 """
 
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from mobaile.domain.report import (
@@ -28,7 +35,13 @@ from mobaile.domain.report import (
     VariantResult,
     VariantStatus,
 )
-from mobaile.services.report.rules import display_expected, expand_spec, is_noise_event, value_matches
+from mobaile.services.report.rules import (
+    display_expected,
+    expand_spec,
+    is_noise_event,
+    literal_value,
+    value_matches,
+)
 
 ALERT_EVENTS = ("app_exception", "error_view")
 IGNORED_EXTRA_EVENTS = ("user_engagement", "session_start", "app_clear_data")
@@ -65,33 +78,96 @@ def _failures(checks: list[ParamCheck]) -> set[str]:
     return {f"{c.field}={c.obtained}" for c in checks if not c.ok}
 
 
-def _candidates(variant: Variant, events: list[TagEvent]) -> list[TagEvent]:
+# Campos pelos quais uma variação recorta os eventos.
+_FIELDS: dict[str, Callable[[dict[str, Any]], Any]] = {
+    "flow_name": lambda p: p.get("flow_name"),
+    "detail": lambda p: p.get("detail"),
+    "screen": screen_of,
+    "ga_screen": lambda p: p.get("ga_screen"),
+}
+
+
+class EventIndex:
+    """Eventos do log por nome e, sob demanda, por valor exato de um campo.
+
+    As listas devolvidas são do índice e seguem a ordem do log: quem recebe só lê.
+    """
+
+    def __init__(self, events: Sequence[TagEvent]) -> None:
+        by_name: dict[str, list[TagEvent]] = {}
+        for event in events:
+            by_name.setdefault(event.event_name, []).append(event)
+        self._by_name = {name: tuple(found) for name, found in by_name.items()}
+        self._by_value: dict[tuple[str, str], dict[str, tuple[TagEvent, ...]]] = {}
+
+    def named(self, name: str) -> Sequence[TagEvent]:
+        return self._by_name.get(name, ())
+
+    def _values(self, name: str, field: str) -> dict[str, tuple[TagEvent, ...]]:
+        index = self._by_value.get((name, field))
+        if index is None:
+            getter = _FIELDS[field]
+            grouped: dict[str, list[TagEvent]] = {}
+            for event in self.named(name):
+                got = getter(event.params)
+                # Mesma normalização de `value_matches`: valor vazio nunca atende.
+                key = None if got is None else str(got).strip()
+                if key:
+                    grouped.setdefault(key, []).append(event)
+            index = self._by_value[(name, field)] = {key: tuple(found) for key, found in grouped.items()}
+        return index
+
+    def select(self, name: str, filters: list[tuple[str, Any]]) -> Sequence[TagEvent]:
+        """Eventos ``name`` que atendem todos os filtros (campo, valor da spec), na ordem do log.
+
+        Começa pelo valor literal mais seletivo, buscado no índice, e confere os
+        demais filtros só nesse recorte.
+        """
+        pool: Sequence[TagEvent] = self.named(name)
+        start = None
+        for position, (field, expected) in enumerate(filters):
+            literal = literal_value(expected)
+            if literal is not None:
+                found = self._values(name, field).get(literal, ())
+                if start is None or len(found) < len(pool):
+                    pool, start = found, position
+        for position, (field, expected) in enumerate(filters):
+            if position != start and pool:
+                getter = _FIELDS[field]
+                pool = [e for e in pool if value_matches(expected, getter(e.params))]
+        return pool
+
+
+def _candidates(variant: Variant, events: EventIndex) -> Sequence[TagEvent]:
     exp = variant.expected
-    candidates = [e for e in events if e.event_name == variant.event]
-    if "flow_name" in exp:
-        candidates = [e for e in candidates if value_matches(exp["flow_name"], e.params.get("flow_name"))]
-    if "detail" in exp:
-        candidates = [e for e in candidates if value_matches(exp["detail"], e.params.get("detail"))]
-    if "screen_name" in exp:
-        same_screen = [e for e in candidates if value_matches(exp["screen_name"], screen_of(e.params))]
-        if same_screen:
-            return same_screen
-        # Disparou na tela certa (ga_screen) com screen_name divergente: vira erro
-        # de screen_name. Em outra tela qualquer não é esta variação: fica como
-        # não disparado e o evento vai para "fora da spec".
-        return [e for e in candidates if value_matches(exp["screen_name"], e.params.get("ga_screen"))]
-    return candidates
+    base = [(key, exp[key]) for key in ("flow_name", "detail") if key in exp]
+    if "screen_name" not in exp:
+        return events.select(variant.event, base)
+    same_screen = events.select(variant.event, [*base, ("screen", exp["screen_name"])])
+    if same_screen:
+        return same_screen
+    # Disparou na tela certa (ga_screen) com screen_name divergente: vira erro
+    # de screen_name. Em outra tela qualquer não é esta variação: fica como
+    # não disparado e o evento vai para "fora da spec".
+    return events.select(variant.event, [*base, ("ga_screen", exp["screen_name"])])
 
 
-def audit_variant(variant: Variant, events: list[TagEvent]) -> VariantResult:
-    pool = _candidates(variant, events)
+def audit_variant(variant: Variant, events: Sequence[TagEvent] | EventIndex) -> VariantResult:
+    index = events if isinstance(events, EventIndex) else EventIndex(events)
+    return _judge(variant, _candidates(variant, index))
+
+
+def _judge(variant: Variant, pool: Sequence[TagEvent]) -> VariantResult:
+    """Resultado da variação a partir dos disparos dela, em ordem de horário."""
     if not pool:
         return VariantResult(variant=variant, status=VariantStatus.MISSING)
     latest = pool[-1]
     checks = check_params(variant.expected, latest.params)
     current = _failures(checks)
-    older_bad = [e for e in pool[:-1] if _failures(check_params(variant.expected, e.params)) - current]
-    diffs = sorted({d for e in older_bad for d in _failures(check_params(variant.expected, e.params)) - current})
+    # Cada disparo anterior é conferido uma vez só.
+    older_bad = [
+        diff for diff in (_failures(check_params(variant.expected, e.params)) - current for e in pool[:-1]) if diff
+    ]
     ga_screen = latest.params.get("ga_screen")
     explicit = latest.params.get("screen_name")
     return VariantResult(
@@ -101,24 +177,28 @@ def audit_variant(variant: Variant, events: list[TagEvent]) -> VariantResult:
         checks=checks,
         occurrences=len(pool),
         older_divergent=len(older_bad),
-        older_divergences=diffs,
+        older_divergences=sorted(set().union(*older_bad)),
         ga_screen=ga_screen if explicit and ga_screen and ga_screen != explicit else None,
     )
 
 
-def _covered(event: TagEvent, variants: list[Variant]) -> bool:
-    for variant in variants:
-        exp = variant.expected
-        if event.event_name != variant.event:
-            continue
-        if "flow_name" in exp and not value_matches(exp["flow_name"], event.params.get("flow_name")):
-            continue
-        if "screen_name" in exp and not value_matches(exp["screen_name"], screen_of(event.params)):
-            continue
-        if "detail" in exp and not value_matches(exp["detail"], event.params.get("detail")):
-            continue
-        return True
-    return False
+def _any_matcher(expected: list[Any]) -> Callable[[Any], bool]:
+    """Confere um valor do log contra uma lista de valores da spec, lembrando a resposta.
+
+    O log repete poucos valores de fluxo e de tela em milhares de eventos;
+    `value_matches` só depende do texto sem espaços nas pontas, que vira a chave.
+    """
+    patterns = list(dict.fromkeys(str(value).strip() for value in expected))
+    memo: dict[str | None, bool] = {}
+
+    def check(obtained: Any) -> bool:
+        key = None if obtained is None else str(obtained).strip()
+        hit = memo.get(key)
+        if hit is None:
+            hit = memo[key] = any(value_matches(pattern, key) for pattern in patterns)
+        return hit
+
+    return check
 
 
 def _group(events: list[TagEvent]) -> list[ExtraEvent]:
@@ -142,28 +222,35 @@ def _text_or_none(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
-def find_extras(variants: list[Variant], events: list[TagEvent]) -> tuple[list[ExtraEvent], list[ExtraEvent]]:
-    spec_flows = [v.expected["flow_name"] for v in variants if "flow_name" in v.expected]
-    spec_screens = [v.expected["screen_name"] for v in variants if "screen_name" in v.expected]
+def find_extras(
+    variants: list[Variant],
+    events: Sequence[TagEvent],
+    pools: Sequence[Sequence[TagEvent]] | None = None,
+) -> tuple[list[ExtraEvent], list[ExtraEvent]]:
+    """Eventos "fora da spec" e alertas. ``pools`` são os candidatos de cada variação, se já calculados."""
+    in_flows = _any_matcher([v.expected["flow_name"] for v in variants if "flow_name" in v.expected])
+    in_screens = _any_matcher([v.expected["screen_name"] for v in variants if "screen_name" in v.expected])
 
-    def in_flows(event: TagEvent) -> bool:
-        return any(value_matches(flow, event.params.get("flow_name")) for flow in spec_flows)
+    def related(event: TagEvent) -> bool:
+        return in_flows(event.params.get("flow_name")) or in_screens(
+            event.params.get("ga_screen") or screen_of(event.params)
+        )
 
-    def in_screens(event: TagEvent) -> bool:
-        screen = event.params.get("ga_screen") or screen_of(event.params)
-        return any(value_matches(spec_screen, screen) for spec_screen in spec_screens)
-
-    alerts = [e for e in events if e.event_name in ALERT_EVENTS and (in_flows(e) or in_screens(e))]
+    alerts = [e for e in events if e.event_name in ALERT_EVENTS and related(e)]
+    if pools is None:
+        index = EventIndex(events)
+        pools = [_candidates(v, index) for v in variants]
     # Evento já atribuído a uma variação, inclusive como erro, não é "fora da spec".
-    assigned = {id(e) for v in variants for e in _candidates(v, events)}
+    # Isso também cobre o evento que casa com evento, fluxo, tela e detail de
+    # alguma variação: ele está entre os candidatos dela.
+    assigned = {id(e) for pool in pools for e in pool}
     extras = [
         e for e in events
         if id(e) not in assigned
         and e.event_name not in ALERT_EVENTS
         and e.event_name not in IGNORED_EXTRA_EVENTS
+        and in_flows(e.params.get("flow_name"))
         and not is_noise_event(e.event_name, e.params)
-        and in_flows(e)
-        and not _covered(e, variants)
     ]
     return _group(extras), _group(alerts)
 
@@ -175,8 +262,10 @@ def run_audit(
     log_stats: dict[str, int] | None = None,
 ) -> AuditReport:
     variants = expand_spec(spec)
-    results = [audit_variant(v, events) for v in variants]
-    extras, alerts = find_extras(variants, events)
+    index = EventIndex(events)
+    pools = [_candidates(v, index) for v in variants]
+    results = [_judge(v, pool) for v, pool in zip(variants, pools, strict=True)]
+    extras, alerts = find_extras(variants, events, pools)
     return AuditReport(
         spec=spec, platform=platform, results=results, log_stats=dict(log_stats or {}), extras=extras, alerts=alerts,
         first_event=events[0] if events else None, last_event=events[-1] if events else None,

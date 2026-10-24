@@ -62,10 +62,15 @@ final class ToolbarLayoutTests: XCTestCase {
         XCTAssertEqual(janela.title, "Page Objects")
     }
 
+    /// Sem aparelho, a janela abre no Início (`LaunchDestination`); numa área
+    /// que precisa de aparelho, o título diz que não há um.
     func testTituloSemAparelho() throws {
         let (estado, sessao, tema) = ambiente(aparelho: nil)
         let (janela, _) = try itensDaToolbar(estado, sessao, tema)
         defer { janela.close() }
+        XCTAssertEqual(janela.title, "Início")
+        estado.workspaceTab = .pageObjects
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertEqual(janela.title, "Sem dispositivo")
     }
 
@@ -109,17 +114,6 @@ final class ToolbarLayoutTests: XCTestCase {
         let (vazio, sessaoVazia, temaVazio) = ambiente(aparelho: nil)
         let axVazio = try arvore(DeviceMenu(), vazio, sessaoVazia, temaVazio)
         XCTAssertEqual(axVazio.node(label: "Dispositivo")?.value, "Nenhum dispositivo", axVazio.dump)
-    }
-
-    /// Os segmentos do modo do clique têm nome próprio e o grupo, o dele.
-    func testModoDoCliqueNomeiaOsSegmentos() throws {
-        let (estado, sessao, tema) = ambiente()
-        let ax = try arvore(InteractionModePicker(), estado, sessao, tema)
-        let rotulos = ax.all.map(\.label)
-        for esperado in ["Repassar toque", "Gravar passo"] {
-            XCTAssertTrue(rotulos.contains(esperado), "falta '\(esperado)': \(rotulos)\n\(ax.dump)")
-        }
-        XCTAssertNotNil(ax.node(label: "Ação do clique no espelho"), ax.dump)
     }
 
     /// Gravando, os botões trocam de nome: o leitor precisa saber que o

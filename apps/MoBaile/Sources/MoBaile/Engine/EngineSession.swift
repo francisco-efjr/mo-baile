@@ -50,6 +50,11 @@ final class EngineSession {
     private(set) var lastScan: Date?
     private(set) var isBooting = false
 
+    /// O que está instalado (`setup.check`), para a tela Início. `nil` antes
+    /// da primeira checagem ou com o motor fora do ar.
+    private(set) var setup: EngineDTO.Setup?
+    private(set) var lastSetupCheck: Date?
+
     /// Resultado do handshake: versão do motor e tabela de métodos.
     private(set) var hello: EngineDTO.Hello?
 
@@ -624,12 +629,24 @@ final class EngineSession {
     /// Relê diagnóstico, simuladores e emuladores.
     func refreshEnvironment() async {
         guard let client else { return }
+        await refreshSetup()
         diagnostics = try? await client.call("diagnostics.check", as: EngineDTO.Diagnostics.self)
         // Lista de simuladores falha em Mac sem Xcode; o diagnóstico já explica
         // isso, então aqui a falha vira lista vazia e não erro na tela.
         simulators = (try? await client.call("simulators.list", as: EngineDTO.SimulatorList.self))?.simulators ?? []
         avds = (try? await client.call("emulators.list", as: EngineDTO.AvdList.self))?.avds ?? []
         lastScan = Date()
+    }
+
+    /// Relê só o que está instalado. É barato (o motor só procura arquivos):
+    /// a tela Início chama toda vez que o app volta ao primeiro plano, que é
+    /// quando a pessoa termina uma instalação no Terminal.
+    func refreshSetup() async {
+        guard let client else { return }
+        if let novo = try? await client.call("setup.check", as: EngineDTO.Setup.self) {
+            setup = novo
+        }
+        lastSetupCheck = Date()
     }
 
     /// Liga um simulador e traz a janela do Simulator para a frente.
@@ -1031,7 +1048,6 @@ final class EngineSession {
         do {
             let inicio: EngineDTO.PassiveState = try await client.call("passive.start")
             state.passiveListening = true
-            state.interactionMode = .record
             state.statusMessage = "Gravando o que você fizer no aparelho (\(inicio.screen[0])×\(inicio.screen[1]))"
         } catch {
             state.passiveListening = false

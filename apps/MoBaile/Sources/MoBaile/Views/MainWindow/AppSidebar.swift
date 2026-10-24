@@ -20,8 +20,20 @@ struct AppSidebar: View {
     var body: some View {
         let theme = themeManager.current
         List(selection: selecao) {
+            // Início fica acima das áreas, sem seção: é o ponto de partida, não
+            // uma área de trabalho. A contagem é o que falta instalar.
+            Label {
+                Text(WorkspaceTab.home.displayName)
+            } icon: {
+                Image(systemName: WorkspaceTab.home.symbolName)
+                    .foregroundStyle(WorkspaceTab.home.categoryColor(theme))
+            }
+            .badge(contagem(.home))
+            .tag(SidebarSelection.area(.home))
+            .accessibilityValue(contagem(.home) == 0 ? "" : "\(contagem(.home)) pendentes")
+
             Section("Workspace") {
-                ForEach(WorkspaceTab.allCases) { area in
+                ForEach(WorkspaceTab.workspaceAreas) { area in
                     Label {
                         Text(area.displayName)
                     } icon: {
@@ -83,6 +95,7 @@ struct AppSidebar: View {
 
     private func contagem(_ area: WorkspaceTab) -> Int {
         switch area {
+        case .home: return session.setup?.pending ?? 0
         case .pageObjects: return appState.steps.count
         case .network: return appState.httpRequests.count
         case .analytics: return appState.analyticsEvents.count
@@ -175,10 +188,9 @@ private struct SidebarBottomBar: View {
         let theme = themeManager.current
         HStack(spacing: 1) {
             Button {
-                appState.interactionMode = .record
                 appState.workspaceTab = .pageObjects
                 appState.selectedStepID = nil
-                appState.statusMessage = "Gravar passo: clique em um elemento no espelho"
+                appState.statusMessage = "Clique em um elemento no espelho: ele vira um passo"
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .medium))
@@ -187,7 +199,7 @@ private struct SidebarBottomBar: View {
             }
             .buttonStyle(BarIconButtonStyle(theme: theme))
             .disabled(!appState.isDeviceConnected)
-            .help("Gravar Passo: o próximo clique no espelho vira um passo")
+            .help("Gravar Passo: cada clique no espelho vira um passo")
             .accessibilityLabel("Gravar Passo")
 
             Spacer(minLength: 6)
@@ -214,6 +226,7 @@ private struct SidebarBottomBar: View {
 extension WorkspaceTab {
     var symbolName: String {
         switch self {
+        case .home: return "house"
         case .pageObjects: return "chevron.left.forwardslash.chevron.right"
         case .network: return "network"
         case .analytics: return "chart.xyaxis.line"
@@ -225,6 +238,7 @@ extension WorkspaceTab {
     /// auditoria do Analytics e fica na mesma categoria.
     func categoryColor(_ theme: any ThemeTokens) -> Color {
         switch self {
+        case .home: return theme.accent
         case .pageObjects: return theme.cat1
         case .network: return theme.cat3
         case .analytics, .report: return theme.cat2

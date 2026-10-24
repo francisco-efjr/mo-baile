@@ -87,6 +87,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "devices.watch_stop": _spec(),
     # Ambiente e inicializacao
     "diagnostics.check": _spec(LANE_QUERY, 30, progress=True),
+    # O que esta instalado (tela Inicio). So procura arquivo: e rapido.
+    "setup.check": _spec(LANE_QUERY, 10),
     "simulators.list": _spec(LANE_QUERY),
     "simulators.boot": _spec(LANE_ENVIRONMENT, 180, progress=True),
     "simulators.shutdown": _spec(LANE_ENVIRONMENT),
@@ -142,6 +144,11 @@ METHODS: dict[str, dict[str, Any]] = {
     "flow.run": _spec(LANE_SERVICES, 30),
     "flow.stop": _spec(LANE_SERVICES, 60),
     "flow.status": _spec(LANE_SERVICES),
+    # Flow declarativo no formato do Maestro. Validar e exportar nao tocam
+    # aparelho; rodar divide a trava e as notificacoes com `flow.run`.
+    "flow.maestro_check": _spec(),
+    "flow.maestro_export": _spec(),
+    "flow.maestro_run": _spec(LANE_SERVICES, 30),
     # Escuta passiva. `start` e `stop` na mesma fila, para o `stop` nunca passar
     # na frente de um `start` ainda em andamento. `status` so le uma referencia
     # e fica na rapida: nao ha ordem a preservar, e esperar um dump de 60 s para

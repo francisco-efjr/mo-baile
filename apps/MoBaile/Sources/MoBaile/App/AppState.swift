@@ -169,9 +169,6 @@ class AppState {
     /// a maioria (1080x2400, 1170x2532...).
     var deviceSize: CGSize = CGSize(width: 1080, height: 2400)
 
-    /// Modo de interacao do espelho: inspecionar, repassar toque ou gravar passo.
-    var interactionMode: InteractionMode = .forward
-
     /// Gravação de vídeo da tela do aparelho, feita pelo motor.
     /// Escuta passiva: grava o que a pessoa faz direto no aparelho.
     var passiveListening: Bool = false
@@ -263,7 +260,10 @@ class AppState {
     /// Sem aparelho, numa área que precisa de um, o inspector só repetiria o
     /// "Conecte um aparelho" do estado vazio. Ele sai da janela e volta ao
     /// conectar, sem mexer na escolha da pessoa, como o Xcode faz (D3).
-    var inspectorSuppressed: Bool { !isDeviceConnected && workspaceTab.needsDevice }
+    /// No Início também: ele mostra o ambiente, e não há seleção a inspecionar.
+    var inspectorSuppressed: Bool {
+        workspaceTab == .home || (!isDeviceConnected && workspaceTab.needsDevice)
+    }
     var inspectorShown: Bool { inspectorVisible && !inspectorSuppressed }
 
     func toggleInspector() {

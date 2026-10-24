@@ -135,7 +135,7 @@ class TestSuperficie(ContractBase):
     METODOS_ESPERADOS: ClassVar[set[str]] = {
         "engine.info", "engine.shutdown", "session.select_device", "devices.list",
         "devices.watch_start", "devices.watch_stop",
-        "diagnostics.check", "simulators.list", "simulators.boot", "simulators.shutdown",
+        "diagnostics.check", "setup.check", "simulators.list", "simulators.boot", "simulators.shutdown",
         "emulators.list", "emulators.boot", "wda.start", "wda.status",
         "screen.capture", "screen.size", "hierarchy.dump", "hierarchy.element_at",
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",
@@ -341,6 +341,20 @@ class TestAmbienteEInicializacao(ContractBase):
             for check in bloco["checks"]:
                 self.assertEqual(set(check), {"label", "state", "detail", "action"})
                 self.assertIn(check["state"], {"ok", "warn", "error", "busy", "off"})
+
+    def test_setup_traz_grupos_areas_e_proximo_passo(self):
+        resultado = self.ok("setup.check")
+        self.assertEqual(set(resultado), {"system", "python", "groups", "features", "pending", "next_step"})
+        self.assertEqual(resultado["groups"][0]["id"], "motor")
+        for grupo in resultado["groups"]:
+            for c in grupo["components"]:
+                self.assertEqual(
+                    set(c), {"id", "label", "state", "detail", "required", "install", "link", "needed_for"},
+                )
+        self.assertEqual(
+            [f["id"] for f in resultado["features"]], ["page_objects", "network", "analytics", "report"],
+        )
+        self.assertIsInstance(resultado["pending"], int)
 
     def test_diagnostico_nao_inventa_dispositivo_conectado(self):
         # O cartao antigo trazia um visto verde fixo em "Dispositivo conectado".

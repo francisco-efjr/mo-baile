@@ -46,6 +46,7 @@ from mobaile.adapters.adb import ADBBridge
 from mobaile.adapters.analytics_logcat import FirebaseAnalyticsListener
 from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
+from mobaile.adapters.flow_devices import AndroidFlowDevice, IOSFlowDevice
 from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
 from mobaile.adapters.ios_wda import IOSBridge
 from mobaile.adapters.mjpeg import MJPEGReader
@@ -69,13 +70,16 @@ from mobaile.security import (
     build_adb_input_text_args,
     validate_coordinate,
     validate_device_id,
+    validate_integer,
+    validate_number,
 )
-from mobaile.services import flows
+from mobaile.services import flows, maestro_flow
 from mobaile.services.codegen import CodeGenerator
 from mobaile.services.devices import DeviceWatcher
 from mobaile.services.diagnostics import DiagnosticsService
 from mobaile.services.hierarchy import UIHierarchyParser
 from mobaile.services.report import ReportService
+from mobaile.services.setup import SetupService
 from mobaile.services.streaming import RealTimeStreamEngine
 
 logger = logging.getLogger(__name__)
@@ -224,6 +228,7 @@ class EngineServer:
         self.codegen = CodeGenerator()
         self.appium = AppiumBridge()
         self.diagnostics = DiagnosticsService(adb=self.adb, ios=self.ios, appium=self.appium)
+        self.setup = SetupService(adb=self.adb, appium=self.appium, scrcpy=self.scrcpy)
         self.report = ReportService(ocr=VisionOCR())
 
         # Estado de sessao. Escrito pelas filas, pelo vigia de dispositivos e
@@ -279,6 +284,7 @@ class EngineServer:
             "devices.watch_start": self.devices_watch_start,
             "devices.watch_stop": self.devices_watch_stop,
             "diagnostics.check": self.diagnostics_check,
+            "setup.check": self.setup_check,
             "simulators.list": self.simulators_list,
             "simulators.boot": self.simulators_boot,
             "simulators.shutdown": self.simulators_shutdown,
@@ -320,6 +326,9 @@ class EngineServer:
             "flow.run": self.flow_run,
             "flow.stop": self.flow_stop,
             "flow.status": self.flow_status,
+            "flow.maestro_check": self.flow_maestro_check,
+            "flow.maestro_export": self.flow_maestro_export,
+            "flow.maestro_run": self.flow_maestro_run,
             "passive.start": self.passive_start,
             "passive.stop": self.passive_stop,
             "passive.status": self.passive_status,
@@ -553,14 +562,9 @@ class EngineServer:
         gravacao do passo), entao nao ha relogio do aparelho a corrigir. A
         janela termina no passo seguinte, se ele vier antes do prazo.
         """
-        try:
-            step_num = int(params.get("step_num"))
-        except (TypeError, ValueError) as exc:
-            raise InvalidInputError("step_num precisa ser um numero inteiro.") from exc
-        before = float(params.get("before_s", self._CORRELATE_BEFORE_S))
-        after = float(params.get("after_s", self._CORRELATE_AFTER_S))
-        if not (0 <= before <= 60 and 0 <= after <= 60):
-            raise InvalidInputError("before_s e after_s precisam ficar entre 0 e 60 segundos.")
+        step_num = validate_integer(params.get("step_num"), "step_num", minimum=0, maximum=1_000_000)
+        before = validate_number(params.get("before_s", self._CORRELATE_BEFORE_S), "before_s", minimum=0, maximum=60)
+        after = validate_number(params.get("after_s", self._CORRELATE_AFTER_S), "after_s", minimum=0, maximum=60)
 
         passos = self.codegen.get_steps()
         passo = next((p for p in passos if p.step_num == step_num), None)
@@ -604,7 +608,9 @@ class EngineServer:
         interface nao faz polling, e o aparelho aparece sozinho ao ser plugado.
         """
         self.devices_watch_stop({})
-        interval = float(params.get("poll_interval") or settings.poll_interval)
+        interval = validate_number(
+            params.get("poll_interval") or settings.poll_interval, "poll_interval", minimum=0.01, maximum=3600,
+        )
 
         def on_changed(platform: str, device_id: str) -> None:
             # Selecao implicita: se o alvo detectado e o unico, ele vira o alvo
@@ -661,6 +667,16 @@ class EngineServer:
         self._progress("Verificando o ambiente Android", 50)
         android = self.diagnostics.android_diagnostics().to_dict()
         return {"ios": ios, "android": android}
+
+    def setup_check(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """O que esta instalado e o que cada area precisa (tela Inicio).
+
+        A plataforma da sessao vai primeiro no proximo passo: quem esta no
+        Android ve o que falta para o Android antes do que falta para o iOS.
+        """
+        with self._state_lock:
+            plataforma = self.platform.value
+        return self.setup.run(platform_in_use=plataforma)
 
     def simulators_list(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Todos os simuladores instalados, e nao so os que ja estao ligados."""
@@ -773,7 +789,9 @@ class EngineServer:
         if image is None:
             raise EngineError("Nao foi possivel capturar a tela do dispositivo.")
         max_width = params.get("max_width")
-        payload = self._encode_png(image, int(max_width) if max_width else None)
+        payload = self._encode_png(
+            image, validate_integer(max_width, "max_width", minimum=16, maximum=16384) if max_width else None,
+        )
         # A captura leva segundos; se o alvo mudou no meio, o front precisa
         # saber de qual aparelho a imagem veio para nao mostra-la no lugar errado.
         payload["device_id"] = sessao.device_id
@@ -943,14 +961,12 @@ class EngineServer:
 
     def stream_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self.stream_stop({})
-        fps = float(params.get("fps") or settings.stream_fps)
-        max_width = int(params.get("max_width") or STREAM_MAX_WIDTH)
+        fps = validate_number(params.get("fps") or settings.stream_fps, "fps", minimum=0.1, maximum=120)
+        max_width = validate_integer(params.get("max_width") or STREAM_MAX_WIDTH, "max_width", minimum=16, maximum=16384)
         fmt = str(params.get("format") or settings.stream_format).lower()
         if fmt not in ("jpeg", "png"):
             raise InvalidInputError(f"Formato de quadro invalido: {fmt!r}")
-        quality = int(params.get("quality") or settings.stream_quality)
-        if not 10 <= quality <= 95:
-            raise InvalidInputError("quality precisa ficar entre 10 e 95.")
+        quality = validate_integer(params.get("quality") or settings.stream_quality, "quality", minimum=10, maximum=95)
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
@@ -1055,8 +1071,8 @@ class EngineServer:
             raise EngineError("Binário do scrcpy não encontrado. Instale com 'brew install scrcpy'.")
 
         device = self._require_device()
-        fps = int(params.get("fps") or 60)
-        max_size = int(params.get("max_size") or 1080)
+        fps = validate_integer(params.get("fps") or 60, "fps", minimum=1, maximum=240)
+        max_size = validate_integer(params.get("max_size") or 1080, "max_size", minimum=16, maximum=16384)
         always_on_top = bool(params.get("always_on_top", True))
         title = str(params.get("title") or f"Mo baile — {device}")
 
@@ -1261,7 +1277,7 @@ class EngineServer:
         return {"running": self.ios_netlog.is_running() or self.android_netlog.is_running()}
 
     def proxy_events(self, params: dict[str, Any]) -> dict[str, Any]:
-        limit = int(params.get("limit") or 200)
+        limit = validate_integer(params.get("limit") or 200, "limit", minimum=1, maximum=1_000_000)
         events = self.proxy.events_history[-limit:]
         return {"events": [event.to_dict() for event in events], "total": len(self.proxy.events_history)}
 
@@ -1422,7 +1438,7 @@ class EngineServer:
         return {"running": self.analytics.is_running()}
 
     def analytics_events(self, params: dict[str, Any]) -> dict[str, Any]:
-        limit = int(params.get("limit") or 200)
+        limit = validate_integer(params.get("limit") or 200, "limit", minimum=1, maximum=1_000_000)
         events = list(self.analytics.events_history)[-limit:]
         return {"events": [event.to_dict() for event in events]}
 
@@ -1850,6 +1866,94 @@ class EngineServer:
     def flow_status(self, _params: dict[str, Any]) -> dict[str, Any]:
         with self._state_lock:
             return {"running": self._flow_running, "cancelled": self._flow_cancelled}
+
+    # ------------------------------------------ flow declarativo (formato Maestro)
+
+    @staticmethod
+    def _ler_flow_maestro(params: dict[str, Any]) -> maestro_flow.Flow:
+        env = params.get("env") or {}
+        if not isinstance(env, dict):
+            raise InvalidInputError("`env` precisa ser um mapa NOME: valor.")
+        if params.get("yaml"):
+            return maestro_flow.parse_flow(str(params["yaml"]), env=env)
+        if params.get("path"):
+            return maestro_flow.load_flow(str(params["path"]), env=env)
+        raise InvalidInputError("Passe `yaml` (o texto do flow) ou `path` (um arquivo .yaml).")
+
+    def flow_maestro_check(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Valida um flow no formato do Maestro sem tocar o aparelho."""
+        return {"valid": True, **self._ler_flow_maestro(params).summary()}
+
+    def flow_maestro_export(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Os passos gravados como flow do Maestro. Texto digitado vira `${VARIAVEL}`.
+
+        Com `save: true`, grava em `~/Documents/Mo baile/flows/`, a mesma raiz
+        do `codegen.save`, sem sobrescrever arquivo existente.
+        """
+        passos = self.codegen.get_steps()
+        if not passos:
+            raise InvalidInputError("Nenhum passo gravado para exportar.")
+        nome = params.get("name")
+        yaml_texto, variaveis = maestro_flow.export_steps(
+            passos, app_id=params.get("app_id") or None, name=str(nome) if nome else None,
+        )
+        resultado: dict[str, Any] = {"yaml": yaml_texto, "variables": variaveis, "steps": len(passos)}
+        if params.get("save"):
+            raiz = pathlib.Path.home() / "Documents" / "Mo baile"
+            pasta = raiz / "flows"
+            base = re.sub(r"[^A-Za-z0-9_-]+", "_", str(nome or "flow")).strip("_")[:64] or "flow"
+            arquivo = pasta / f"{base}.yaml"
+            contador = 2
+            while arquivo.exists():
+                arquivo = pasta / f"{base}_{contador}.yaml"
+                contador += 1
+            if not _dentro_de(arquivo, raiz):
+                raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
+            pasta.mkdir(parents=True, exist_ok=True)
+            arquivo.write_text(yaml_texto, encoding="utf-8")
+            resultado["path"] = str(arquivo)
+        return resultado
+
+    def flow_maestro_run(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Roda um flow do Maestro no alvo ativo, com as esperas do Maestro.
+
+        Divide com `flow.run` a trava de execucao, `flow.stop` e as
+        notificacoes `flow.log`/`flow.finished`: para a interface e o mesmo
+        "fluxo rodando". Validacao vem antes da trava, para erro de YAML nao
+        ocupar o aparelho.
+        """
+        flow = self._ler_flow_maestro(params)
+        sessao = self._require_session()
+        device_id = sessao.device_id or ""
+        if sessao.platform is Platform.IOS:
+            aparelho = IOSFlowDevice(self.ios, device_id)
+        else:
+            aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=lambda: self._android_hierarchy(device_id))
+        with self._state_lock:
+            if self._shutdown_done:
+                raise InvalidInputError("O motor esta encerrando.")
+            if self._flow_running:
+                raise InvalidInputError("Ja existe uma execucao em andamento.")
+            self._flow_running = True
+            self._flow_cancelled = False
+
+        def ao_terminar(sucesso: bool, mensagem: str) -> None:
+            with self._state_lock:
+                self._flow_running = False
+                self._flow_thread = None
+                cancelado = self._flow_cancelled
+            self.notify("flow.finished", {"success": sucesso and not cancelado, "message": mensagem})
+
+        execucao = maestro_flow.FlowThread(
+            flow, aparelho, lambda linha: self.notify("flow.log", {"line": linha}), ao_terminar,
+        )
+        with self._state_lock:
+            self._flow_thread = execucao
+            if self._flow_cancelled:
+                # `flow.stop` chegou entre a trava e aqui: o flow nem comeca.
+                execucao.cancel()
+        execucao.start()
+        return {"running": True, **flow.summary()}
 
     def codegen_steps(self, _params: dict[str, Any]) -> dict[str, Any]:
         return {"steps": [step.to_dict() for step in self.codegen.get_steps()]}

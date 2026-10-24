@@ -14,6 +14,7 @@ from mobaile.security.files import (
     validate_input_dir,
     validate_input_file,
 )
+from mobaile.security.numbers import validate_integer, validate_number
 from mobaile.security.paths import secure_runtime_dir, write_executable_script
 from mobaile.security.redaction import redact_body, redact_headers, redact_url
 from mobaile.security.shell import (
@@ -47,7 +48,9 @@ __all__ = [
     "validate_device_id",
     "validate_input_dir",
     "validate_input_file",
+    "validate_integer",
     "validate_keycode",
+    "validate_number",
     "validate_port",
     "write_executable_script",
 ]

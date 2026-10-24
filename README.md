@@ -35,20 +35,27 @@ uma captura estática no Appium Inspector.
 
 ## Requisitos
 
+Na primeira abertura, a tela **Início** do app mostra o que está pronto e o que
+falta instalar nesta máquina, com "Instalar no Terminal…" para cada item. O
+levantamento completo, por recurso e com o caminho para Windows, está em
+[docs/INSTALACAO.md](docs/INSTALACAO.md).
+
 | Para | Precisa de |
 |---|---|
 | Abrir o app | macOS 14 (Sonoma) ou superior |
 | Motor | Python 3.10 ou superior com `Pillow` e `requests` (`python3 -m pip install Pillow requests`) |
 | Android | `adb` ([Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools)); emulador ou aparelho com depuração USB |
-| iOS (simulador e iPhone) | Xcode, e [Appium](https://appium.io) com o driver XCUITest para subir o WebDriverAgent |
+| iOS (simulador e iPhone) | Xcode completo (as Command Line Tools não têm o simulador), Node.js e [Appium](https://appium.io) com o driver XCUITest (`appium driver install xcuitest`) para subir o WebDriverAgent |
 | Tagueamento de iPhone físico por cabo | opcional: `pymobiledevice3` no mesmo Python do motor |
 | Relatório a partir de log exportado | nada além do app |
 
-O app usa o Python do sistema, não um ambiente virtual. Ele procura, nesta
-ordem, `MOBAILE_PYTHON` (variável de ambiente), `/opt/homebrew/bin/python3`,
+O app procura o Python nesta ordem: `MOBAILE_PYTHON` (variável de ambiente),
+o Python do Mo baile em `~/Library/Application Support/Mo baile/python` (criado
+pelo "Instalar no Terminal…" do Início, ou por
+`bash tools/setup/instalar-mac.sh python`), `/opt/homebrew/bin/python3`,
 `/usr/local/bin/python3` e `/usr/bin/python3`. O `python3` que vem com o macOS
-costuma ser antigo demais; instale um pelo [Homebrew](https://brew.sh) ou
-pelo [python.org](https://www.python.org/downloads/macos/).
+é antigo demais, e o do Homebrew recusa `pip install` fora de um ambiente
+virtual; o Python do Mo baile resolve os dois casos.
 
 ## Instalação
 
