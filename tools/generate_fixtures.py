@@ -23,6 +23,7 @@ import base64
 import contextlib
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -43,6 +44,7 @@ from relatorio_ocr import CARD_CHECKOUT, CARD_INTERACTION  # noqa: E402
 from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
 from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
+from mobaile.services.home import RecentStore  # noqa: E402
 from mobaile.services.report import ReportService  # noqa: E402
 from mobaile.services.setup import Probe, SetupService  # noqa: E402
 
@@ -76,6 +78,21 @@ SIMULADORES = [
     },
 ]
 AVDS = ["Pixel_9", "Pixel_9_Pro"]
+
+
+CHANGELOG_EXEMPLO = """# Changelog
+
+## [9.9.0] - 2026-10-24
+
+### Adicionado
+
+- **Tela Início nova.** Boas-vindas, aparelho e recentes.
+- **Tela Ambiente.** O diagnóstico de instalação, à parte.
+
+## [9.8.0] - 2026-10-01
+
+- **Antiga.** Não aparece.
+"""
 
 
 @contextlib.contextmanager
@@ -273,6 +290,20 @@ def build() -> dict:
         # front, que ate agora compilavam sem nunca terem visto saida do motor.
         fixtures["diagnostics.check"] = call("diagnostics.check")
         fixtures["setup.check"] = call("setup.check")
+        # Tela Inicio: recentes num arquivo descartavel com relogio fixo, e as
+        # novidades de um CHANGELOG de exemplo, para a fixture nao mudar a cada
+        # versao nem depender do historico de quem gera.
+        with tempfile.TemporaryDirectory() as pasta_home:
+            pasta_home = pathlib.Path(pasta_home)
+            (pasta_home / "CHANGELOG.md").write_text(CHANGELOG_EXEMPLO, encoding="utf-8")
+            server.home.recents = RecentStore(pasta_home / "recentes.json", clock=lambda: 1757030000.0)
+            server.home.recents.record(
+                "report", "Relatório · Demanda", "2 divergências · 42,9% conforme",
+                "/Users/qa/Documents/Mo baile/specs/demanda.json",
+            )
+            server.home._changelog = lambda: pasta_home / "CHANGELOG.md"
+            server.home._version = "9.9.0"
+            fixtures["home.summary"] = call("home.summary")
         fixtures["simulators.list"] = call("simulators.list")
         fixtures["simulators.boot"] = call("simulators.boot", {"udid": SIMULADORES[0]["udid"]})
         fixtures["emulators.list"] = call("emulators.list")
@@ -416,6 +447,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="so confere; nao escreve")
     args = parser.parse_args(argv)
+    # Gerar as fixtures salva Page Object e audita relatorio: os recentes da
+    # tela Inicio iriam para o Mac de quem gera. Vao para uma pasta descartavel.
+    os.environ["MOBAILE_DATA_DIR"] = tempfile.mkdtemp(prefix="mobaile-fixtures-")
     destination = FIXTURE_PATH
     if args.check:
         return check(destination)

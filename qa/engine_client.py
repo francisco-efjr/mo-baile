@@ -9,6 +9,7 @@ import pathlib
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -36,6 +37,8 @@ class Motor:
         env["QA_ANIMADO"] = "0"
         env["QA_CAPTURE_DELAY_MS"] = "0"
         env["NO_PROXY"] = env["no_proxy"] = "127.0.0.1,localhost"
+        # Recentes da tela Início numa pasta descartável, nunca no Mac de quem roda.
+        env["MOBAILE_DATA_DIR"] = tempfile.mkdtemp(prefix="mobaile-qa-")
         env.update(extra_env or {})
 
         self.proc = subprocess.Popen(

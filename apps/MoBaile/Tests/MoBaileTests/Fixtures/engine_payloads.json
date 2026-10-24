@@ -43,6 +43,8 @@
         "flow.stop",
         "hierarchy.dump",
         "hierarchy.element_at",
+        "home.forget_recent",
+        "home.summary",
         "input.tap",
         "input.text",
         "netlog.start",
@@ -143,6 +145,16 @@
         "setup.check": {
           "lane": "query",
           "timeout_s": 10,
+          "progress": false
+        },
+        "home.summary": {
+          "lane": "query",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "home.forget_recent": {
+          "lane": "fast",
+          "timeout_s": 15,
           "progress": false
         },
         "simulators.list": {
@@ -417,6 +429,7 @@
         "proxy.event",
         "analytics.event",
         "device.changed",
+        "home.changed",
         "passive.step",
         "passive.skipped",
         "passive.text",
@@ -917,6 +930,140 @@
         "detail": "Appium 2.11.0 sem o driver XCUITest. Toque, hierarquia e Page Objects no iOS dependem dele.",
         "install": "appium",
         "link": null
+      }
+    }
+  },
+  "home.summary": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "state": "daily",
+      "python": {
+        "version": "3.12.7",
+        "path": "/opt/homebrew/bin/python3"
+      },
+      "environment": {
+        "ready": 3,
+        "total": 4,
+        "pending": [
+          {
+            "id": "appium",
+            "title": "Appium com o driver XCUITest",
+            "install": "appium",
+            "link": null,
+            "blocks": [
+              {
+                "area": "page_objects",
+                "platform": "ios",
+                "effect": "toque e hierarquia no iOS"
+              }
+            ]
+          }
+        ]
+      },
+      "platforms": [
+        {
+          "platform": "android",
+          "ready": true,
+          "found": [
+            "adb encontrado",
+            "emulador encontrado"
+          ],
+          "missing": [],
+          "install": "android",
+          "link": null
+        },
+        {
+          "platform": "ios",
+          "ready": false,
+          "found": [
+            "Xcode encontrado"
+          ],
+          "missing": [
+            "Appium com o driver XCUITest"
+          ],
+          "install": "appium",
+          "link": null
+        }
+      ],
+      "suggested_platform": "android",
+      "targets": [
+        {
+          "id": "1A2B3C4D-0000-4000-8000-0000000000AA",
+          "name": "iPhone 16 Pro",
+          "platform": "ios",
+          "kind": "simulator",
+          "running": true,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": false,
+            "record": false
+          },
+          "blocked_by": [
+            "appium"
+          ]
+        },
+        {
+          "id": "Pixel_9",
+          "name": "Pixel 9",
+          "platform": "android",
+          "kind": "emulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": true,
+            "record": true
+          },
+          "blocked_by": []
+        },
+        {
+          "id": "Pixel_9_Pro",
+          "name": "Pixel 9 Pro",
+          "platform": "android",
+          "kind": "emulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": true,
+            "record": true
+          },
+          "blocked_by": []
+        },
+        {
+          "id": "1A2B3C4D-0000-4000-8000-0000000000BB",
+          "name": "iPad Air 11-inch (M3)",
+          "platform": "ios",
+          "kind": "simulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": false,
+            "record": false
+          },
+          "blocked_by": [
+            "appium"
+          ]
+        }
+      ],
+      "recent": [
+        {
+          "kind": "report",
+          "title": "Relatório · Demanda",
+          "subtitle": "2 divergências · 42,9% conforme",
+          "path": "/Users/qa/Documents/Mo baile/specs/demanda.json",
+          "at": 1757030000.0
+        }
+      ],
+      "whats_new": {
+        "version": "9.9.0",
+        "items": [
+          "Tela Início nova",
+          "Tela Ambiente"
+        ]
       }
     }
   },

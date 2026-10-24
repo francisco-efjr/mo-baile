@@ -76,7 +76,7 @@ class TestTabelaDeMetodos(Base):
         filas = {
             contract.LANE_ENVIRONMENT: {"wda.start", "simulators.boot", "simulators.shutdown", "emulators.boot"},
             contract.LANE_QUERY: {"devices.list", "wda.status", "simulators.list", "emulators.list",
-                                  "diagnostics.check", "setup.check", "analytics.ios_devices"},
+                                  "diagnostics.check", "setup.check", "home.summary", "analytics.ios_devices"},
             contract.LANE_SERVICES: {"proxy.start", "proxy.stop", "proxy.events", "proxy.clear", "proxy.diagnose",
                                      "netlog.start", "netlog.stop",
                                      "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",

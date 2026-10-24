@@ -527,11 +527,12 @@ extension WorkspaceTab {
     /// Outros nomes que as pessoas usam para a área.
     var keywords: [String] {
         switch self {
-        case .home: return ["início", "home", "instalar", "ambiente", "dependências", "primeiro uso"]
+        case .home: return ["início", "home", "boas-vindas", "aparelho", "recentes", "novidades"]
         case .pageObjects: return ["código", "passos", "fluxo", "locators", "automação"]
         case .network: return ["http", "proxy", "tráfego", "requisições"]
         case .analytics: return ["firebase", "eventos", "tagueamento"]
         case .report: return ["auditoria", "spec", "figma", "tagueamento"]
+        case .environment: return ["ambiente", "instalar", "dependências", "diagnóstico", "primeiro uso", "setup"]
         }
     }
 }

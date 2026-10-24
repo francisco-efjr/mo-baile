@@ -163,6 +163,9 @@ echo "==> Embutindo o motor Python"
 mkdir -p "$CONTENTS/Resources/engine"
 cp -R "$REPO_ROOT/engine/src" "$CONTENTS/Resources/engine/src"
 find "$CONTENTS/Resources/engine" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+# As "Novidades" da tela Inicio vem da secao da versao no CHANGELOG. O motor o
+# procura ao lado de engine/ (Contents/Resources), como na raiz do repositorio.
+cp "$REPO_ROOT/CHANGELOG.md" "$CONTENTS/Resources/CHANGELOG.md"
 
 echo "==> Embutindo os scripts de instalacao"
 # A tela Inicio roda Contents/Resources/setup/instalar-mac.sh no Terminal. O

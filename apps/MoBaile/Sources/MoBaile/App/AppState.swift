@@ -17,6 +17,9 @@ class AppState {
     
     // --- Streaming & Interaction ---
     var streamActive: Bool = false
+    /// Pendência que o Ambiente deve mostrar ao abrir (o "Resolver…" da
+    /// Início leva até o cartão dela). Consumida pela tela.
+    var environmentFocus: String? = nil
     var tapForward: Bool = false
     var passiveMode: Bool = false
     
@@ -262,7 +265,7 @@ class AppState {
     /// conectar, sem mexer na escolha da pessoa, como o Xcode faz (D3).
     /// No Início também: ele mostra o ambiente, e não há seleção a inspecionar.
     var inspectorSuppressed: Bool {
-        workspaceTab == .home || (!isDeviceConnected && workspaceTab.needsDevice)
+        workspaceTab == .home || workspaceTab == .environment || (!isDeviceConnected && workspaceTab.needsDevice)
     }
     var inspectorShown: Bool { inspectorVisible && !inspectorSuppressed }
 

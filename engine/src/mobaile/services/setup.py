@@ -445,16 +445,22 @@ class SetupService:
         def faltam(grupo: str) -> list[Component]:
             return [c for c in grupos.get(grupo, []) if c.required and not c.ok]
 
-        def em_uso(grupo: str) -> bool:
-            return any(c.required and c.ok for c in grupos.get(grupo, []))
-
-        plataformas = [g for g in (ANDROID, IOS) if any(c.required for c in grupos.get(g, []))]
-        usadas = [g for g in plataformas if em_uso(g)]
-        contam = usadas or plataformas
+        obrigatorios = {g: [c.ok for c in itens if c.required] for g, itens in grupos.items()}
         pendentes = faltam(MOTOR)
-        for grupo in contam:
+        for grupo in SetupService.counted_platforms(obrigatorios):
             pendentes += faltam(grupo)
         return pendentes
+
+    @staticmethod
+    def counted_platforms(required: dict[str, list[bool]]) -> list[str]:
+        """Plataformas cujos obrigatórios contam como pendência.
+
+        `required` é, por grupo, o `ok` de cada item obrigatório. A tela Início
+        e o Ambiente usam a mesma regra para contar "11 de 12 prontos".
+        """
+        plataformas = [g for g in (ANDROID, IOS) if required.get(g)]
+        usadas = [g for g in plataformas if any(required[g])]
+        return usadas or plataformas
 
     # ----------------------------------------------------------------- tudo
 

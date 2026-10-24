@@ -1,14 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// Tela Início: o que está pronto, o que falta instalar e o caminho para as
-/// áreas. É onde o app abre na primeira vez e sempre que não há aparelho.
+/// Tela Início (3.11.0): boas-vindas útil no dia a dia. Escolher ou usar o
+/// aparelho, entrar numa área, continuar o trabalho recente. O diagnóstico de
+/// instalação foi para a tela Ambiente (`EnvironmentView`).
 ///
-/// Três blocos, de cima para baixo: o próximo passo (um só, em destaque), as
-/// áreas com o estado de cada plataforma, e o Ambiente item a item. O estado
-/// vem do motor (`setup.check`); quando o motor não sobe, a tela ainda diz o
-/// que falta, porque o que falta é justamente o Python dele.
-/// Maquete: `docs/design/home/home-maquete.html`.
+/// O motor decide o estado (`home.summary`): `first_run` quando nenhuma
+/// plataforma serve nesta máquina, `daily` quando pelo menos uma serve. Com o
+/// motor parado, a tela ainda diz o que fazer, porque o que falta costuma ser
+/// justamente o Python dele.
+/// Especificação: `docs/design/home/README.md`; maquetes em `docs/design/home/maquete/`.
 struct HomeView: View {
     @Environment(ThemeManager.self) private var themeManager
 
@@ -23,48 +24,25 @@ struct HomeView: View {
 /// O conteúdo do Início, sem a rolagem: é o que os testes desenham com o
 /// `ImageRenderer`, que não desenha `ScrollView`.
 struct HomeContent: View {
-    @Environment(AppState.self) private var appState
     @Environment(EngineSession.self) private var session
-    @Environment(ThemeManager.self) private var themeManager
 
     @AppStorage(LaunchDestination.seenKey) private var jaVisto = false
-    /// Título de boas-vindas só na primeira visita; ele não muda enquanto a
-    /// tela está aberta, mesmo depois de `jaVisto` virar `true`.
-    @State private var primeiraVisita: Bool?
-    @State private var erroInstalacao: String?
-
-    private var theme: any ThemeTokens { themeManager.current }
-
-    private var passo: HomeNextStep {
-        HomeNextStep.pick(
-            engineStatus: session.engineStatus,
-            lastError: session.lastError,
-            setup: session.setup,
-            deviceName: appState.isDeviceConnected ? appState.selectedDeviceName : nil
-        )
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s9) {
-            cabecalho
-            HomeNextStepCard(passo: passo, pending: session.setup?.pending ?? 0,
-                             install: instalar, erro: erroInstalacao)
-            areas
-            ambiente
-            Text(HomeCopy.note)
-                .font(DSFont.subheadline)
-                .foregroundStyle(theme.labelSecondary)
-                .frame(maxWidth: .infinity)
+        Group {
+            if session.isConnected, let home = session.home {
+                if home.isFirstRun {
+                    HomeFirstRunContent(home: home)
+                } else {
+                    HomeDailyContent(home: home)
+                }
+            } else {
+                HomeEngineContent()
+            }
         }
-        .frame(maxWidth: 760, alignment: .leading)
-        .padding(.horizontal, DesignMetrics.Spacing.windowMargin)
-        .padding(.top, 28)
-        .padding(.bottom, DesignMetrics.Spacing.windowMargin)
-        .frame(maxWidth: .infinity)
-        .onAppear {
-            if primeiraVisita == nil { primeiraVisita = !jaVisto }
-            jaVisto = true
-        }
+        // A Primeira vez vira o uso diário sozinha, com o crossfade de 180 ms.
+        .animation(Motion.crossfade, value: session.home?.state)
+        .onAppear { jaVisto = true }
         .task { await conferir(seMaisVelhoQue: 0) }
         // Quem instala pelo Terminal volta ao app: confere de novo sem pedir.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -72,129 +50,68 @@ struct HomeContent: View {
         }
     }
 
-    // MARK: - Cabeçalho
-
-    private var cabecalho: some View {
-        HStack(alignment: .center, spacing: DesignMetrics.Spacing.s6) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .frame(width: 56, height: 56)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s1) {
-                Text(primeiraVisita == true ? "Boas-vindas ao Mo baile" : "Mo baile")
-                    .font(DSFont.title1.weight(.bold))
-                    .foregroundStyle(theme.labelPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Text(HomeCopy.summary(passo, pending: session.setup?.pending ?? 0))
-                    .font(DSFont.body)
-                    .foregroundStyle(theme.labelSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: DesignMetrics.Spacing.s4)
-            VStack(alignment: .trailing, spacing: DesignMetrics.Spacing.s1) {
-                Button {
-                    Task {
-                        await session.refreshEnvironment()
-                        await session.refreshDevices()
-                    }
-                } label: {
-                    Label("Verificar de Novo", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(PlainTextButtonStyle(theme: theme))
-                .controlSize(.small)
-                .disabled(!session.isConnected)
-                if let quando = session.lastSetupCheck {
-                    Text("verificado às \(quando.formatted(date: .omitted, time: .shortened))")
-                        .font(DSFont.mono(10.5))
-                        .foregroundStyle(theme.labelSecondary)
-                }
-            }
-        }
-    }
-
-    // MARK: - Áreas
-
-    private var areas: some View {
-        VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s4) {
-            Text("Áreas")
-                .font(DSFont.headline)
-                .foregroundStyle(theme.labelPrimary)
-                .accessibilityAddTraits(.isHeader)
-            // Quatro lado a lado, da mesma altura: a coluna de conteúdo nunca
-            // fica estreita a ponto de precisar quebrar em duas linhas.
-            HStack(alignment: .top, spacing: DesignMetrics.Spacing.s5) {
-                ForEach(WorkspaceTab.workspaceAreas) { area in
-                    HomeAreaTile(area: area, feature: session.setup?.features.first { $0.tab == area }) {
-                        appState.selectedStepID = nil
-                        appState.workspaceTab = area
-                    }
-                    .frame(maxHeight: .infinity, alignment: .top)
-                }
-            }
-            .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    // MARK: - Ambiente
-
-    private var ambiente: some View {
-        VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s5) {
-            Text("Ambiente")
-                .font(DSFont.headline)
-                .foregroundStyle(theme.labelPrimary)
-                .accessibilityAddTraits(.isHeader)
-            if let setup = session.setup, session.isConnected {
-                ForEach(setup.groups) { grupo in
-                    HomeComponentGroup(title: grupo.title, components: grupo.components,
-                                       install: instalar, open: abrir)
-                }
-            } else {
-                // Sem motor, só o Python é verificável: é ele que falta.
-                HomeComponentGroup(title: "Motor", components: [componentePython],
-                                   install: instalar, open: abrir)
-                Text("O resto é conferido quando o motor subir.")
-                    .font(DSFont.subheadline)
-                    .foregroundStyle(theme.labelSecondary)
-            }
-        }
-    }
-
-    private var componentePython: EngineDTO.SetupComponent {
-        let detalhe: String
-        let estado: String
-        switch passo {
-        case .installPython(let motivo): detalhe = motivo; estado = "error"
-        case .engineStopped(let motivo): detalhe = motivo; estado = "warn"
-        default: detalhe = "Subindo o motor…"; estado = "busy"
-        }
-        return EngineDTO.SetupComponent(
-            id: "python", label: "Python 3.10 ou mais novo", state: estado, detail: detalhe,
-            required: true, install: estado == "error" ? "python" : nil, link: nil, neededFor: "o motor"
-        )
-    }
-
-    // MARK: - Ações
-
     private func conferir(seMaisVelhoQue segundos: TimeInterval) async {
         guard session.isConnected else { return }
         if let ultima = session.lastSetupCheck, Date().timeIntervalSince(ultima) < segundos { return }
         await session.refreshSetup()
     }
+}
+
+/// Início com o motor parado ou subindo: o único passo que resta (instalar o
+/// Python, reiniciar o motor) ou "Conferindo…".
+struct HomeEngineContent: View {
+    @Environment(AppState.self) private var appState
+    @Environment(EngineSession.self) private var session
+    @Environment(ThemeManager.self) private var themeManager
+
+    @State private var erroInstalacao: String?
+
+    private var theme: any ThemeTokens { themeManager.current }
+
+    private var passo: HomeNextStep {
+        HomeNextStep.pick(engineStatus: session.engineStatus, lastError: session.lastError, setup: nil, deviceName: nil)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s9) {
+            HStack(alignment: .center, spacing: DesignMetrics.Spacing.s6) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .frame(width: 52, height: 52)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s1) {
+                    Text("Mo baile")
+                        .font(DSFont.largeTitle.weight(.bold))
+                        .foregroundStyle(theme.labelPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(HomeCopy.summary(passo))
+                        .font(DSFont.body)
+                        .foregroundStyle(theme.labelSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HomeNextStepCard(passo: passo, pending: 0, install: instalar, erro: erroInstalacao)
+            Text(HomeCopy.note)
+                .font(DSFont.callout)
+                .foregroundStyle(theme.labelSecondary)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: 760, alignment: .leading)
+        .padding(.horizontal, DesignMetrics.Spacing.s10)
+        .padding(.top, 36)
+        .padding(.bottom, DesignMetrics.Spacing.s10)
+        .frame(maxWidth: .infinity)
+    }
 
     private func instalar(_ alvo: String) {
         do {
-            // O Python do motor recebe os pacotes; sem motor, o script cria o do Mo baile.
-            try SetupInstaller.openInTerminal(target: alvo, python: session.isConnected ? session.setup?.python.path : nil)
+            // Sem motor, o script cria o Python do Mo baile.
+            try SetupInstaller.openInTerminal(target: alvo, python: nil)
             erroInstalacao = nil
             appState.statusMessage = "Instalação aberta no Terminal"
         } catch {
             erroInstalacao = error.localizedDescription
         }
-    }
-
-    private func abrir(_ link: String) {
-        guard let url = URL(string: link) else { return }
-        NSWorkspace.shared.open(url)
     }
 }
 
@@ -359,73 +276,6 @@ struct HomeNextStepCard: View {
             }
             .help("Copia o comando para rodar você mesmo no Terminal")
         }
-    }
-}
-
-// MARK: - Área
-
-/// Atalho para uma área, com o estado dela em cada plataforma.
-struct HomeAreaTile: View {
-    @Environment(ThemeManager.self) private var themeManager
-    let area: WorkspaceTab
-    let feature: EngineDTO.SetupFeature?
-    let action: () -> Void
-
-    @State private var hover = false
-
-    var body: some View {
-        let theme = themeManager.current
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: DesignMetrics.Spacing.s3) {
-                Image(systemName: area.symbolName)
-                    .font(.system(size: 17))
-                    .foregroundStyle(area.categoryColor(theme))
-                    .accessibilityHidden(true)
-                Text(area.displayName)
-                    .font(DSFont.headline)
-                    .foregroundStyle(theme.labelPrimary)
-                Text(HomeCopy.areaSummary(area))
-                    .font(DSFont.subheadline)
-                    .foregroundStyle(theme.labelSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(minHeight: 28, alignment: .topLeading)
-                if let feature {
-                    ForEach(feature.platforms, id: \.platform) { linha in
-                        HStack(alignment: .firstTextBaseline, spacing: DesignMetrics.Spacing.s2) {
-                            Image(systemName: DiagnosticCard.symbol(linha.daemonState))
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(HomeStateStyle.color(linha.daemonState, theme))
-                            Text(rotulo(linha))
-                                .font(DSFont.subheadline)
-                                .foregroundStyle(theme.labelSecondary)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                } else {
-                    Text("Conferindo…")
-                        .font(DSFont.subheadline)
-                        .foregroundStyle(theme.labelTertiary)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .contentShape(Rectangle())
-            .dsCard(padding: DesignMetrics.Spacing.s6)
-            .background(hover ? theme.fillQuaternary : .clear,
-                        in: RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-        .help("Ir para \(area.displayName)")
-        .accessibilityLabel(area.displayName)
-        .accessibilityValue(feature.map { $0.platforms.map(rotulo).joined(separator: ", ") } ?? "")
-        .accessibilityHint("Abre a área")
-    }
-
-    private func rotulo(_ linha: EngineDTO.SetupFeature.PlatformState) -> String {
-        let nome = HomeCopy.platformName(linha.platform)
-        return nome.isEmpty ? linha.detail : "\(nome) · \(linha.detail)"
     }
 }
 

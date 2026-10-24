@@ -25,6 +25,8 @@ struct WorkspacePane: View {
                 AnalyticsInspectorView().transition(.opacity)
             case .report:
                 ReportView().transition(.opacity)
+            case .environment:
+                EnvironmentView().transition(.opacity)
             }
         }
         .animation(Motion.crossfade, value: appState.workspaceTab)

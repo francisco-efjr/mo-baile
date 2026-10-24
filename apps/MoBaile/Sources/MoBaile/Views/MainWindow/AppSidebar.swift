@@ -20,22 +20,31 @@ struct AppSidebar: View {
     var body: some View {
         let theme = themeManager.current
         List(selection: selecao) {
-            // Início fica acima das áreas, sem seção: é o ponto de partida, não
-            // uma área de trabalho. A contagem é o que falta instalar.
+            // Início fica acima das áreas, sem seção e sem contagem: é o ponto de
+            // partida. O que falta instalar conta no Ambiente, no rodapé (3.11.0).
             Label {
                 Text(WorkspaceTab.home.displayName)
             } icon: {
                 Image(systemName: WorkspaceTab.home.symbolName)
                     .foregroundStyle(WorkspaceTab.home.categoryColor(theme))
             }
-            .badge(contagem(.home))
             .tag(SidebarSelection.area(.home))
-            .accessibilityValue(contagem(.home) == 0 ? "" : "\(contagem(.home)) pendentes")
 
             Section("Workspace") {
                 ForEach(WorkspaceTab.workspaceAreas) { area in
                     Label {
-                        Text(area.displayName)
+                        HStack(spacing: DesignMetrics.Spacing.s3) {
+                            Text(area.displayName)
+                            Spacer(minLength: DesignMetrics.Spacing.s2)
+                            // O atalho aparece enquanto não há contagem: com
+                            // contagem, ela é a informação que importa.
+                            if contagem(area) == 0 {
+                                Text("⌘\(area.shortcutDigit)")
+                                    .font(DSFont.mono(10.5))
+                                    .foregroundStyle(theme.labelTertiary)
+                                    .accessibilityHidden(true)
+                            }
+                        }
                     } icon: {
                         Image(systemName: area.symbolName)
                             .foregroundStyle(area.categoryColor(theme))
@@ -67,7 +76,10 @@ struct AppSidebar: View {
         .scrollContentBackground(themeManager.palette == nil ? .automatic : .hidden)
         .background(themeManager.palette == nil ? Color.clear : theme.bgSidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            SidebarBottomBar()
+            VStack(spacing: 0) {
+                SidebarEnvironmentItem(pending: contagem(.environment))
+                SidebarBottomBar()
+            }
         }
     }
 
@@ -95,7 +107,8 @@ struct AppSidebar: View {
 
     private func contagem(_ area: WorkspaceTab) -> Int {
         switch area {
-        case .home: return session.setup?.pending ?? 0
+        case .home: return 0
+        case .environment: return session.home?.environment.pending.count ?? session.setup?.pending ?? 0
         case .pageObjects: return appState.steps.count
         case .network: return appState.httpRequests.count
         case .analytics: return appState.analyticsEvents.count
@@ -178,6 +191,65 @@ private struct StepSidebarRow: View {
     }
 }
 
+/// Ambiente, fixo no rodapé da barra lateral, acima da barra inferior: fica à
+/// vista mesmo com muitos passos na seção Fluxo. A contagem amarela é o que
+/// falta instalar e some quando é zero. ⌘5.
+private struct SidebarEnvironmentItem: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    let pending: Int
+
+    @State private var hover = false
+
+    var body: some View {
+        let theme = themeManager.current
+        let escolhido = appState.workspaceTab == .environment && appState.selectedStepID == nil
+        Button {
+            appState.selectedStepID = nil
+            appState.workspaceTab = .environment
+        } label: {
+            HStack(spacing: DesignMetrics.Spacing.s4) {
+                Image(systemName: WorkspaceTab.environment.symbolName)
+                    .font(.system(size: 13))
+                    .foregroundStyle(escolhido ? theme.onAccent : theme.labelSecondary)
+                    .frame(width: 18)
+                Text(WorkspaceTab.environment.displayName)
+                    .font(DSFont.body)
+                    .foregroundStyle(escolhido ? theme.onAccent : theme.labelPrimary)
+                Spacer(minLength: DesignMetrics.Spacing.s2)
+                if pending > 0 {
+                    Text("\(pending)")
+                        .font(DSFont.footnote.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.black.opacity(0.78))
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 16)
+                        .background(theme.warningFill, in: Capsule())
+                } else {
+                    Text("⌘5")
+                        .font(DSFont.mono(10.5))
+                        .foregroundStyle(escolhido ? theme.onAccent.opacity(0.8) : theme.labelTertiary)
+                }
+            }
+            .padding(.horizontal, DesignMetrics.Spacing.s4)
+            .frame(height: 28)
+            .background(
+                escolhido ? theme.selection : (hover ? theme.fillSecondary : .clear),
+                in: RoundedRectangle(cornerRadius: DesignMetrics.Radius.sidebarItem, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .padding(.horizontal, 10)
+        .padding(.vertical, DesignMetrics.Spacing.s2)
+        .help("Ambiente: o que está instalado nesta máquina (⌘5)")
+        .accessibilityLabel("Ambiente")
+        .accessibilityValue(pending == 0 ? "tudo pronto" : (pending == 1 ? "1 pendente" : "\(pending) pendentes"))
+        .accessibilityAddTraits(escolhido ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
 /// Barra inferior de 32 pt: Gravar Passo e o estado do aparelho.
 private struct SidebarBottomBar: View {
     @Environment(AppState.self) private var appState
@@ -231,6 +303,7 @@ extension WorkspaceTab {
         case .network: return "network"
         case .analytics: return "chart.xyaxis.line"
         case .report: return "checklist"
+        case .environment: return "slider.horizontal.3"
         }
     }
 
@@ -242,6 +315,7 @@ extension WorkspaceTab {
         case .pageObjects: return theme.cat1
         case .network: return theme.cat3
         case .analytics, .report: return theme.cat2
+        case .environment: return theme.labelSecondary
         }
     }
 }

@@ -135,7 +135,7 @@ class TestSuperficie(ContractBase):
     METODOS_ESPERADOS: ClassVar[set[str]] = {
         "engine.info", "engine.shutdown", "session.select_device", "devices.list",
         "devices.watch_start", "devices.watch_stop",
-        "diagnostics.check", "setup.check", "simulators.list", "simulators.boot", "simulators.shutdown",
+        "diagnostics.check", "setup.check", "home.summary", "home.forget_recent", "simulators.list", "simulators.boot", "simulators.shutdown",
         "emulators.list", "emulators.boot", "wda.start", "wda.status",
         "screen.capture", "screen.size", "hierarchy.dump", "hierarchy.element_at",
         "input.tap", "input.text", "stream.start", "stream.stop", "stream.stats",

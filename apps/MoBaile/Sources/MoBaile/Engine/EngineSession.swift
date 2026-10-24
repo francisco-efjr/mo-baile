@@ -53,6 +53,8 @@ final class EngineSession {
     /// O que está instalado (`setup.check`), para a tela Início. `nil` antes
     /// da primeira checagem ou com o motor fora do ar.
     private(set) var setup: EngineDTO.Setup?
+    /// Tela Início (`home.summary`). Relido quando o motor avisa `home.changed`.
+    private(set) var home: EngineDTO.HomeSummary?
     private(set) var lastSetupCheck: Date?
 
     /// Resultado do handshake: versão do motor e tabela de métodos.
@@ -647,6 +649,59 @@ final class EngineSession {
             setup = novo
         }
         lastSetupCheck = Date()
+        await refreshHome()
+    }
+
+    /// Relê o que a tela Início mostra. O motor avisa por `home.changed`
+    /// quando muda (aparelho chegou, recente novo); não há polling.
+    func refreshHome() async {
+        guard let client else { return }
+        if let novo = try? await client.call("home.summary", as: EngineDTO.HomeSummary.self) {
+            home = novo
+        }
+    }
+
+    /// Reabre um item de "Continuar de onde parou". Arquivo que sumiu sai da
+    /// lista: o motor não confere sozinho, porque os caminhos costumam estar em
+    /// ~/Documents e conferir faria o macOS pedir acesso à pasta a cada abertura.
+    func openRecent(_ item: EngineDTO.HomeRecent) async {
+        guard FileManager.default.fileExists(atPath: item.path) else {
+            state.statusMessage = "\(item.title) não existe mais e saiu da lista"
+            _ = try? await client?.callIgnoringResult("home.forget_recent", params: ["path": .string(item.path)])
+            await refreshHome()
+            return
+        }
+        let url = URL(fileURLWithPath: item.path)
+        switch item.kind {
+        case "report":
+            state.selectedStepID = nil
+            state.workspaceTab = .report
+            await openReportSpec(at: url)
+        case "page_object":
+            state.selectedStepID = nil
+            state.workspaceTab = .pageObjects
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        default:
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    /// Liga um alvo desligado, ou passa a usar um que já está ligado.
+    func useTarget(_ alvo: EngineDTO.HomeTarget) async {
+        if !alvo.running {
+            if alvo.appPlatform == .ios {
+                await bootSimulator(udid: alvo.id)
+            } else {
+                await bootEmulator(name: alvo.id)
+            }
+            return
+        }
+        if state.platform != alvo.appPlatform {
+            state.platform = alvo.appPlatform
+        }
+        await select(deviceID: alvo.id)
+        await refreshDevices()
+        await refreshHome()
     }
 
     /// Liga um simulador e traz a janela do Simulator para a frente.
@@ -1168,6 +1223,22 @@ final class EngineSession {
         }
     }
 
+    /// Roda um flow do Maestro (`.yaml`) no aparelho, pelo runner do motor e
+    /// sem rede. O andamento chega pelos mesmos `flow.log`/`flow.finished`.
+    func runMaestroFlow(at url: URL) async {
+        guard let client else { return }
+        state.runLog.removeAll()
+        state.currentRunStep = 0
+        state.runState = .running
+        do {
+            try await client.callIgnoringResult("flow.maestro_run", params: ["path": .string(url.path)])
+            state.statusMessage = "Rodando \(url.lastPathComponent)…"
+        } catch {
+            state.runState = .failed
+            report(error)
+        }
+    }
+
     func stopFlow() async {
         guard let client, state.runState == .running else { return }
         try? await client.callIgnoringResult("flow.stop")
@@ -1538,6 +1609,9 @@ final class EngineSession {
             // os quadros seguintes se empilhavam.
             if let fps = frame.fps { state.fps = Int(fps.rounded()) }
             if let captureMs = frame.captureMs { state.latencyMs = Int(captureMs.rounded()) }
+
+        case "home.changed":
+            await refreshHome()
 
         case "device.changed":
             struct Change: Decodable {

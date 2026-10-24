@@ -491,8 +491,9 @@ extension WindowSnapshotTests {
                      self.esperar { await s.refreshEnvironment() }
                      return (AnyView(self.janela(e, s, t)), t)
                  }),
-            Cena(id: "02c-inicio-falta-instalar", titulo: "Início, falta instalar um item",
-                 conferir: "Próximo passo com Instalar no Terminal e o comando, áreas com estado por plataforma, Ambiente por grupo",
+            Cena(id: "02c-inicio-falta-instalar", titulo: "Início no dia a dia, sem aparelho",
+                 conferir: "Saudação, cápsula do ambiente com a pendência, alvos com Iniciar e o aviso Só espelho com Resolver, "
+                    + "atalho do Relatório, áreas com ⌘1–⌘4, recentes e novidades; Ambiente com contagem no rodapé da barra lateral",
                  tamanho: CGSize(width: 1280, height: 1100),
                  montar: { _ in
                      let (e, _, t) = self.ambiente(conectado: false, area: .home)
@@ -509,6 +510,40 @@ extension WindowSnapshotTests {
                          throw EngineError.pythonUnsuitable(mensagem)
                      }
                      self.esperar { await s.connect() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02e-inicio-aparelho-conectado", titulo: "Início no dia a dia, aparelho conectado",
+                 conferir: "Miniatura do último quadro, chip da plataforma, ações em cápsula, status vivos à direita",
+                 tamanho: CGSize(width: 1280, height: 1000),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: true, area: .home)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02f-inicio-primeira-vez", titulo: "Início, primeira vez nesta máquina",
+                 conferir: "Três passos: motor pronto, Android e iOS com o que foi achado e o sugerido em destaque, conectar desabilitado",
+                 tamanho: CGSize(width: 1280, height: 1000),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .home)
+                     var respostas = try self.resultadosDasFixtures()
+                     var resumo = try XCTUnwrap(
+                         JSONSerialization.jsonObject(with: try XCTUnwrap(respostas["home.summary"])) as? [String: Any]
+                     )
+                     resumo["state"] = "first_run"
+                     respostas["home.summary"] = try JSONSerialization.data(withJSONObject: resumo)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: respostas))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02g-ambiente", titulo: "Ambiente",
+                 conferir: "Resumo por grupo, pendência com comando e Instalar no Terminal, tabela Área × iOS × Android, "
+                    + "componentes por grupo com o pendente antes",
+                 tamanho: CGSize(width: 1280, height: 1400),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .environment)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
                      return (AnyView(self.janela(e, s, t)), t)
                  }),
             Cena(id: "03-page-objects-inicial", titulo: "Page Objects, aparelho conectado sem passos",

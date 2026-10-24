@@ -89,6 +89,9 @@ METHODS: dict[str, dict[str, Any]] = {
     "diagnostics.check": _spec(LANE_QUERY, 30, progress=True),
     # O que esta instalado (tela Inicio). So procura arquivo: e rapido.
     "setup.check": _spec(LANE_QUERY, 10),
+    # Le o mesmo diagnostico do setup.check e lista simuladores e emuladores.
+    "home.summary": _spec(LANE_QUERY, 20),
+    "home.forget_recent": _spec(),
     "simulators.list": _spec(LANE_QUERY),
     "simulators.boot": _spec(LANE_ENVIRONMENT, 180, progress=True),
     "simulators.shutdown": _spec(LANE_ENVIRONMENT),
@@ -177,6 +180,7 @@ NOTIFICATIONS: tuple[str, ...] = (
     "proxy.event",
     "analytics.event",
     "device.changed",
+    "home.changed",
     "passive.step",
     "passive.skipped",
     "passive.text",

@@ -34,6 +34,7 @@ Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 | `proxy.event` | Uma requisição HTTP foi observada |
 | `analytics.event` | Um evento de tagueamento foi capturado |
 | `device.changed` | Um alvo foi conectado ou desconectado. `device_id` nulo significa que sumiu. Não é emitida pela escolha manual (`session.select_device`) nem ao ligar o vigia com um alvo já escolhido: só a chegada e a saída de um alvo geram a notificação (3.5.2) |
+| `home.changed` | O que a tela Início mostra mudou: aparelho chegou ou saiu (`reason: "device"`), ou um recente entrou ou saiu (`"recent"`). A interface relê `home.summary`; não há polling (3.11.0) |
 | `passive.step` | A escuta passiva transformou um toque no aparelho em passo gravado. Mesmo formato de `codegen.record` |
 | `passive.skipped` | Um toque no aparelho não virou passo, com `x`, `y` e o motivo |
 | `passive.text` | O texto digitado num campo foi lido e guardado no último passo de entrada |
@@ -103,7 +104,7 @@ serial por domínio**. Uma chamada lenta numa fila não atrasa as outras filas.
 | `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
 | `capture` | leitura de tela e árvore, que pode levar segundos, e a escuta passiva | `hierarchy.dump`, `screen.capture`, `screen.size`, `passive.start`, `passive.stop` |
 | `services` | serviços de fundo que o motor liga e desliga | `proxy.*`, `analytics.*` (menos `analytics.ios_devices`), `flow.*`, `recording.start`, `recording.stop` |
-| `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `setup.check`, `analytics.ios_devices` |
+| `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `setup.check`, `home.summary`, `analytics.ios_devices` |
 | `environment` | preparo de ambiente, que pode levar minutos | `wda.start`, `simulators.boot`, `simulators.shutdown`, `emulators.boot` |
 | `report` | aba Relatório: ler spec e log, auditar, gravar arquivos e OCR dos prints. Não toca aparelho | `report.spec`, `report.audit`, `report.export`, `report.import` |
 
@@ -187,7 +188,9 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | Método | Parâmetros | Devolve |
 |---|---|---|
 | `diagnostics.check` | — | estado medido do ambiente nas duas plataformas, com detalhe e ação sugerida por checagem |
-| `setup.check` | — | o que está instalado (tela Início): `system`, `python` (`version`, `path`), `groups` (`motor`, `android`, `ios`, `extras`, cada um com `components`: `id`, `label`, `state`, `detail`, `required`, `install` = alvo de `tools/setup/instalar-mac.sh`, `link`, `needed_for`), `features` (`page_objects`, `network`, `analytics`, `report`, com o estado por plataforma), `pending` (obrigatórios que faltam) e `next_step`. Só procura arquivos: responde em décimos de segundo. Desde a 3.10.0 |
+| `setup.check` | — | o que está instalado (tela Ambiente; até a 3.10.0, tela Início): `system`, `python` (`version`, `path`), `groups` (`motor`, `android`, `ios`, `extras`, cada um com `components`: `id`, `label`, `state`, `detail`, `required`, `install` = alvo de `tools/setup/instalar-mac.sh`, `link`, `needed_for`), `features` (`page_objects`, `network`, `analytics`, `report`, com o estado por plataforma), `pending` (obrigatórios que faltam) e `next_step`. Só procura arquivos: responde em décimos de segundo. Desde a 3.10.0 |
+| `home.summary` | — | o que a tela Início mostra (3.11.0). `state`: `first_run` (nenhuma plataforma utilizável) ou `daily`. `python` como no `setup.check`. `environment`: `ready` e `total` (só obrigatórios, das plataformas que contam) e `pending` (`id`, `title`, `install`, `link`, `blocks`: `area` — `*` é a plataforma inteira —, `platform`, `effect`). `platforms`: cartões da Primeira vez (`platform`, `ready`, `found`, `missing`, `install`, `link`). `suggested_platform`. `targets`: até 6 alvos (`id`, `name`, `platform`, `kind` = `simulator`, `emulator` ou `physical`, `running`, `connected`, `capabilities` com `mirror`, `tap`, `record`, e `blocked_by` com ids de `pending`). `recent`: até 20 itens dos últimos 30 dias (`kind` = `flow`, `maestro`, `report` ou `page_object`, `title`, `subtitle`, `path`, `at` em epoch), guardados em `~/Library/Application Support/Mo baile/recentes.json` (`MOBAILE_DATA_DIR` troca a pasta). O motor não confere se o arquivo ainda existe. `whats_new`: `{version, items}` da seção da versão no CHANGELOG embutido, ou nulo |
+| `home.forget_recent` | `path` | `{removed}`. Tira o item dos recentes; a interface chama quando reabrir falha porque o arquivo sumiu (3.11.0) |
 | `simulators.list` | — | todos os simuladores instalados, ligados ou não, com os ligados primeiro |
 | `simulators.boot` | `udid`, `open_app` | liga o simulador e traz a janela do Simulator para a frente. Sem `udid`, escolhe o primeiro (preferindo um já ligado) |
 | `simulators.shutdown` | `udid` | desliga |

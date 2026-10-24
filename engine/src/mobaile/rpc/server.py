@@ -78,6 +78,7 @@ from mobaile.services.codegen import CodeGenerator
 from mobaile.services.devices import DeviceWatcher
 from mobaile.services.diagnostics import DiagnosticsService
 from mobaile.services.hierarchy import UIHierarchyParser
+from mobaile.services.home import HomeService
 from mobaile.services.report import ReportService
 from mobaile.services.setup import SetupService
 from mobaile.services.streaming import RealTimeStreamEngine
@@ -229,6 +230,8 @@ class EngineServer:
         self.appium = AppiumBridge()
         self.diagnostics = DiagnosticsService(adb=self.adb, ios=self.ios, appium=self.appium)
         self.setup = SetupService(adb=self.adb, appium=self.appium, scrcpy=self.scrcpy)
+        # Lê `self.setup` a cada chamada: o gerador de fixtures troca o serviço.
+        self.home = HomeService(setup=lambda: self.setup, ios=self.ios, adb=self.adb)
         self.report = ReportService(ocr=VisionOCR())
 
         # Estado de sessao. Escrito pelas filas, pelo vigia de dispositivos e
@@ -238,6 +241,8 @@ class EngineServer:
         self._session_epoch = 0
         self.platform: Platform = Platform.ANDROID
         self.device_id: str | None = None
+        # Ultima auditoria (titulo, subtitulo, spec): o export atualiza o recente dela.
+        self._ultimo_relatorio: tuple[str, str, str] | None = None
         self.current_xml: str | None = None
         # (serial, porta) do aparelho Android em que `proxy.start` ligou o
         # proxy global e o `adb reverse`. O desmonte usa este registro, e nao o
@@ -285,6 +290,8 @@ class EngineServer:
             "devices.watch_stop": self.devices_watch_stop,
             "diagnostics.check": self.diagnostics_check,
             "setup.check": self.setup_check,
+            "home.summary": self.home_summary,
+            "home.forget_recent": self.home_forget_recent,
             "simulators.list": self.simulators_list,
             "simulators.boot": self.simulators_boot,
             "simulators.shutdown": self.simulators_shutdown,
@@ -631,6 +638,7 @@ class EngineServer:
                     self.current_xml = None
                     self._session_epoch += 1
             self.notify("device.changed", {"platform": platform, "device_id": device_id or None})
+            self.notify("home.changed", {"reason": "device"})
 
         self._watcher = DeviceWatcher(
             adb_bridge=self.adb,
@@ -677,6 +685,28 @@ class EngineServer:
         with self._state_lock:
             plataforma = self.platform.value
         return self.setup.run(platform_in_use=plataforma)
+
+    def home_summary(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Tela Inicio: primeira vez ou dia a dia, alvos, recentes e novidades."""
+        with self._state_lock:
+            plataforma = self.platform.value
+            device_id = self.device_id
+        return self.home.summary(platform_in_use=plataforma, device_id=device_id)
+
+    def home_forget_recent(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Tira um item do "Continuar de onde parou" (o arquivo sumiu)."""
+        caminho = params.get("path")
+        if not isinstance(caminho, str) or not caminho.strip():
+            raise InvalidInputError("Passe `path`, o caminho do item.")
+        removido = self.home.recents.forget(caminho)
+        if removido:
+            self.notify("home.changed", {"reason": "recent"})
+        return {"removed": removido}
+
+    def _remember(self, kind: str, title: str, subtitle: str, path: str) -> None:
+        """Guarda o item nos recentes da Inicio e avisa a interface."""
+        if self.home.recents.record(kind, title, subtitle, path):
+            self.notify("home.changed", {"reason": "recent"})
 
     def simulators_list(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Todos os simuladores instalados, e nao so os que ja estao ligados."""
@@ -1559,6 +1589,7 @@ class EngineServer:
             escritos.append(str(arquivo))
 
         logger.info("Page Object gravado em %s", destino)
+        self._remember("page_object", f"{chave}.py", "Page Object · Python/Appium", escritos[0])
         return {"saved": True, "paths": escritos, "directory": str(destino)}
 
     # ------------------------------------------------------- escuta passiva
@@ -1912,6 +1943,7 @@ class EngineServer:
             pasta.mkdir(parents=True, exist_ok=True)
             arquivo.write_text(yaml_texto, encoding="utf-8")
             resultado["path"] = str(arquivo)
+            self._remember("maestro", arquivo.name, f"Flow do Maestro · {len(passos)} passos", str(arquivo))
         return resultado
 
     def flow_maestro_run(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -1937,12 +1969,18 @@ class EngineServer:
             self._flow_running = True
             self._flow_cancelled = False
 
+        caminho_flow = str(params["path"]) if params.get("path") and not params.get("yaml") else None
+
         def ao_terminar(sucesso: bool, mensagem: str) -> None:
             with self._state_lock:
                 self._flow_running = False
                 self._flow_thread = None
                 cancelado = self._flow_cancelled
             self.notify("flow.finished", {"success": sucesso and not cancelado, "message": mensagem})
+            if caminho_flow and not cancelado:
+                estado = "passou" if sucesso else "falhou"
+                self._remember("maestro", pathlib.Path(caminho_flow).name,
+                               f"Flow do Maestro · última execução {estado}", caminho_flow)
 
         execucao = maestro_flow.FlowThread(
             flow, aparelho, lambda linha: self.notify("flow.log", {"line": linha}), ao_terminar,
@@ -1992,16 +2030,30 @@ class EngineServer:
                 raise InvalidInputError(f"O log {log_path.name} não tem eventos do Firebase Analytics.")
         else:
             raise InvalidInputError(f"Origem do log desconhecida: {source!r}. Use session ou file.")
-        return self.report.audit(
+        resultado = self.report.audit(
             params.get("spec_path"), items, source=source, log_path=log_path, platform=platform,
             progress=self._progress,
         )
+        resumo = resultado["summary"]
+        divergencias = resumo["divergent"] + resumo["missing"]
+        conformidade = f"{resumo['compliance_rate']:.1f}".replace(".", ",")
+        self._ultimo_relatorio = (
+            f"Relatório · {resultado['spec']['projeto']}",
+            f"{divergencias} {'divergência' if divergencias == 1 else 'divergências'} · {conformidade}% conforme",
+            resultado["spec"]["path"],
+        )
+        self._remember("report", *self._ultimo_relatorio)
+        return resultado
 
     def report_export(self, params: dict[str, Any]) -> dict[str, Any]:
         """Grava board, HTML, Markdown e TSV do ultimo relatorio."""
-        return self.report.export(
+        resultado = self.report.export(
             params.get("directory"), progress=self._progress, check_cancelled=self._check_cancelled,
         )
+        if self._ultimo_relatorio:
+            titulo, subtitulo, caminho = self._ultimo_relatorio
+            self._remember("report", titulo, f"{subtitulo} · exportado em HTML", caminho)
+        return resultado
 
     def report_import(self, params: dict[str, Any]) -> dict[str, Any]:
         """OCR dos prints dos cards do Figma: grava o rascunho da spec e a revisao."""

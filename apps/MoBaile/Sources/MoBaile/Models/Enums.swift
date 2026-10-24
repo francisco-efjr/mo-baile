@@ -45,7 +45,7 @@ enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
 }
 
 enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
-    case home, pageObjects, network, analytics, report
+    case home, pageObjects, network, analytics, report, environment
     var id: String { rawValue }
     var displayName: String {
         switch self {
@@ -54,20 +54,22 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
         case .network: return "Rede HTTP"
         case .analytics: return "Analytics"
         case .report: return "Relatório"
+        case .environment: return "Ambiente"
         }
     }
 
-    /// Início e Relatório funcionam sem aparelho: um mostra o ambiente, o
-    /// outro trabalha com arquivos (spec e log). As outras áreas precisam de
-    /// um conectado.
-    var needsDevice: Bool { self != .report && self != .home }
+    /// Início, Relatório e Ambiente funcionam sem aparelho: o Início recebe e
+    /// oferece os alvos, o Relatório trabalha com arquivos (spec e log) e o
+    /// Ambiente mostra o que está instalado. As outras áreas precisam de um
+    /// aparelho conectado.
+    var needsDevice: Bool { ![.home, .report, .environment].contains(self) }
 
-    /// As áreas de trabalho, sem o Início: a seção Workspace da barra lateral.
-    static var workspaceAreas: [WorkspaceTab] { allCases.filter { $0 != .home } }
+    /// As áreas de trabalho: a seção Workspace da barra lateral. O Início fica
+    /// acima dela e o Ambiente, fixo no rodapé.
+    static var workspaceAreas: [WorkspaceTab] { allCases.filter { $0 != .home && $0 != .environment } }
 
-    /// Atalho de teclado: ⌘0 no Início e ⌘1 a ⌘4 nas áreas, na ordem da
-    /// barra lateral. O Início entrou depois e ficou com o 0 para as áreas
-    /// manterem os atalhos que as pessoas já usam.
+    /// Atalho de teclado: ⌘0 no Início, ⌘1 a ⌘4 nas áreas, na ordem da barra
+    /// lateral, e ⌘5 no Ambiente (3.11.0). O ⌘, continua nos Ajustes.
     var shortcutDigit: Character {
         Character("\(WorkspaceTab.allCases.firstIndex(of: self) ?? 0)")
     }

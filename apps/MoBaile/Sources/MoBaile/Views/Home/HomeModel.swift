@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// O que o cartão "Próximo passo" da tela Início mostra. Um passo só, como no
@@ -69,9 +70,78 @@ enum LaunchDestination {
     }
 }
 
-/// Textos da tela Início.
+/// Textos da tela Início e da tela Ambiente.
 enum HomeCopy {
     static let note = "Depois de instalado, tudo roda nesta máquina, sem internet."
+    static let homeNote = "Tudo roda nesta máquina, sem internet."
+    static let cableHint = "Aparelho físico: conecte pelo cabo. No iPhone, toque em Confiar; no Android, "
+        + "ligue a depuração USB. Ele aparece aqui sozinho."
+
+    /// Subtítulo da janela no Início: o estado do ambiente em poucas palavras.
+    static func homeSubtitle(_ home: EngineDTO.HomeSummary?, engineRunning: Bool) -> String {
+        guard engineRunning else { return "Motor parado" }
+        guard let home else { return "Conferindo…" }
+        if home.isFirstRun { return "Primeira vez nesta máquina" }
+        return environmentPill(home.environment)
+    }
+
+    /// Texto da cápsula do ambiente: "Ambiente pronto" ou "Ambiente: 3 de 4 prontos".
+    static func environmentPill(_ ambiente: EngineDTO.HomeEnvironment) -> String {
+        ambiente.isReady ? "Ambiente pronto" : "Ambiente: \(ambiente.ready) de \(ambiente.total) prontos"
+    }
+
+    /// "Bom dia" até 11:59, "Boa tarde" até 17:59, "Boa noite" depois, com o
+    /// primeiro nome do usuário do macOS quando há.
+    static func greeting(at data: Date = Date(), fullName: String = NSFullUserName()) -> String {
+        let hora = Calendar.current.component(.hour, from: data)
+        let saudacao = hora < 12 ? "Bom dia" : (hora < 18 ? "Boa tarde" : "Boa noite")
+        guard let nome = fullName.split(separator: " ").first, !nome.isEmpty else { return saudacao }
+        return "\(saudacao), \(nome)"
+    }
+
+    /// Data de um recente: "hoje 9:40", "ontem", dia da semana, depois a data.
+    static func relativeDate(_ data: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        if calendar.isDate(data, inSameDayAs: now) {
+            return "hoje " + data.formatted(.dateTime.hour().minute())
+        }
+        if let ontem = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(data, inSameDayAs: ontem) {
+            return "ontem"
+        }
+        let dias = calendar.dateComponents([.day], from: calendar.startOfDay(for: data), to: calendar.startOfDay(for: now)).day ?? 99
+        if dias < 7 {
+            return data.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "pt_BR")))
+                .replacingOccurrences(of: ".", with: "")
+        }
+        return data.formatted(.dateTime.day(.twoDigits).month(.twoDigits).locale(Locale(identifier: "pt_BR")))
+    }
+
+    /// Segunda linha de um alvo: "Simulador iOS · desligado · tudo pronto".
+    static func targetDetail(_ alvo: EngineDTO.HomeTarget) -> String {
+        let tipo: String
+        switch alvo.kind {
+        case "simulator": tipo = "Simulador iOS"
+        case "emulator": tipo = "Emulador Android"
+        default: tipo = alvo.platform == "ios" ? "iPhone pelo cabo" : "Aparelho Android pelo cabo"
+        }
+        var partes = [tipo, alvo.connected ? "conectado" : (alvo.running ? "ligado" : "desligado")]
+        if alvo.capabilities.tap && alvo.blockedBy.isEmpty { partes.append("tudo pronto") }
+        return partes.joined(separator: " · ")
+    }
+
+    /// Botão de um alvo: liga o que está desligado, usa o que já está ligado.
+    static func targetAction(_ alvo: EngineDTO.HomeTarget) -> String {
+        if alvo.running { return "Usar Este" }
+        return alvo.platform == "ios" ? "Iniciar Simulador" : "Iniciar Emulador"
+    }
+
+    /// Aviso na linha do alvo quando uma pendência o limita.
+    static func limitation(_ alvo: EngineDTO.HomeTarget, pending: EngineDTO.HomePending) -> String {
+        let efeito = pending.blocks.first { $0.platform == alvo.platform }?.effect ?? pending.title
+        if alvo.capabilities.mirror && !alvo.capabilities.tap {
+            return "Só espelho: falta \(pending.title) para \(efeito)."
+        }
+        return "Falta \(pending.title): \(efeito)."
+    }
 
     /// Subtítulo da janela.
     static func subtitle(setup: EngineDTO.Setup?, engineRunning: Bool) -> String {
@@ -110,11 +180,11 @@ enum HomeCopy {
     /// Uma linha sobre o que cada área faz.
     static func areaSummary(_ area: WorkspaceTab) -> String {
         switch area {
-        case .home: return ""
-        case .pageObjects: return "Espelho, hierarquia e o código Appium de cada toque."
-        case .network: return "Tráfego HTTP do aparelho, e HTTPS do app em debug."
-        case .analytics: return "Eventos do Firebase Analytics em tempo real."
-        case .report: return "Audita os eventos contra a spec dos cards."
+        case .home, .environment: return ""
+        case .pageObjects: return "Cada toque vira locator e método Appium em Python."
+        case .network: return "Tráfego do aparelho, com credenciais redigidas."
+        case .analytics: return "Eventos do Firebase em tempo real."
+        case .report: return "Eventos contra a spec do Figma. Sem aparelho."
         }
     }
 

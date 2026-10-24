@@ -118,7 +118,10 @@ struct ContentView: View {
     }
 
     private var windowSubtitle: String {
-        if appState.workspaceTab == .home { return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected) }
+        if appState.workspaceTab == .home { return HomeCopy.homeSubtitle(session.home, engineRunning: session.isConnected) }
+        if appState.workspaceTab == .environment {
+            return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected)
+        }
         if appState.workspaceTab == .report { return reportSubtitle }
         guard appState.isDeviceConnected else { return "Nenhum dispositivo" }
         switch appState.workspaceTab {
@@ -138,6 +141,8 @@ struct ContentView: View {
         case .report:
             return reportSubtitle
         case .home:
+            return HomeCopy.homeSubtitle(session.home, engineRunning: session.isConnected)
+        case .environment:
             return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected)
         }
     }
@@ -209,6 +214,8 @@ struct DetailColumn: View {
             Group {
                 if appState.workspaceTab == .home {
                     HomeView()
+                } else if appState.workspaceTab == .environment {
+                    EnvironmentView()
                 } else if !appState.workspaceTab.needsDevice {
                     // Relatório ocupa a coluna inteira: o espelho não ajuda a
                     // ler uma auditoria, e a aba funciona sem aparelho.
