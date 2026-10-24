@@ -5,6 +5,58 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.10.0] - 2026-10-23
+
+### Adicionado
+
+- **Tela Início.** Primeiro item da barra lateral, acima do Workspace: mostra
+  o que está pronto e o que falta instalar nesta máquina, por área do app
+  (espelho, hierarquia, Page Objects, Rede, Analytics, Relatório), com o
+  próximo passo e "Instalar no Terminal…" quando um script resolve. A
+  checagem é barata e se repete quando o app volta ao primeiro plano. Método
+  novo `setup.check` (aditivo; `PROTOCOL_VERSION` continua 2).
+- **Instalação numa máquina zerada.** `docs/INSTALACAO.md` lista o que o Mac
+  e o Windows precisam por recurso. Scripts `tools/setup/instalar-mac.sh` e
+  `tools/setup/instalar-windows.ps1`, e o mesmo diagnóstico no terminal com
+  `python3 -m mobaile.services.setup`. No Windows, o caminho é a interface
+  Tkinter, só com Android.
+- **Flows no formato do Maestro, rodando local.** O motor lê, confere,
+  exporta e roda flows YAML do Maestro pelo próprio runner, sem rede
+  (`flow.maestro_check`, `flow.maestro_export`, `flow.maestro_run`). Também
+  entram um lançador offline do Maestro (`tools/maestro_offline/`, sem
+  telemetria nem login) e o agente `maestro-automacao`. O estudo está em
+  `docs/research/maestro-modelo-de-automacao.md`. PyYAML é opcional (extra
+  `maestro`): sem ele, só esses métodos recusam.
+- `tools/create_local_signing_identity.sh` cria a identidade "Mo baile Local"
+  no Keychain. Com ela, o empacotamento assina sempre com a mesma identidade,
+  e as permissões dadas ao app (como a pasta Documentos) valem entre builds.
+
+### Mudado
+
+- **Toolbar só com a escolha do aparelho.** O seletor "Repassar toque |
+  Gravar passo" saiu: todo clique no espelho toca no aparelho e grava o
+  passo. Saíram também os itens equivalentes do menu Dispositivo e da paleta
+  de comandos.
+
+### Corrigido
+
+- **O app não pede mais acesso à pasta Documentos ao abrir.** Um `.pth` de
+  instalação editável no Python do sistema apontava para uma pasta em
+  `~/Documents`, e o macOS pedia acesso toda vez que o motor subia. O motor e
+  a sonda do Python agora sobem com `python3 -S`, e só o site-packages entra
+  no caminho, sem seguir `.pth` (`mobaile/_site.py`).
+- **Auditoria de log grande não expira mais.** Um log de Analytics perto do
+  limite de 64 MB levava 78 s e estourava o timeout de 60 s do
+  `report.audit`. Agora leva cerca de 2 s; um log de 17 MB caiu de 10 s para
+  0,6 s, e o export ficou 15% mais rápido. O resultado é o mesmo, conferido
+  contra a versão anterior. Medição em `docs/DESEMPENHO_RELATORIO.md`
+  (`tools/bench_report.py`).
+- **Parâmetro numérico inválido no RPC vira `invalid_input`.** `limit`
+  negativo devolvia o histórico errado. Texto, `NaN` e `Infinity` em `limit`,
+  `poll_interval`, `fps`, `max_width`, `quality`, `max_size`, `step_num`,
+  `before_s`, `after_s` e nas coordenadas viravam erro interno ou passavam
+  adiante. As faixas estão em `docs/PROTOCOLO_RPC.md`.
+
 ## [3.9.0] - 2026-10-23
 
 ### Adicionado
