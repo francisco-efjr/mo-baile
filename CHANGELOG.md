@@ -5,6 +5,38 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.11.0] - 2026-10-24
+
+### Adicionado
+
+- **Tela Início nova.** Virou boas-vindas do dia a dia: saudação, cápsula
+  com o estado do ambiente, o aparelho (lista de simuladores, emuladores e
+  aparelhos com Iniciar ou Usar Este; com aparelho conectado, a miniatura,
+  as ações e o que está ligado agora), as quatro áreas com o atalho,
+  "Continuar de onde parou" e as novidades da versão. Pendência de ambiente
+  só aparece onde atrapalha, na linha do alvo que ela limita ("Só espelho:
+  falta o Appium…"), com "Resolver…" levando ao cartão certo.
+- **Primeira vez em três passos.** Numa máquina sem plataforma pronta, a
+  Início mostra motor, escolha da plataforma (com o que já foi achado e a
+  sugerida em destaque, e "Preparar Android…"/"Preparar iOS…") e conectar um
+  aparelho. Troca sozinha para o dia a dia quando a primeira plataforma fica
+  pronta.
+- **Tela Ambiente (⌘5).** Todo o diagnóstico que estava na Início: resumo por
+  grupo, cada pendência com o comando, "Instalar no Terminal…" e "Copiar
+  Comando", a tabela do que funciona em cada área por plataforma e os
+  componentes por grupo. Fica fixa no rodapé da barra lateral, com a contagem
+  do que falta; a Início perdeu a contagem.
+- **Recentes locais.** Page Object salvo, flow do Maestro exportado ou rodado
+  e auditoria do Relatório entram em "Continuar de onde parou" (até 20, dos
+  últimos 30 dias, em `~/Library/Application Support/Mo baile/recentes.json`).
+  Clicar reabre na área certa; item cujo arquivo sumiu sai da lista.
+- **"Rodar Flow…"** no cartão do aparelho roda um `.yaml` do Maestro pelo
+  runner do motor, sem rede.
+- Métodos `home.summary` e `home.forget_recent` e a notificação
+  `home.changed` (aditivos; `PROTOCOL_VERSION` continua 2). O CHANGELOG passa
+  a ir dentro do app, para as novidades.
+- Especificação e maquetes em `docs/design/home/`.
+
 ## [3.10.0] - 2026-10-23
 
 ### Adicionado
