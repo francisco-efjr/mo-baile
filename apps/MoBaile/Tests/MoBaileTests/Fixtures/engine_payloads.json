@@ -82,7 +82,8 @@
         "stream.stop",
         "wda.start",
         "wda.status"
-      ]
+      ],
+      "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
     }
   },
   "engine.hello": {
@@ -437,7 +438,8 @@
         "flow.step",
         "flow.finished",
         "$/progress"
-      ]
+      ],
+      "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
     }
   },
   "erro_incompatible_protocol": {

@@ -96,6 +96,12 @@ continua mascarado, inclusive os cabeçalhos na forma de dicionário
 (`"Set-Cookie" = ( … );`). Texto digitado também não vai para o log do motor
 nem para a mensagem final de um flow do Maestro.
 
+**Log do motor.** `engine.log` em `~/Library/Logs/Mo baile` (ou em
+`MOBAILE_LOG_DIR`): arquivo `0600` em pasta `0700`, rotação de 1 MB × 3, toda
+URL passada por `redact_url` mesmo com `MOBAILE_REDACT=0` e nenhum texto
+digitado. O despejo de queda do faulthandler fica ao lado, em
+`engine-faults.log`, com a mesma permissão.
+
 ## 6. Consumo de memória sem limite no proxy
 
 **Severidade: média. Corrigido.**

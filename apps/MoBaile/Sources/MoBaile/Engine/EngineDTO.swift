@@ -509,11 +509,15 @@ enum EngineDTO {
         /// método decide aqui o prazo de cada chamada. Uma fonte de verdade só.
         let methods: [String: MethodSpec]
         let notifications: [String]
+        /// Arquivo de log do motor, ou `nil` se ele subiu só com stderr (ou é
+        /// anterior ao campo). Citado na mensagem de queda.
+        let logPath: String?
 
         enum CodingKeys: String, CodingKey {
             case capabilities, methods, notifications
             case protocolVersion = "protocol_version"
             case engineVersion = "engine_version"
+            case logPath = "log_path"
         }
     }
 
@@ -559,9 +563,12 @@ enum EngineDTO {
         let pageObjectsKey: String
         let proxy: ProxyInfo
         let methods: [String]
+        /// O mesmo `log_path` do `engine.hello`.
+        let logPath: String?
 
         enum CodingKeys: String, CodingKey {
             case version, platform, proxy, methods
+            case logPath = "log_path"
             case deviceId = "device_id"
             case adbPath = "adb_path"
             case adbAvailable = "adb_available"

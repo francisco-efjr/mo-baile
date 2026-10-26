@@ -7,8 +7,9 @@ enum EngineError: LocalizedError, Equatable {
     case engineNotFound(String)
     /// O processo do motor nao esta no ar.
     case notRunning
-    /// O processo encerrou sozinho.
-    case processTerminated(Int32)
+    /// O processo encerrou sozinho. `logPath` é o arquivo de log que o motor
+    /// informou no `engine.hello`, quando informou: a mensagem o cita.
+    case processTerminated(Int32, logPath: String? = nil)
     /// O motor respondeu com um erro de dominio (`data.code` do JSON-RPC).
     case engine(code: String, message: String)
     /// Erro de protocolo: resposta que nao casa com o contrato.
@@ -34,8 +35,11 @@ enum EngineError: LocalizedError, Equatable {
             return "Motor do Mo baile nao encontrado. \(detail)"
         case .notRunning:
             return "O motor nao esta em execucao."
-        case .processTerminated(let status):
-            return "O motor encerrou inesperadamente (codigo \(status))."
+        case .processTerminated(let status, let logPath):
+            guard let logPath else {
+                return "O motor encerrou inesperadamente (codigo \(status))."
+            }
+            return "O motor encerrou inesperadamente (codigo \(status); log em \(logPath))."
         case .engine(_, let message):
             return message
         case .protocolViolation(let detail):

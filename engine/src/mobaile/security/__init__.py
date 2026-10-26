@@ -21,7 +21,13 @@ from mobaile.security.paths import (
     sweep_orphan_runner_scripts,
     write_executable_script,
 )
-from mobaile.security.redaction import is_sensitive_header, redact_body, redact_headers, redact_url
+from mobaile.security.redaction import (
+    is_sensitive_header,
+    redact_body,
+    redact_headers,
+    redact_url,
+    redact_urls_in_text,
+)
 from mobaile.security.shell import (
     MAX_INPUT_TEXT,
     build_adb_input_text_args,
@@ -48,6 +54,7 @@ __all__ = [
     "redact_body",
     "redact_headers",
     "redact_url",
+    "redact_urls_in_text",
     "safe_file_stem",
     "secure_runtime_dir",
     "sweep_orphan_runner_scripts",

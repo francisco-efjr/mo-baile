@@ -21,9 +21,12 @@ Concorrencia:
 from __future__ import annotations
 
 import base64
+import faulthandler
 import io
 import json
 import logging
+import logging.handlers
+import os
 import pathlib
 import queue
 import re
@@ -68,6 +71,8 @@ from mobaile.domain.models import LocatorStrategy, Platform, UIElement
 from mobaile.rpc import contract, protocol
 from mobaile.security import (
     build_adb_input_text_args,
+    logs_dir,
+    redact_urls_in_text,
     validate_coordinate,
     validate_device_id,
     validate_integer,
@@ -193,8 +198,11 @@ def _dentro_de(caminho: pathlib.Path, raiz: pathlib.Path) -> bool:
 class EngineServer:
     """Estado da sessao e tabela de metodos."""
 
-    def __init__(self, out=None) -> None:
+    def __init__(self, out=None, log_path: str | None = None) -> None:
         self._out = out or sys.stdout
+        # Arquivo de log deste motor, ou `None` se ele subiu só com stderr.
+        # Vai no `engine.hello` e no `engine.info` para o front citar na queda.
+        self.log_path = log_path
         self._write_lock = threading.Lock()
         self._running = True
         self._shutdown_done = False
@@ -495,7 +503,7 @@ class EngineServer:
                 f"Protocolo incompativel: o front fala a versao {cliente} e o motor, a versao "
                 f"{contract.PROTOCOL_VERSION}. Atualize o Mo baile para que os dois andem juntos."
             )
-        return contract.hello_payload(__version__)
+        return contract.hello_payload(__version__, log_path=self.log_path)
 
     def engine_info(self, _params: dict[str, Any]) -> dict[str, Any]:
         sessao = self._sessao()
@@ -512,6 +520,7 @@ class EngineServer:
             "page_objects_key": settings.page_objects_key,
             "proxy": {"host": settings.proxy_host, "port": settings.proxy_port, "running": self.proxy.is_running()},
             "methods": sorted(self.methods),
+            "log_path": self.log_path,
         }
 
     def engine_shutdown(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -2350,14 +2359,145 @@ class EngineServer:
             self.shutdown()
 
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+LOG_FILE_NAME = "engine.log"
+# Despejo do faulthandler (queda no C, travamento fatal). Arquivo proprio, e
+# nao o `engine.log`: a rotacao fecha o descritor do log, e o faulthandler
+# escreveria num numero de descritor que o sistema ja pode ter dado a outro
+# arquivo.
+FAULT_FILE_NAME = "engine-faults.log"
+LOG_MAX_BYTES = 1024 * 1024
+LOG_BACKUPS = 3
+
+# O que `configure_logging` instalou, para reconfigurar sem duplicar.
+_log_handlers: list[logging.Handler] = []
+# Mantido aberto pela vida do processo: o faulthandler guarda so o numero do
+# descritor e escreve nele no meio de uma queda, sem Python para reabrir nada.
+_fault_file = None
+
+
+def _open_private(path: pathlib.Path, *, truncate: bool = False):
+    """Abre para acrescentar, so para o dono (0600), sem seguir symlink."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_TRUNC if truncate else os.O_APPEND)
+    fd = os.open(path, flags, 0o600)
+    try:
+        # Arquivo de versao anterior, ou criado sob outro umask, fica so com o dono.
+        os.fchmod(fd, 0o600)
+        return os.fdopen(fd, "w" if truncate else "a", encoding="utf-8")
+    except OSError:
+        os.close(fd)
+        raise
+
+
+class _PrivateRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """`RotatingFileHandler` cujo arquivo, inclusive o recriado na rotacao, e 0600.
+
+    O `open()` padrao obedece ao umask e deixaria o log legivel por todos.
+    """
+
+    def _open(self):
+        return _open_private(pathlib.Path(self.baseFilename))
+
+
+class _RedactingFilter(logging.Filter):
+    """Passa a mensagem, os argumentos e o traceback por `redact_url`.
+
+    Fica nos handlers, e nao num logger: filtro de logger nao ve o que sobe
+    dos loggers filhos. A mensagem ja sai formatada e sem argumentos, para
+    nenhum handler voltar a montar o texto original.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            mensagem = record.getMessage()
+        except Exception:
+            # Argumento que nao casa com o formato: o `handleError` do logging
+            # imprimiria a mensagem e os argumentos crus no stderr. Vai o par
+            # redigido, sem montar.
+            mensagem = f"{record.msg} {record.args!r}"
+        record.msg = redact_urls_in_text(mensagem)
+        record.args = None
+        if record.exc_info and not record.exc_text:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            # O Formatter reaproveita `exc_text` quando ja esta preenchido, e
+            # um handler que formatou antes deste pode te-lo deixado em claro.
+            record.exc_text = redact_urls_in_text(record.exc_text)
+        if record.stack_info:
+            record.stack_info = redact_urls_in_text(record.stack_info)
+        return True
+
+
+def shutdown_logging() -> None:
+    """Desfaz o que `configure_logging` instalou (testes e reconfiguracao)."""
+    global _fault_file
+    raiz = logging.getLogger()
+    for handler in _log_handlers:
+        raiz.removeHandler(handler)
+        handler.close()
+    _log_handlers.clear()
+    if _fault_file is not None:
+        faulthandler.disable()
+        _fault_file.close()
+        _fault_file = None
+
+
+def configure_logging(stream=None) -> str | None:
+    """Log do motor no stderr e em `logs_dir()/engine.log`.
+
+    O stderr continua: quem roda o motor no terminal, e o front, leem por ali.
+    O arquivo e o que sobra quando o app foi aberto pelo Finder, onde o
+    stderr do app nao vai para lugar nenhum. Arquivo 0600 em pasta 0700,
+    1 MB x 3 copias, URLs redigidas nos dois destinos. Texto digitado nao
+    entra em log nenhum: os adapters nao o passam ao `logger`.
+
+    Sem pasta de logs (symlink, arquivo no lugar, sem permissao), o motor
+    sobe so com o stderr e devolve `None`, que vira `log_path: null`.
+    """
+    global _fault_file
+    shutdown_logging()
+    raiz = logging.getLogger()
+    raiz.setLevel(logging.INFO)
+    formato = logging.Formatter(LOG_FORMAT)
+    filtro = _RedactingFilter()
+
+    # Log vai para stderr: stdout e canal exclusivo do protocolo.
+    saida = logging.StreamHandler(stream or sys.stderr)
+    saida.setFormatter(formato)
+    saida.addFilter(filtro)
+    raiz.addHandler(saida)
+    _log_handlers.append(saida)
+
+    try:
+        pasta = logs_dir()
+        caminho = pasta / LOG_FILE_NAME
+        arquivo = _PrivateRotatingFileHandler(
+            caminho, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8"
+        )
+    except OSError as exc:
+        logger.warning("Log do motor so no stderr: %s", exc)
+        return None
+    arquivo.setFormatter(formato)
+    arquivo.addFilter(filtro)
+    raiz.addHandler(arquivo)
+    _log_handlers.append(arquivo)
+
+    despejo = pasta / FAULT_FILE_NAME
+    try:
+        # Despejo nao tem rotacao: so cresce numa queda. Passou do teto do
+        # log, recomeca do zero na subida seguinte.
+        grande = despejo.is_file() and despejo.stat().st_size > LOG_MAX_BYTES
+        _fault_file = _open_private(despejo, truncate=grande)
+        faulthandler.enable(file=_fault_file, all_threads=True)
+    except OSError as exc:
+        logger.warning("Despejo de queda desligado: %s", exc)
+    logger.info("Motor %s, log em %s", __version__, caminho)
+    return str(caminho)
+
+
 def serve() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        # Log vai para stderr: stdout e canal exclusivo do protocolo.
-        stream=sys.stderr,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    server = EngineServer()
+    log_path = configure_logging()
+    server = EngineServer(log_path=log_path)
 
     def ao_receber_sigterm(_signum, _frame) -> None:
         """SIGTERM vira pedido de parada, nunca excecao.

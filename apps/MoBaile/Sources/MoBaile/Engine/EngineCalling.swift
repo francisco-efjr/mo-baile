@@ -36,6 +36,10 @@ protocol EngineCalling: Actor {
     /// Prazos por método, vindos do `engine.hello`.
     func useMethodTable(_ table: [String: EngineDTO.MethodSpec])
 
+    /// Arquivo de log que o motor informou no `engine.hello`, para a mensagem
+    /// de queda citá-lo.
+    func useLogPath(_ path: String?)
+
     /// Encerramento ordenado: pode esperar o motor desmontar antes de voltar.
     func stop() async
 }
@@ -64,6 +68,9 @@ extension EngineCalling {
     func callIgnoringResult(_ method: String) async throws {
         try await callIgnoringResult(method, params: [:])
     }
+
+    /// Duplo de teste sem processo não tem log para guardar.
+    func useLogPath(_ path: String?) {}
 }
 
 extension EngineClient: EngineCalling {}

@@ -434,6 +434,28 @@ final class EngineSessionSupervisionTests: XCTestCase {
         XCTAssertEqual(estado.statusMessage, sessao.lastError)
     }
 
+    /// A mensagem de queda cita o log que o motor que caiu informou no
+    /// `engine.hello` (MEL-5). Espera longa: a mensagem fica parada na tela.
+    func testQuedaCitaOLogDoMotorQueCaiu() async throws {
+        let estado = AppState()
+        // O hello da fixture, que sai do motor real com o `log_path` preenchido.
+        let comLog = FakeEngine(respostas: try resultadosDasFixtures(), erros: [:])
+        let fabrica = FabricaDeMotores([comLog, try novoMotor()])
+        let politicaLenta = EngineSession.RestartPolicy(delays: [30, 30, 30])
+        let sessao = EngineSession(state: estado, restartPolicy: politicaLenta) { try fabrica.fazer() }
+        await sessao.connect()
+        defer { Task { await sessao.disconnect() } }
+
+        await fabrica.fabricados[0].cair(status: 9)
+        try await esperar("mensagem de queda") { estado.statusMessage.contains("Reiniciando") }
+
+        XCTAssertTrue(estado.statusMessage.contains("codigo 9"), estado.statusMessage)
+        XCTAssertTrue(
+            estado.statusMessage.contains("log em /Users/qa/Library/Logs/Mo baile/engine.log"),
+            estado.statusMessage
+        )
+    }
+
     /// O limite vale também para um motor que sobe e cai de novo: senão uma
     /// queda sistemática viraria reinício eterno.
     func testMotorQueCaiLogoDepoisDeSubirTambemEsgotaOLimite() async throws {

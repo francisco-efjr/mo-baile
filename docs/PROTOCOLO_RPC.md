@@ -80,7 +80,8 @@ O front chama `engine.hello` antes de qualquer outra coisa:
   "engine_version":"0.1.0",
   "capabilities":["cancel","progress","lanes"],
   "methods":{"hierarchy.dump":{"lane":"capture","timeout_s":60,"progress":true}, "...":{}},
-  "notifications":["stream.frame","stream.settled","$/progress","..."]}}
+  "notifications":["stream.frame","stream.settled","$/progress","..."],
+  "log_path":"/Users/qa/Library/Logs/Mo baile/engine.log"}}
 ```
 
 - Se `protocol_version` do cliente for diferente da do motor, o motor responde
@@ -91,6 +92,11 @@ O front chama `engine.hello` antes de qualquer outra coisa:
   esperar antes de desistir da chamada, **contado do envio e incluindo o tempo
   que o pedido passa na fila** atrás de outros do mesmo domínio. O front usa esse
   valor, e não uma tabela própria: há uma fonte de verdade só.
+- `log_path` é o arquivo de log deste motor (`engine.log` na pasta de
+  `logs_dir()`, 0600, rotação de 1 MB × 3, URLs redigidas), ou `null` quando a
+  pasta de logs não pôde ser usada e o motor subiu só com o stderr. O front o
+  cita na mensagem de queda. Campo aditivo, sem mudar a versão do protocolo; o
+  `engine.info` traz o mesmo campo.
 - `engine.hello` não é obrigatório para o motor atender. Clientes antigos, o
   harness de QA e a interface Tk continuam funcionando sem ele.
 
@@ -175,8 +181,8 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações |
-| `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos |
+| `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações, `log_path` |
+| `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos, `log_path` |
 | `engine.shutdown` | — | `{stopped}` na hora; o desmonte roda depois que a resposta sai. Fim do stdin e SIGTERM encerram pelo mesmo caminho, sem interromper o desmonte |
 | `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele. O alvo escolhido fica fixo no vigia: a varredura seguinte não o troca pelo primeiro da lista, e não há `device.changed` redundante (3.5.2) |
 | `session.correlate` | `step_num`, `before_s` (padrão 1), `after_s` (padrão 4) | requisições (`requests`, ids de `proxy.event`) e eventos de analytics (`events`, ids de `analytics.event`) cuja hora cai na janela do passo: de `recorded_at - before_s` até `recorded_at + after_s` ou até o `recorded_at` do passo seguinte, o que vier antes. `window` é `[início, fim]` em epoch; `probable` é sempre `true` (atribuição por tempo, não causal). Todos os carimbos são do relógio do Mac na recepção. Passo inexistente ou sem hora: `invalid_input` (3.6) |

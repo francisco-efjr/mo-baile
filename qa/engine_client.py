@@ -39,6 +39,8 @@ class Motor:
         env["NO_PROXY"] = env["no_proxy"] = "127.0.0.1,localhost"
         # Recentes da tela Início numa pasta descartável, nunca no Mac de quem roda.
         env["MOBAILE_DATA_DIR"] = tempfile.mkdtemp(prefix="mobaile-qa-")
+        # O log do motor (engine.log) também: nada em ~/Library/Logs/Mo baile.
+        env["MOBAILE_LOG_DIR"] = tempfile.mkdtemp(prefix="mobaile-qa-logs-")
         env.update(extra_env or {})
 
         self.proc = subprocess.Popen(

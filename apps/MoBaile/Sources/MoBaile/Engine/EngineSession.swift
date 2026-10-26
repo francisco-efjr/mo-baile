@@ -337,6 +337,7 @@ final class EngineSession {
         }
         hello = resposta
         await client.useMethodTable(resposta.methods)
+        await client.useLogPath(resposta.logPath)
     }
 
     private func install(_ client: any EngineCalling) {
@@ -447,7 +448,8 @@ final class EngineSession {
                 restartTask = nil
             }
         }
-        var motivo = EngineError.processTerminated(status).localizedDescription
+        // `hello` ainda é o do motor que caiu: é o log dele que conta a queda.
+        var motivo = EngineError.processTerminated(status, logPath: hello?.logPath).localizedDescription
         while !Task.isCancelled {
             // A janela conta tentativas, com ou sem sucesso: um motor que sobe e
             // cai de novo logo depois também esgota o limite, em vez de ficar

@@ -109,6 +109,9 @@ def ambiente_fixo(server: EngineServer):
     que e o que ela deveria estar medindo.
     """
     server.adb.adb_path = "adb"
+    # O gerador nao chama `configure_logging`: o caminho do log e o de um Mac
+    # de referencia, para a suite Swift decodificar o campo preenchido.
+    server.log_path = "/Users/qa/Library/Logs/Mo baile/engine.log"
     server.adb.emulator_path = "/Users/qa/Library/Android/sdk/emulator/emulator"
     with contextlib.ExitStack() as stack:
         fixar = stack.enter_context

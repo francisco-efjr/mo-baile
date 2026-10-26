@@ -163,3 +163,20 @@ def redact_url(url: str, *, force: bool = False) -> str:
         parsed.scheme, netloc, parsed.path,
         _redact_form(parsed.query), _redact_form(parsed.fragment),
     ))
+
+
+# URL dentro de texto livre: esquema, `://` e tudo até o primeiro espaço,
+# aspa ou sinal de tag. Pontuação colada no fim fica dentro da captura, o que
+# não atrapalha: `redact_url` só mexe em userinfo, query e fragment.
+_URL_IN_TEXT = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s\"'<>]+")
+
+
+def redact_urls_in_text(text: str) -> str:
+    """Passa por `redact_url` cada URL que aparecer numa mensagem de log.
+
+    Sempre forçado: log é arquivo em disco, e `MOBAILE_REDACT=0` vale só para
+    a tela (D-E).
+    """
+    if not text or "://" not in text:
+        return text
+    return _URL_IN_TEXT.sub(lambda match: redact_url(match.group(0), force=True), text)

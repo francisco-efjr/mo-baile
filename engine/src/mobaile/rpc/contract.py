@@ -196,12 +196,17 @@ def lane_of(method: str) -> str:
     return METHODS.get(method, {}).get("lane", LANE_FAST)
 
 
-def hello_payload(engine_version: str) -> dict[str, Any]:
-    """Resultado de `engine.hello`. Copia a tabela para ninguem altera-la por fora."""
+def hello_payload(engine_version: str, log_path: str | None = None) -> dict[str, Any]:
+    """Resultado de `engine.hello`. Copia a tabela para ninguem altera-la por fora.
+
+    `log_path` e o arquivo de log deste motor, ou `None` quando ele subiu so
+    com stderr. Campo aditivo: o protocolo continua na mesma versao.
+    """
     return {
         "protocol_version": PROTOCOL_VERSION,
         "engine_version": engine_version,
         "capabilities": list(CAPABILITIES),
         "methods": {name: dict(spec) for name, spec in METHODS.items()},
         "notifications": list(NOTIFICATIONS),
+        "log_path": log_path,
     }
