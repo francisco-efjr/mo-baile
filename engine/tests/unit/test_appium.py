@@ -4,8 +4,12 @@ O time usa Appium para gerenciar o WDA, então o botão "Iniciar WDA" pede ao
 Appium em vez de compilar o WDA por conta própria.
 """
 
+import os
+import stat
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -96,6 +100,116 @@ class TestSubidaDoServidor(unittest.TestCase):
             ok, msg = bridge.start_server()
         self.assertFalse(ok)
         self.assertIn("encerrou", msg)
+
+
+class TestEnderecoDoServidor(unittest.TestCase):
+    """O Appium escuta em 0.0.0.0 por padrao e nao tem autenticacao: subido
+    sem `--address`, qualquer maquina da rede comandava o aparelho conectado.
+    O motor so sobe o servidor proprio em loopback, na porta da APPIUM_URL."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="mobaile-appium-")
+        self.addCleanup(self._tmp.cleanup)
+        self.pasta_de_logs = os.path.join(self._tmp.name, "logs")
+        # Nada de log no ~/Library de quem roda a suite, nem no caminho antigo.
+        for alvo in (
+            patch.dict(os.environ, {"MOBAILE_LOG_DIR": self.pasta_de_logs}),
+            patch("pathlib.Path.home", return_value=Path(self._tmp.name)),
+        ):
+            alvo.start()
+            self.addCleanup(alvo.stop)
+
+    def _subir(self, url):
+        """Sobe com `Popen` falso; o servidor "responde" logo depois."""
+        bridge = AppiumBridge(base_url=url)
+        processo = MagicMock()
+        processo.poll.return_value = None
+        with patch.object(bridge, "is_running", side_effect=[False, True]), \
+             patch.object(AppiumBridge, "locate_appium", return_value="/bin/appium"), \
+             patch("subprocess.Popen", return_value=processo) as popen:
+            ok, msg = bridge.start_server()
+        if popen.called:
+            # O log do Appium fica aberto no processo filho; aqui o falso nao fecha.
+            saida = popen.call_args.kwargs.get("stdout")
+            if hasattr(saida, "close"):
+                saida.close()
+        return ok, msg, popen
+
+    @staticmethod
+    def _opcao(argv, nome):
+        return argv[argv.index(nome) + 1] if nome in argv else None
+
+    def test_sobe_so_no_loopback_na_porta_padrao(self):
+        ok, _msg, popen = self._subir("http://127.0.0.1:4723")
+        self.assertTrue(ok)
+        argv = popen.call_args.args[0]
+        self.assertEqual(self._opcao(argv, "--address"), "127.0.0.1")
+        self.assertEqual(self._opcao(argv, "--port"), "4723")
+
+    def test_porta_vem_da_url(self):
+        _ok, _msg, popen = self._subir("http://localhost:4799")
+        argv = popen.call_args.args[0]
+        self.assertEqual(self._opcao(argv, "--address"), "127.0.0.1")
+        self.assertEqual(self._opcao(argv, "--port"), "4799")
+
+    def test_url_sem_porta_usa_a_do_appium(self):
+        _ok, _msg, popen = self._subir("http://127.0.0.1")
+        self.assertEqual(self._opcao(popen.call_args.args[0], "--port"), "4723")
+
+    def test_loopback_ipv6_escuta_no_ipv6(self):
+        # O cliente fala com [::1]; servidor em 127.0.0.1 nunca responderia.
+        _ok, _msg, popen = self._subir("http://[::1]:4723")
+        self.assertEqual(self._opcao(popen.call_args.args[0], "--address"), "::1")
+
+    def test_porta_zero_nao_sobe_servidor(self):
+        # O harness de QA usa porta 0 para nunca alcancar um Appium de verdade.
+        # Antes, o motor subia o Appium real e esperava 45 s a toa.
+        ok, msg, popen = self._subir("http://127.0.0.1:0")
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        self.assertIn("indisponivel", msg)
+
+    def test_host_fora_do_loopback_nao_sobe_servidor(self):
+        ok, msg, popen = self._subir("http://10.0.0.5:4723")
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        self.assertIn("indisponivel", msg)
+
+    def test_credencial_da_url_nao_vai_para_a_mensagem(self):
+        ok, msg, popen = self._subir("http://fulano:segredo@10.0.0.5:4723")
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        self.assertNotIn("segredo", msg)
+
+    def test_harness_de_qa_pela_variavel_de_ambiente(self):
+        import mobaile.adapters.appium as modulo
+        from mobaile.config import Settings
+
+        with patch.dict(os.environ, {"APPIUM_URL": "http://127.0.0.1:0"}), \
+             patch.object(modulo, "settings", Settings.from_env()):
+            ok, _msg, popen = self._subir(None)
+        self.assertFalse(ok)
+        popen.assert_not_called()
+
+    def test_servidor_remoto_ja_no_ar_continua_valendo(self):
+        # Quem aponta APPIUM_URL para outra maquina e sobe o servidor por la
+        # continua sendo atendido: o motor so deixa de subir um proprio.
+        bridge = AppiumBridge(base_url="http://10.0.0.5:4723")
+        with patch.object(bridge, "is_running", return_value=True), \
+             patch("subprocess.Popen") as popen:
+            ok, _msg = bridge.start_server()
+        self.assertTrue(ok)
+        popen.assert_not_called()
+
+    def test_log_vai_para_a_pasta_de_logs_so_para_o_dono(self):
+        ok, msg, _popen = self._subir("http://127.0.0.1:4723")
+        self.assertTrue(ok)
+        caminho = os.path.join(self.pasta_de_logs, "appium.log")
+        self.assertTrue(os.path.isfile(caminho), msg)
+        self.assertEqual(stat.S_IMODE(os.stat(caminho).st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(os.stat(self.pasta_de_logs).st_mode), 0o700)
+        self.assertIn(caminho, msg)
+        self.assertFalse((Path(self._tmp.name) / "Library" / "Logs" / "mobaile-appium.log").exists())
 
 
 class TestGarantirWDA(unittest.TestCase):

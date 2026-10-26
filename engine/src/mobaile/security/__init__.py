@@ -15,7 +15,7 @@ from mobaile.security.files import (
     validate_input_file,
 )
 from mobaile.security.numbers import validate_integer, validate_number
-from mobaile.security.paths import secure_runtime_dir, write_executable_script
+from mobaile.security.paths import logs_dir, secure_runtime_dir, write_executable_script
 from mobaile.security.redaction import redact_body, redact_headers, redact_url
 from mobaile.security.shell import (
     MAX_INPUT_TEXT,
@@ -35,6 +35,7 @@ __all__ = [
     "MAX_SPEC_BYTES",
     "MAX_XML_BYTES",
     "build_adb_input_text_args",
+    "logs_dir",
     "parse_untrusted_xml",
     "prepare_output_dir",
     "quote_for_device_shell",

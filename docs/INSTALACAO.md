@@ -106,6 +106,11 @@ quando roda do código.
   driver. O motor procura o `appium` no `PATH`, em `/opt/homebrew/bin`, em
   `/usr/local/bin`, em `~/.npm-global/bin` e no `nvm`. O driver mora em
   `~/.appium/node_modules/appium-xcuitest-driver` (ou em `APPIUM_HOME`).
+  Quando o motor sobe o Appium, ele escuta só em `127.0.0.1`, na porta da
+  `APPIUM_URL` (padrão 4723), e o log vai para
+  `~/Library/Logs/Mo baile/appium.log` (pasta 0700, arquivo 0600). Com a
+  `APPIUM_URL` apontando para outra máquina ou para a porta 0, o motor não
+  sobe servidor: usa o que já estiver no ar.
 - **O PATH do Finder:** o app aberto pelo Finder herda o `PATH` mínimo do
   launchd. O `appium` é um script `#!/usr/bin/env node`, então, se o `node`
   não estiver nesse `PATH`, o Appium existe mas não sobe. O `setup.check`
