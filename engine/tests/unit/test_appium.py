@@ -211,6 +211,15 @@ class TestEnderecoDoServidor(unittest.TestCase):
         self.assertIn(caminho, msg)
         self.assertFalse((Path(self._tmp.name) / "Library" / "Logs" / "mobaile-appium.log").exists())
 
+    def test_log_de_outro_dono_segue_sem_log(self):
+        # fchmod recusado (arquivo de outro dono): o Appium sobe sem log, como antes.
+        with patch("os.fchmod", side_effect=PermissionError("outro dono")), \
+             patch("os.close", wraps=os.close) as fechar:
+            ok, _msg, popen = self._subir("http://127.0.0.1:4723")
+        self.assertTrue(ok)
+        self.assertIs(popen.call_args.kwargs.get("stdout"), subprocess.DEVNULL)
+        fechar.assert_called()
+
 
 class TestGarantirWDA(unittest.TestCase):
     def test_wda_ja_no_ar_nao_abre_sessao(self):

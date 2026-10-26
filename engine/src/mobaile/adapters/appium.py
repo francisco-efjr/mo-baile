@@ -156,9 +156,15 @@ class AppiumBridge:
         except OSError as exc:
             logger.warning("Log do Appium desligado: %s", exc)
             return subprocess.DEVNULL, Path("/dev/null")
-        # Arquivo de versao anterior, ou criado sob outro umask, fica so com o dono.
-        os.fchmod(fd, 0o600)
-        return os.fdopen(fd, "a", encoding="utf-8"), log_path
+        try:
+            # Arquivo de versao anterior, ou criado sob outro umask, fica so com o dono.
+            os.fchmod(fd, 0o600)
+            return os.fdopen(fd, "a", encoding="utf-8"), log_path
+        except OSError as exc:
+            # Arquivo de outro dono: segue sem log, como antes, e sem vazar o descritor.
+            os.close(fd)
+            logger.warning("Log do Appium desligado: %s", exc)
+            return subprocess.DEVNULL, Path("/dev/null")
 
     def _start_server_locked(self) -> tuple[bool, str]:
         if self.is_running():
