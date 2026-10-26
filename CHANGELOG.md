@@ -5,6 +5,53 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.12.0] - 2026-10-26
+
+### Adicionado
+
+- **Andamento do fluxo de verdade.** A barra e o destaque do passo avançam a
+  cada passo, no runner dos passos gravados e no flow do Maestro (que mostra
+  `i/total` dos comandos do YAML). Antes, só a linha de falha mexia na barra.
+  Notificação nova `flow.step` `{index, total}`, aditiva (`PROTOCOL_VERSION`
+  continua 2).
+- **Log do motor em arquivo.** `~/Library/Logs/Mo baile/engine.log` (0600, pasta
+  0700, 1 MB × 3), com URLs redigidas e sem texto digitado; o despejo de queda
+  nativa vai para `engine-faults.log`. Aberto pelo Finder, o app não perde mais
+  o que o motor disse. `engine.hello` e `engine.info` trazem `log_path`, e a
+  mensagem de queda do motor cita o arquivo. O ciclo de vida do motor (subiu,
+  caiu, parado) aparece no Console.app em `com.qa.mobaile`, categoria `engine`.
+
+### Mudado
+
+- **Parar o fluxo não é mais falha.** `flow.finished` ganha `cancelled`; a
+  execução parada volta a "Pronto" com a linha `STOP` no log, em vez de "FAIL".
+- O log bruto do CFNetwork (iPhone em Debug) e o do Appium foram para a mesma
+  pasta de logs, só para o dono.
+- A primeira abertura depois de atualizar demora um pouco mais: o Python
+  recompila o cache, agora fora do app.
+
+### Corrigido
+
+- **O Appium que o Mo baile sobe escutava em toda a rede.** O padrão do Appium
+  é `0.0.0.0`, sem autenticação: qualquer máquina da mesma rede podia comandar o
+  aparelho conectado. Agora sobe com `--address 127.0.0.1` e a porta da
+  `APPIUM_URL`; com `APPIUM_URL` fora do loopback (ou porta 0), o motor não
+  sobe um Appium próprio e não espera mais 45 s à toa.
+- **A assinatura do app quebrava no primeiro uso.** O Python gravava
+  `__pycache__` dentro do bundle (inclusive no handshake do `verify-native`) e o
+  `codesign --verify` acusava selo inválido. O bytecode vai para
+  `~/Library/Caches/Mo baile/pycache`, e o `verify-native` confere o selo antes
+  e depois do handshake.
+- **Texto sensível em disco e em log.** `Set-Cookie` e `Authorization` na forma
+  de dicionário do CFNetwork passam a ser mascarados no log bruto (mesmo com
+  `MOBAILE_REDACT=0`); script de fluxo órfão (que embute o texto digitado) é
+  apagado depois de 10 minutos; timeout do `adb input text` não leva mais o
+  texto ao log; falha de flow do Maestro não repete o valor de `${VAR}`.
+- **A escuta de Analytics não morre mais em silêncio.** Uma linha JSON que não
+  é objeto, ou um byte fora de UTF-8, matava a thread de leitura e a escuta
+  ficava muda com a flag ligada. A tabela de eventos e o log da execução ganham
+  teto (1000 eventos, 5000 linhas).
+
 ## [3.11.0] - 2026-10-24
 
 ### Adicionado
