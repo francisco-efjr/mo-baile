@@ -113,6 +113,13 @@ actor EngineClient {
         // Sem buffer no lado Python: com buffer, a resposta so chegaria quando o
         // bloco enchesse, e cada chamada pareceria travada.
         environment["PYTHONUNBUFFERED"] = "1"
+        // Bytecode fora da raiz do motor. No app, a raiz fica dentro do bundle
+        // assinado (Contents/Resources/engine/src), e cada `__pycache__` que o
+        // Python criasse ali quebraria o selo: `codesign --verify --deep
+        // --strict` passaria a falhar depois do primeiro uso. A variável, e não
+        // `-B`, mantém o cache (partida rápida) e vale também para os filhos
+        // que o motor sobe com `sys.executable -m ...`, que herdam o ambiente.
+        environment["PYTHONPYCACHEPREFIX"] = configuration.pycachePrefix
         for (key, value) in configuration.extraEnvironment {
             environment[key] = value
         }
@@ -452,4 +459,13 @@ struct EngineConfiguration: Sendable {
     let pythonURL: URL
     let sourcePath: String
     var extraEnvironment: [String: String] = [:]
+    /// Onde o Python grava o bytecode do motor (`PYTHONPYCACHEPREFIX`).
+    var pycachePrefix: String = EngineConfiguration.defaultPycachePrefix
+
+    /// `~/Library/Caches/Mo baile/pycache`, ao lado do cache do OCR
+    /// (`adapters/vision_ocr.py`).
+    static var defaultPycachePrefix: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/Mo baile/pycache").path
+    }
 }

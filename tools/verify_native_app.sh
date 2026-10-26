@@ -8,7 +8,8 @@
 #   1. a versao do Info.plist e a do motor embutido batem com VERSION;
 #   2. o motor embutido e o mesmo codigo de engine/src (nada ficou para tras);
 #   3. o Python que o app vai usar sobe o motor embutido e responde ao
-#      engine.hello com a versao certa.
+#      engine.hello com a versao certa, sem gravar bytecode no bundle: a
+#      assinatura e conferida antes e de novo depois do handshake.
 #
 # O Python e escolhido com a mesma regra do EngineLocator.swift quando o app
 # roda fora do repositorio: MOBAILE_PYTHON executavel vale sem sonda; senao, na
@@ -137,19 +138,37 @@ conferir_build_e_assinatura() {
     if ! git -C "$REPO_ROOT" diff --quiet HEAD -- 2>/dev/null; then
         echo "aviso: ha mudancas rastreadas nao commitadas; o app pode nao refleti-las."
     fi
+    conferir_selo
+    echo "build: commit $gravado, assinatura valida."
+}
+
+# O selo cobre Contents/Resources. Qualquer arquivo gravado ali depois da
+# assinatura o quebra; o caso conhecido e o Python criando __pycache__ ao lado do
+# motor embutido (MEL-2). O app manda o bytecode para ~/Library/Caches/Mo
+# baile/pycache e o handshake abaixo nao grava bytecode; sobra encontrada aqui
+# veio de outro caminho que rodou o motor do bundle.
+conferir_selo() {
+    local saida sobras
     if ! saida="$(codesign --verify --deep --strict "$APP_DIR" 2>&1)"; then
         echo "$saida"
+        sobras="$(find "$APP_DIR/Contents" -name "__pycache__" -type d 2>/dev/null | head -3 || true)"
+        if [ -n "$sobras" ]; then
+            echo "bytecode gravado dentro do bundle depois da assinatura:"
+            echo "$sobras"
+        fi
         falha "assinatura invalida (codesign --verify --deep --strict)."
     fi
-    echo "build: commit $gravado, assinatura valida."
 }
 conferir_build_e_assinatura
 
 python="$(escolher_python)" || exit 1
 
 resposta="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"engine.hello","params":{"protocol_version":2}}' \
-    | PYTHONPATH="$ENGINE_SRC" PYTHONNOUSERSITE=1 "$python" -S -m mobaile.rpc 2>/dev/null | head -n 1 || true)"
+    | PYTHONPATH="$ENGINE_SRC" PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 "$python" -S -m mobaile.rpc 2>/dev/null | head -n 1 || true)"
 echo "$resposta" | grep -q "\"engine_version\":\"$ESPERADA\"" \
     || falha "o motor embutido nao respondeu ao engine.hello com $python (resposta: ${resposta:-vazia})."
+
+# O handshake rodou o motor de dentro do bundle: o selo tem de continuar intacto.
+conferir_selo
 
 echo "OK: $APP_DIR na versao $ESPERADA, motor igual a engine/src, handshake com $python."

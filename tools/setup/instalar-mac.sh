@@ -207,7 +207,9 @@ alvo_verificar() {
         if [ -x "$APP_VENV/bin/python3" ]; then py="$APP_VENV/bin/python3"; else py="$(python_base || true)"; fi
     fi
     [ -n "$py" ] || { echo "  Nenhum Python 3.10+ ainda."; return 0; }
-    PYTHONPATH="$MOTOR_SRC" "$py" -m mobaile.services.setup || true
+    # Sem bytecode: no app, MOTOR_SRC fica dentro do bundle assinado, e um
+    # __pycache__ gravado ali quebra o selo (MEL-2).
+    PYTHONPATH="$MOTOR_SRC" PYTHONDONTWRITEBYTECODE=1 "$py" -m mobaile.services.setup || true
 }
 
 # ---------------------------------------------------------------------- main
