@@ -165,6 +165,9 @@ class AppState {
     /// `total` do último `flow.step`; 0 antes do primeiro.
     var runStepTotal: Int = 0
     var runSource: RunSource = .recordedSteps
+    /// Início da execução. O `runLog` tem teto: a primeira linha guardada não é
+    /// necessariamente a do começo.
+    var runStartedAt: Date?
     
     // --- Mirror Frame ---
     var currentFrame: NSImage? = nil

@@ -1217,6 +1217,7 @@ final class EngineSession {
         state.currentRunStep = 0
         state.runStepTotal = 0
         state.runSource = .recordedSteps
+        state.runStartedAt = Date()
         state.runState = .running
         do {
             let inicio: EngineDTO.FlowRun = try await client.call("flow.run")
@@ -1235,6 +1236,7 @@ final class EngineSession {
         state.currentRunStep = 0
         state.runStepTotal = 0
         state.runSource = .maestro
+        state.runStartedAt = Date()
         state.runState = .running
         do {
             try await client.callIgnoringResult("flow.maestro_run", params: ["path": .string(url.path)])

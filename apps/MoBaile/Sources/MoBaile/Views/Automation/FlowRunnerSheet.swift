@@ -149,7 +149,8 @@ struct FlowRunnerSheet: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                 }
-                .onChange(of: appState.runLog.count) {
+                // Pela última linha, não pela contagem: no teto do log a contagem para.
+                .onChange(of: appState.runLog.last?.id) {
                     if let lastId = appState.runLog.last?.id {
                         proxy.scrollTo(lastId, anchor: .bottom)
                     }
@@ -211,12 +212,12 @@ struct FlowRunnerSheet: View {
         }
     }
 
-    /// Tempo do primeiro ao último registro do runner; enquanto roda, até agora.
+    /// Tempo do início da execução ao último registro do runner; enquanto roda, até agora.
     private func resumo(agora: Date) -> String {
         let aprovados = andamento.approved
         let falhas = appState.runState == .failed ? 1 : 0
         var segundos = 0.0
-        if let inicio = appState.runLog.first?.timestamp {
+        if let inicio = appState.runStartedAt ?? appState.runLog.first?.timestamp {
             let fim = appState.runState == .running ? agora : (appState.runLog.last?.timestamp ?? inicio)
             segundos = max(0, fim.timeIntervalSince(inicio))
         }

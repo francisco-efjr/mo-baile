@@ -49,4 +49,17 @@ final class ListasComTetoTests: XCTestCase {
         XCTAssertEqual(estado.runLog.first?.message, "linha 2")
         XCTAssertEqual(estado.runLog.last?.message, "linha 5001")
     }
+
+    func testInicioDaExecucaoNaoDependeDaPrimeiraLinhaGuardada() async throws {
+        let (estado, sessao) = try novaSessao()
+        estado.steps = [AutomationStep(stepNum: 1, actionType: "click", varName: "BOTAO_1", elementName: "Entrar",
+                                       className: "android.widget.Button", strategy: .id, locatorValue: "x", coords: nil,
+                                       inputText: nil, package: "", platform: .android, recordedAt: nil)]
+        let antes = Date()
+
+        await sessao.runFlow()
+
+        let inicio = try XCTUnwrap(estado.runStartedAt)
+        XCTAssertGreaterThanOrEqual(inicio, antes)
+    }
 }
