@@ -6,6 +6,7 @@ falso (ver `aparelho_falso.py`).
 
 from __future__ import annotations
 
+import time
 import unittest
 
 from test_flow_execucao import SENTINELA, FluxoBase
@@ -57,6 +58,47 @@ class TestFlowMaestroRpc(FluxoBase):
         self.assertIn("error", resposta)
         self.assertIn("JavaScript", resposta["error"]["message"])
         self.assertFalse(self.ok("flow.status")["running"])
+
+
+    def test_flow_step_so_conta_comandos_de_topo(self):
+        # onFlowStart, onFlowComplete e os subpassos de retry/runFlow tambem
+        # passam por `_passo`; a barra do front conta so os comandos de topo.
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        flow = (
+            "appId: br.app\n"
+            "onFlowStart:\n  - assertVisible: Continuar\n"
+            "onFlowComplete:\n  - assertVisible: Continuar\n"
+            "---\n"
+            "- assertVisible: Continuar\n"
+            "- retry:\n    maxRetries: 1\n    commands:\n"
+            "      - assertVisible: Continuar\n      - assertVisible: Continuar\n"
+            "- runFlow:\n    commands:\n      - assertVisible: Continuar\n"
+        )
+        self.ok("flow.maestro_run", {"yaml": flow})
+        fim = self.esperar_fim(prazo=30)
+
+        self.assertTrue(fim["success"], fim)
+        self.assertIs(fim.get("cancelled"), False, fim)
+        self.assertEqual(
+            self.notificacoes("flow.step"),
+            [{"index": 1, "total": 3}, {"index": 2, "total": 3}, {"index": 3, "total": 3}],
+        )
+
+    def test_flow_stop_no_maestro_termina_com_cancelled(self):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        # O primeiro comando espera um elemento que nunca aparece: o stop chega
+        # durante a espera.
+        flow = "- tapOn:\n    text: Inexistente\n    optional: true\n- assertVisible: Continuar\n"
+        self.ok("flow.maestro_run", {"yaml": flow})
+        limite = time.monotonic() + 10
+        while not self.notificacoes("flow.step") and time.monotonic() < limite:
+            time.sleep(0.02)
+        self.assertTrue(self.ok("flow.stop")["stopped"])
+        fim = self.esperar_fim(prazo=30)
+
+        self.assertIs(fim.get("cancelled"), True, fim)
+        self.assertFalse(fim["success"], fim)
+        self.assertEqual([n["index"] for n in self.notificacoes("flow.step")], [1])
 
 
 if __name__ == "__main__":

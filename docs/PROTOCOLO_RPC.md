@@ -39,7 +39,8 @@ Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 | `passive.skipped` | Um toque no aparelho não virou passo, com `x`, `y` e o motivo |
 | `passive.text` | O texto digitado num campo foi lido e guardado no último passo de entrada |
 | `flow.log` | Uma linha de saída da execução do fluxo |
-| `flow.finished` | A execução do fluxo terminou, com `success` e `message` |
+| `flow.step` | Começou um passo de nível superior do fluxo: `{index, total}`, com `index` a partir de 1. Vale para `flow.run` (cada passo gravado) e `flow.maestro_run` (cada comando de topo do YAML; `onFlowStart`, `onFlowComplete` e os subpassos de `runFlow`/`retry` não contam). Sem `run_id`: a trava de execução já impede duas ao mesmo tempo (3.12.0) |
+| `flow.finished` | A execução do fluxo terminou, com `success`, `message` e `cancelled`. `cancelled` é `true` quando a execução parou por `flow.stop` (ou encerramento do motor); nesse caso `success` é sempre `false`, então quem não lê `cancelled` continua sem contar a parada como aprovada. `cancelled` existe desde a 3.12.0: front que fala com motor anterior trata a ausência como `false` |
 | `$/progress` | Andamento de um método longo. Ver "Progresso" |
 
 ## Erros
@@ -264,12 +265,12 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `flow.run` | — | roda os passos gravados no alvo ativo. O andamento chega por `flow.log` e `flow.finished` |
+| `flow.run` | — | roda os passos gravados no alvo ativo. O andamento chega por `flow.step`, `flow.log` e `flow.finished` |
 | `flow.stop` | — | pede a interrupção após o passo atual. Idempotente |
 | `flow.status` | — | `{running, cancelled}` |
 | `flow.maestro_check` | `yaml` ou `path`, `env?` | valida um flow no formato do Maestro sem tocar o aparelho: `{valid, app_id, name, tags, steps}`. Comando fora do subconjunto suportado, JavaScript e comandos de IA/nuvem dão `invalid_input` com o motivo |
 | `flow.maestro_export` | `app_id?`, `name?`, `save?` | os passos gravados como flow do Maestro: `{yaml, variables, steps, path?}`. Texto digitado não vai para o YAML: vira `${VARIAVEL}`, listada em `variables`. Com `save`, grava em `~/Documents/Mo baile/flows/` sem sobrescrever |
-| `flow.maestro_run` | `yaml` ou `path`, `env?` | roda o flow no alvo ativo com as esperas do Maestro (elemento até 17 s, 7 s se `optional`; hierarquia assentada após cada ação). Divide trava, `flow.stop`, `flow.log` e `flow.finished` com `flow.run`. Devolve `{running, app_id, name, tags, steps}` |
+| `flow.maestro_run` | `yaml` ou `path`, `env?` | roda o flow no alvo ativo com as esperas do Maestro (elemento até 17 s, 7 s se `optional`; hierarquia assentada após cada ação). Divide trava, `flow.stop`, `flow.step`, `flow.log` e `flow.finished` com `flow.run`. Devolve `{running, app_id, name, tags, steps}` |
 
 O formato e o que fica de fora estão em
 [research/maestro-modelo-de-automacao.md](research/maestro-modelo-de-automacao.md).

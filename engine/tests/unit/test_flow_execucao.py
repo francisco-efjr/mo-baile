@@ -195,5 +195,50 @@ class TestDigitacaoIOS(FluxoBase):
         self.assertEqual(self._digitado(), [])
 
 
+class TestProgressoECancelado(FluxoBase):
+    """MEL-3: o front so via o passo na linha de falha, e parar virava "FAIL"."""
+
+    def esperar(self, condicao, descricao: str, prazo: float = 20.0) -> None:
+        limite = time.monotonic() + prazo
+        while time.monotonic() < limite:
+            if condicao():
+                return
+            time.sleep(0.02)
+        self.fail(f"prazo estourado esperando {descricao}. Recebido: {self.out.getvalue()[-2000:]}")
+
+    def test_flow_run_emite_flow_step_de_1_a_n_e_o_marcador_nao_vira_log(self):
+        self.gravar_android((540, 480, "id"), (540, 480, "position"), (540, 480, "id"))
+
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+
+        self.assertTrue(fim["success"], fim)
+        self.assertIs(fim.get("cancelled"), False, fim)
+        self.assertEqual(
+            self.notificacoes("flow.step"),
+            [{"index": 1, "total": 3}, {"index": 2, "total": 3}, {"index": 3, "total": 3}],
+        )
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        self.assertTrue(linhas, "a execucao deveria continuar narrando o andamento")
+        self.assertFalse([linha for linha in linhas if "\x1e" in linha or "mobaile.step" in linha],
+                         "a linha-marcador do runner vazou como flow.log")
+        # A linha humana `▶ [i/n]` continua no log.
+        self.assertTrue(any("[2/3]" in linha for linha in linhas), linhas)
+
+    def test_flow_stop_termina_com_cancelled_e_sem_sucesso(self):
+        self.gravar_android((540, 480, "id"), (540, 480, "position"), (540, 480, "id"))
+
+        self.ok("flow.run")
+        self.esperar(lambda: self.notificacoes("flow.step"), "o primeiro flow.step")
+        self.assertTrue(self.ok("flow.stop")["stopped"])
+        fim = self.esperar_fim()
+
+        self.assertIs(fim.get("cancelled"), True, fim)
+        self.assertFalse(fim["success"], fim)
+        indices = [n["index"] for n in self.notificacoes("flow.step")]
+        self.assertLess(max(indices), 3, "o fluxo seguiu ate o fim depois do stop")
+        self.assertFalse(self.ok("flow.status")["running"])
+
+
 if __name__ == "__main__":
     unittest.main()

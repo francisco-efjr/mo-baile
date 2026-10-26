@@ -1208,11 +1208,13 @@ final class EngineSession {
     ///
     /// O serviço existia no motor e era testado, mas só a interface Tk o usava:
     /// o front nativo não tinha como rodar automação. O andamento chega por
-    /// `flow.log`, linha a linha.
+    /// `flow.step` (passo atual) e `flow.log` (linha a linha).
     func runFlow() async {
         guard let client, !state.steps.isEmpty else { return }
         state.runLog.removeAll()
         state.currentRunStep = 0
+        state.runStepTotal = 0
+        state.runSource = .recordedSteps
         state.runState = .running
         do {
             let inicio: EngineDTO.FlowRun = try await client.call("flow.run")
@@ -1224,11 +1226,13 @@ final class EngineSession {
     }
 
     /// Roda um flow do Maestro (`.yaml`) no aparelho, pelo runner do motor e
-    /// sem rede. O andamento chega pelos mesmos `flow.log`/`flow.finished`.
+    /// sem rede. O andamento chega pelos mesmos `flow.step`/`flow.log`/`flow.finished`.
     func runMaestroFlow(at url: URL) async {
         guard let client else { return }
         state.runLog.removeAll()
         state.currentRunStep = 0
+        state.runStepTotal = 0
+        state.runSource = .maestro
         state.runState = .running
         do {
             try await client.callIgnoringResult("flow.maestro_run", params: ["path": .string(url.path)])
@@ -1674,20 +1678,27 @@ final class EngineSession {
             state.runLog.append(
                 LogLine(timestamp: Date(), prefix: "RUN", message: payload.line)
             )
-            // O script imprime "PASSO n" ao entrar em cada passo; é o que move o
-            // destaque na lista lateral.
-            if let numero = Self.numeroDoPasso(em: payload.line) {
-                state.currentRunStep = numero
-            }
+
+        case "flow.step":
+            // O passo atual vem do motor, nos dois runners. Antes saía de uma
+            // regex sobre o log, que só casava na linha de falha.
+            guard let passo = decodeParams(notification, as: EngineDTO.FlowStep.self) else { return }
+            state.currentRunStep = passo.index
+            state.runStepTotal = passo.total
 
         case "flow.finished":
-            struct Fim: Decodable { let success: Bool; let message: String }
-            guard let payload = decodeParams(notification, as: Fim.self) else { return }
-            state.runState = payload.success ? .passed : .failed
+            guard let payload = decodeParams(notification, as: EngineDTO.FlowFinished.self) else { return }
             state.statusMessage = payload.message
-            state.runLog.append(
-                LogLine(timestamp: Date(), prefix: payload.success ? "PASS" : "FAIL", message: payload.message)
-            )
+            let prefixo: String
+            if payload.cancelled {
+                // Parar não é falhar (D-A): volta ao ocioso, com a parada no log.
+                state.runState = .idle
+                prefixo = "STOP"
+            } else {
+                state.runState = payload.success ? .passed : .failed
+                prefixo = payload.success ? "PASS" : "FAIL"
+            }
+            state.runLog.append(LogLine(timestamp: Date(), prefix: prefixo, message: payload.message))
 
         case "$/progress":
             guard let progresso = decodeParams(notification, as: EngineDTO.Progress.self),
@@ -1733,12 +1744,6 @@ final class EngineSession {
     }
 
     // MARK: - Diagnostico
-
-    /// Extrai o número do passo de uma linha de log do executor.
-    private static func numeroDoPasso(em linha: String) -> Int? {
-        guard let faixa = linha.range(of: #"(?i)passo\s+(\d+)"#, options: .regularExpression) else { return nil }
-        return Int(linha[faixa].filter(\.isNumber))
-    }
 
     private func applyDaemonStatus(from info: EngineDTO.EngineInfo) {
         state.daemonStatus.adb = info.adbAvailable ? .ok : .error

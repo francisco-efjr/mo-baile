@@ -358,6 +358,17 @@ def build() -> dict:
             quadro["params"][chave] = 0
         fixtures["notif_stream.frame"] = quadro
 
+        # Execucao de fluxo, pelos mesmos helpers que os dois runners usam. Fica
+        # o `flow.finished` de uma parada, que e o caso que o front antigo
+        # confundia com falha (3.12.0).
+        out.seek(0)
+        out.truncate()
+        server._notify_flow_step(2, 3)
+        server._notify_flow_finished(False, "Automação cancelada.", True)
+        avisos = [json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip()]
+        fixtures["notif_flow.step"] = next(m for m in avisos if m.get("method") == "flow.step")
+        fixtures["notif_flow.finished"] = next(m for m in avisos if m.get("method") == "flow.finished")
+
     traffic = NetworkEvent(
         id=7, timestamp=1757030000.5, time_str="14:32:10.123", method="POST",
         url="https://api.exemplo.com.br/v2/pedido/simulacao", host="api.exemplo.com.br",

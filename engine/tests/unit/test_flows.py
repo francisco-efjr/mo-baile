@@ -213,6 +213,25 @@ class TestFlowRunner(unittest.TestCase):
         self.assertFalse(results[0][0])
         self.assertIn("cancelada", results[0][1].lower())
 
+    def test_marcador_de_passo_vira_on_step_e_nunca_saida(self):
+        # MEL-3: o marcador e para o motor. Sem `on_step` (interface Tk) ele
+        # tambem nao pode aparecer cru no log.
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "marcador.py")
+            with open(path, "w", encoding="utf-8") as source:
+                source.write(
+                    "print('\\x1emobaile.step ' + '{\"index\":1,\"total\":2}', flush=True)\n"
+                    "print('linha humana', flush=True)\n"
+                    "print('\\x1emobaile.step torto', flush=True)\n"
+                )
+            for on_step in (MagicMock(), None):
+                logs = []
+                execution = run_flow_in_background(path, logs.append, MagicMock(), on_step=on_step)
+                execution.join(5)
+                self.assertEqual(logs, ["linha humana"])
+                if on_step is not None:
+                    on_step.assert_called_once_with(1, 2)
+
     def test_cancelamento_antes_do_start_notifica_sem_criar_processo(self):
         finished = MagicMock()
         execution = FlowExecution("/tmp/unused-flow.py", MagicMock(), finished)

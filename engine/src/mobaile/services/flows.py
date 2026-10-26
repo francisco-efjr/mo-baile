@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 MASK = "***"
 MIN_MASKED_TEXT = 3
 
+# Linha-marcador que o script imprime no início de cada passo, fora do `log()`
+# (sem timestamp): `\x1emobaile.step {"index":i,"total":n}`. `FlowExecution`
+# a troca por `on_step` e nunca a repassa como saída. O separador de registro
+# (0x1E) no começo garante que nenhuma linha humana do log case por acaso.
+STEP_MARKER = "\x1emobaile.step "
+
 
 class _TemporaryScript(str):
     """Caminho gerado pelo motor, distinguido de um script exportado pelo usuário."""
@@ -175,6 +181,7 @@ WDA_URL = {wda_url!r}
 # nenhum conteúdo gravado pelo usuário é interpretado como código Python.
 STEPS = json.loads({steps_json!r})
 STOP_REQUESTED = False
+STEP_MARKER = {STEP_MARKER!r}
 
 def request_stop(_signal, _frame):
     global STOP_REQUESTED
@@ -201,6 +208,11 @@ def _quote_for_device_shell(raw):
 def log(msg):
     timestamp = time.strftime("%H:%M:%S")
     print(f"[{{timestamp}}] {{msg}}", flush=True)
+
+def announce_step(index, total):
+    # Para o motor, não para quem lê: sem timestamp e fora do `log()`. O motor
+    # troca esta linha pela notificação `flow.step` e não a mostra.
+    print(STEP_MARKER + json.dumps({{"index": index, "total": total}}, separators=(",", ":")), flush=True)
 
 def verify_preconditions():
     log("=== [PRÉ-CONDIÇÕES] Verificando ambiente antes da execução ===")
@@ -372,6 +384,7 @@ def main():
     total = len(STEPS)
     for i, step in enumerate(STEPS, start=1):
         check_cancelled()
+        announce_step(i, total)
         var_name = step.get("var_name", f"PASSO_{{i}}")
         coords = step.get("coords", [0, 0])
         action = step.get("action_type", "click")
@@ -429,7 +442,7 @@ if __name__ == "__main__":
 class FlowExecution(threading.Thread):
     """Thread de execução com cancelamento cooperativo do script gerado."""
 
-    def __init__(self, script_path, on_output, on_finished, sensitive_texts=()):
+    def __init__(self, script_path, on_output, on_finished, sensitive_texts=(), on_step=None):
         super().__init__(daemon=True, name="mobaile-flow")
         # Rede de seguranca, nao o mecanismo principal: o runner ja nao imprime o
         # que digita, mas um traceback inesperado poderia repetir o comando. Texto
@@ -442,6 +455,7 @@ class FlowExecution(threading.Thread):
         self._temporary_script = isinstance(script_path, _TemporaryScript)
         self.on_output = on_output
         self.on_finished = on_finished
+        self.on_step = on_step
         self._cancelled = threading.Event()
         self._process_lock = threading.Lock()
         self._process: subprocess.Popen | None = None
@@ -450,6 +464,17 @@ class FlowExecution(threading.Thread):
         for segredo in self._segredos:
             linha = linha.replace(segredo, MASK)
         return linha
+
+    def _anunciar_passo(self, linha: str) -> None:
+        """Troca a linha-marcador por `on_step(index, total)`. Marcador torto é descartado."""
+        try:
+            dados = json.loads(linha[len(STEP_MARKER):])
+            index, total = int(dados["index"]), int(dados["total"])
+        except (ValueError, TypeError, KeyError):
+            logger.debug("Linha-marcador de passo ilegível descartada.")
+            return
+        if self.on_step is not None:
+            self.on_step(index, total)
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -480,7 +505,11 @@ class FlowExecution(threading.Thread):
 
             for line in iter(proc.stdout.readline, ""):
                 stripped = line.rstrip()
-                if stripped:
+                if stripped.startswith(STEP_MARKER):
+                    # Nunca vira saída: nem com `on_step` ausente (Tk), que
+                    # mostraria o marcador cru.
+                    self._anunciar_passo(stripped)
+                elif stripped:
                     self.on_output(self._mascarar(stripped))
 
             proc.stdout.close()
@@ -524,9 +553,13 @@ def run_flow_in_background(
     on_output: Callable[[str], None],
     on_finished: Callable[[bool, str], None],
     sensitive_texts: Iterable[str] = (),
+    on_step: Callable[[int, int], None] | None = None,
 ) -> FlowExecution:
-    """Executa o script em processo próprio; `cancel()` para entre passos."""
+    """Executa o script em processo próprio; `cancel()` para entre passos.
 
-    t = FlowExecution(script_path, on_output, on_finished, sensitive_texts)
+    `on_step(index, total)` chega no início de cada passo, com `index` a partir de 1.
+    """
+
+    t = FlowExecution(script_path, on_output, on_finished, sensitive_texts, on_step)
     t.start()
     return t

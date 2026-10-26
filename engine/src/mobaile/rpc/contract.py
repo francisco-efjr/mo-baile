@@ -185,6 +185,7 @@ NOTIFICATIONS: tuple[str, ...] = (
     "passive.skipped",
     "passive.text",
     "flow.log",
+    "flow.step",
     "flow.finished",
     PROGRESS,
 )

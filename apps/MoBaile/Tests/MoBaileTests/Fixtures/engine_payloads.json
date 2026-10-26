@@ -434,6 +434,7 @@
         "passive.skipped",
         "passive.text",
         "flow.log",
+        "flow.step",
         "flow.finished",
         "$/progress"
       ]
@@ -1190,6 +1191,23 @@
       "fps": 0,
       "capture_ms": 0,
       "skipped": 0
+    }
+  },
+  "notif_flow.step": {
+    "jsonrpc": "2.0",
+    "method": "flow.step",
+    "params": {
+      "index": 2,
+      "total": 3
+    }
+  },
+  "notif_flow.finished": {
+    "jsonrpc": "2.0",
+    "method": "flow.finished",
+    "params": {
+      "success": false,
+      "message": "Automação cancelada.",
+      "cancelled": true
     }
   },
   "notif_proxy.event": {

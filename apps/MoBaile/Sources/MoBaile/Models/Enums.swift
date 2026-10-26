@@ -75,8 +75,16 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Parada pedida pelo usuário não é caso próprio: volta a `.idle`, com a
+/// linha `STOP` no log (D-A da rodada 3.12.0).
 enum RunState: Equatable, Sendable {
     case idle, running, passed, failed
+}
+
+/// Quem disparou a execução. Só `flow.run` roda os passos gravados; no flow do
+/// Maestro a lista de passos gravados não corresponde ao que está rodando.
+enum RunSource: Equatable, Sendable {
+    case recordedSteps, maestro
 }
 
 enum DaemonState: String, Sendable {

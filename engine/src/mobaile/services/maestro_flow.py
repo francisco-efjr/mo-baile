@@ -678,6 +678,7 @@ class FlowRunner:
         *,
         log: Callable[[str], None] = lambda _l: None,
         cancelled: Callable[[], bool] = lambda: False,
+        on_step: Callable[[int, int], None] = lambda _i, _t: None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         lookup_timeout_s: float = LOOKUP_TIMEOUT_S,
@@ -686,6 +687,7 @@ class FlowRunner:
         self.device = device
         self._log = log
         self._cancelled = cancelled
+        self._on_step = on_step
         self._clock = clock
         self._sleep = sleep
         self.lookup_timeout_s = lookup_timeout_s
@@ -722,6 +724,10 @@ class FlowRunner:
             total = len(flow.steps)
             for n, passo in enumerate(flow.steps, start=1):
                 falha = passo
+                # So aqui, e nao em `_passo`: onFlowStart, onFlowComplete e os
+                # subpassos de runFlow/retry nao contam na barra do front.
+                self._checar()
+                self._on_step(n, total)
                 self._passo(passo, f"{n}/{total}")
                 feitos += 1
             falha = None
@@ -956,12 +962,13 @@ class FlowThread(threading.Thread):
         device: FlowDevice,
         on_output: Callable[[str], None],
         on_finished: Callable[[bool, str], None],
+        on_step: Callable[[int, int], None] = lambda _i, _t: None,
     ):
         super().__init__(daemon=True, name="mobaile-maestro-flow")
         self.flow = flow
         self.on_finished = on_finished
         self._cancelado = threading.Event()
-        self.runner = FlowRunner(device, log=on_output, cancelled=self._cancelado.is_set)
+        self.runner = FlowRunner(device, log=on_output, cancelled=self._cancelado.is_set, on_step=on_step)
         self.result: FlowResult | None = None
 
     def cancel(self) -> None:

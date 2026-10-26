@@ -1842,14 +1842,7 @@ class EngineServer:
             self.notify("flow.log", {"line": linha})
 
         def ao_terminar(sucesso: bool, mensagem: str) -> None:
-            with self._state_lock:
-                self._flow_running = False
-                self._flow_thread = None
-                cancelado = self._flow_cancelled
-            self.notify(
-                "flow.finished",
-                {"success": sucesso and not cancelado, "message": mensagem},
-            )
+            self._notify_flow_finished(sucesso, mensagem, self._release_flow())
 
         try:
             ok, motivo = flows.verify_preconditions(
@@ -1872,6 +1865,7 @@ class EngineServer:
                 self._flow_thread = flows.run_flow_in_background(
                     script, ao_sair, ao_terminar,
                     sensitive_texts=[p.input_text for p in passos if p.input_text],
+                    on_step=self._notify_flow_step,
                 )
         except Exception:
             with self._state_lock:
@@ -1879,6 +1873,29 @@ class EngineServer:
                 self._flow_thread = None
             raise
         return {"running": True, "steps": len(passos), "script": script}
+
+    def _release_flow(self) -> bool:
+        """Solta a trava de execucao. Devolve se a execucao tinha sido cancelada."""
+        with self._state_lock:
+            self._flow_running = False
+            self._flow_thread = None
+            return self._flow_cancelled
+
+    def _notify_flow_step(self, index: int, total: int) -> None:
+        """Inicio de um passo de nivel superior; `index` comeca em 1."""
+        self.notify("flow.step", {"index": index, "total": total})
+
+    def _notify_flow_finished(self, success: bool, message: str, cancelled: bool) -> None:
+        """Fim da execucao, igual para `flow.run` e `flow.maestro_run`.
+
+        Parar nao e falhar: `cancelled` deixa o front mostrar a parada como
+        parada. `success` continua falso numa execucao cancelada, para o front
+        antigo, que nao le `cancelled`, nao contar como aprovada.
+        """
+        self.notify(
+            "flow.finished",
+            {"success": success and not cancelled, "message": message, "cancelled": cancelled},
+        )
 
     def flow_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Pede a interrupcao. Idempotente.
@@ -1976,11 +1993,8 @@ class EngineServer:
         caminho_flow = str(params["path"]) if params.get("path") and not params.get("yaml") else None
 
         def ao_terminar(sucesso: bool, mensagem: str) -> None:
-            with self._state_lock:
-                self._flow_running = False
-                self._flow_thread = None
-                cancelado = self._flow_cancelled
-            self.notify("flow.finished", {"success": sucesso and not cancelado, "message": mensagem})
+            cancelado = self._release_flow()
+            self._notify_flow_finished(sucesso, mensagem, cancelado)
             if caminho_flow and not cancelado:
                 estado = "passou" if sucesso else "falhou"
                 self._remember("maestro", pathlib.Path(caminho_flow).name,
@@ -1988,6 +2002,7 @@ class EngineServer:
 
         execucao = maestro_flow.FlowThread(
             flow, aparelho, lambda linha: self.notify("flow.log", {"line": linha}), ao_terminar,
+            on_step=self._notify_flow_step,
         )
         with self._state_lock:
             self._flow_thread = execucao

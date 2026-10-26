@@ -162,6 +162,9 @@ class AppState {
     var runState: RunState = .idle
     var runLog: [LogLine] = []
     var currentRunStep: Int = 0
+    /// `total` do último `flow.step`; 0 antes do primeiro.
+    var runStepTotal: Int = 0
+    var runSource: RunSource = .recordedSteps
     
     // --- Mirror Frame ---
     var currentFrame: NSImage? = nil

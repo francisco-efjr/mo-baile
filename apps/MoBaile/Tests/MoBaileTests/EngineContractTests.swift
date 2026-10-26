@@ -421,4 +421,40 @@ extension EngineContractTests {
             XCTAssertTrue((0...100).contains(percent), "percentual fora da faixa: \(percent)")
         }
     }
+
+    // MARK: - Execucao de fluxo (3.12.0)
+
+    func testNotificacaoDePassoDoFluxo() throws {
+        struct Envelope: Decodable {
+            let method: String
+            let params: EngineDTO.FlowStep
+        }
+        let envelope = try JSONDecoder().decode(Envelope.self, from: payload("notif_flow.step"))
+        XCTAssertEqual(envelope.method, "flow.step")
+        XCTAssertEqual(envelope.params.index, 2)
+        XCTAssertEqual(envelope.params.total, 3)
+    }
+
+    /// Parar não é falhar: o motor marca a parada em `cancelled`.
+    func testFimDeFluxoCanceladoTrazCancelled() throws {
+        struct Envelope: Decodable {
+            let method: String
+            let params: EngineDTO.FlowFinished
+        }
+        let envelope = try JSONDecoder().decode(Envelope.self, from: payload("notif_flow.finished"))
+        XCTAssertEqual(envelope.method, "flow.finished")
+        XCTAssertFalse(envelope.params.success)
+        XCTAssertTrue(envelope.params.cancelled)
+        XCTAssertFalse(envelope.params.message.isEmpty)
+    }
+
+    /// Motor anterior à 3.12.0 não manda `cancelled`: a ausência é `false`.
+    func testFimDeFluxoSemCancelledDecodificaComoFalse() throws {
+        let fim = try JSONDecoder().decode(
+            EngineDTO.FlowFinished.self,
+            from: Data(#"{"success":false,"message":"Automação falhou (código de saída: 1)."}"#.utf8)
+        )
+        XCTAssertFalse(fim.cancelled)
+        XCTAssertFalse(fim.success)
+    }
 }
