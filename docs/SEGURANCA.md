@@ -96,6 +96,11 @@ continua mascarado, inclusive os cabeçalhos na forma de dicionário
 (`"Set-Cookie" = ( … );`). Texto digitado também não vai para o log do motor
 nem para a mensagem final de um flow do Maestro.
 
+Versões até a 3.11 gravavam esse log bruto em
+`~/Library/Logs/MoBaile/cfnetwork-diagnostics.log` (e `.log.1`), possivelmente
+com `Set-Cookie` em forma de dicionário sem máscara. O dono pode apagar os dois
+arquivos; o motor não os apaga sozinho.
+
 **Log do motor.** `engine.log` em `~/Library/Logs/Mo baile` (ou em
 `MOBAILE_LOG_DIR`): arquivo `0600` em pasta `0700`, rotação de 1 MB × 3, toda
 URL passada por `redact_url` mesmo com `MOBAILE_REDACT=0` e nenhum texto

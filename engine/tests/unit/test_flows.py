@@ -232,6 +232,44 @@ class TestFlowRunner(unittest.TestCase):
                 if on_step is not None:
                     on_step.assert_called_once_with(1, 2)
 
+    def test_script_exportado_fora_do_motor_nao_imprime_o_marcador(self):
+        # Revisao da MEL-3: o marcador e para o motor. Quem roda o script
+        # exportado na mao nao pode ver a linha `\x1emobaile.step` crua.
+        import sys
+
+        self.generator.generate_entry(
+            self.sample_elem_android, strategy=LocatorStrategy.POSITION, click_coord=(120, 210),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = generate_hidden_runner_script(
+                steps=self.generator.get_steps(), platform="android", device_id="emulator-5554",
+                adb_path="adb", output_path=os.path.join(directory, "exportado.py"),
+            )
+            with open(path, encoding="utf-8") as source:
+                content = source.read()
+            content = content.replace('if __name__ == "__main__":',
+                'def verify_preconditions():\n    return True\n\n'
+                'def wait_between_steps(_seconds):\n    pass\n\n'
+                'def execute_android_step(step):\n    return True\n\n'
+                'if __name__ == "__main__":')
+            with open(path, "w", encoding="utf-8") as source:
+                source.write(content)
+
+            ambiente = {k: v for k, v in os.environ.items() if k != "MOBAILE_STEP_MARKER"}
+            saida = subprocess.run(
+                [sys.executable, path], capture_output=True, text=True, env=ambiente, timeout=30,
+            )
+            self.assertEqual(saida.returncode, 0, saida.stdout + saida.stderr)
+            self.assertIn("[1/1]", saida.stdout)
+            self.assertNotIn("\x1e", saida.stdout)
+
+            # Pelo motor o marcador continua chegando como `flow.step`.
+            on_step, logs = MagicMock(), []
+            execution = run_flow_in_background(path, logs.append, MagicMock(), on_step=on_step)
+            execution.join(10)
+            on_step.assert_called_once_with(1, 1)
+            self.assertFalse(any("\x1e" in linha for linha in logs))
+
     def test_cancelamento_antes_do_start_notifica_sem_criar_processo(self):
         finished = MagicMock()
         execution = FlowExecution("/tmp/unused-flow.py", MagicMock(), finished)

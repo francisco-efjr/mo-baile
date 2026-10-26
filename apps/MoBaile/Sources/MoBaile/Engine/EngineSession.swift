@@ -1682,7 +1682,10 @@ final class EngineSession {
         case "flow.step":
             // O passo atual vem do motor, nos dois runners. Antes saía de uma
             // regex sobre o log, que só casava na linha de falha.
-            guard let passo = decodeParams(notification, as: EngineDTO.FlowStep.self) else { return }
+            // Só durante a execução: um aviso atrasado, já depois do fim, não
+            // move o destaque da execução que terminou.
+            guard state.runState == .running,
+                  let passo = decodeParams(notification, as: EngineDTO.FlowStep.self) else { return }
             state.currentRunStep = passo.index
             state.runStepTotal = passo.total
 

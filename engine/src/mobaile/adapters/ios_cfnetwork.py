@@ -329,6 +329,18 @@ def _mask_value(name: str, value: str) -> str:
     return redact_headers({name: value.strip('"(); ,')}, force=True)[name]
 
 
+def _mask_list_start(name: str, resto: str) -> tuple[str, bool]:
+    """Inicio `( ...` de uma lista sensivel: texto mascarado e se ela continua.
+
+    A lista so fecha na mesma linha se ela termina em `)` (ou `);`): um `)`
+    no meio e do valor (`( "a=(1)",`) e nao fecha nada.
+    """
+    if not resto.rstrip(" ;").endswith(")"):
+        primeiro = resto[1:].strip()
+        return "(" + (" " + _mask_value(name, primeiro) if primeiro else ""), True
+    return _mask_value(name, resto) + (";" if resto.endswith(";") else ""), False
+
+
 def _mask_block(lines: list[str]) -> str:
     """Bloco bruto com headers sensiveis e credenciais de URL mascarados.
 
@@ -336,18 +348,34 @@ def _mask_block(lines: list[str]) -> str:
     senha na URL nao podem ir junto (SEC-3). Os headers da resposta vem na
     forma de dicionario, `"Set-Cookie" = (` com o valor nas linhas seguintes
     ate `);`, entao a chave sensivel fica pendente ate a lista fechar, como em
-    `_headers_from_dict`.
+    `_headers_from_dict`. Com `"Set-Cookie" =` sozinho na linha, o `(` vem na
+    seguinte: a chave fica pendente ate ele.
     """
     out = []
     pendente: str | None = None
+    abrindo = False  # chave sensivel vista, `(` ainda por vir
     for line in lines:
         corpo = line.strip()
+        margem = line[: len(line) - len(line.lstrip())]
         if pendente is not None and corpo.startswith((")", "}")):
-            pendente = None
+            pendente, abrindo = None, False
+        elif abrindo and not corpo:
+            out.append(line)
+            continue
+        elif abrindo:
+            if corpo.startswith("("):
+                texto, continua = _mask_list_start(pendente, corpo)
+            else:
+                # Valor solto, sem lista: mascara e encerra.
+                texto, continua = _mask_value(pendente, corpo) + (";" if corpo.endswith(";") else ""), False
+            out.append(margem + texto)
+            abrindo = False
+            if not continua:
+                pendente = None
+            continue
         elif pendente is not None:
             # Valor de lista em linha propria: `"sid=..."`, `"a=1",` ou `"b=2");`.
             fecha = corpo.endswith((")", ");"))
-            margem = line[: len(line) - len(line.lstrip())]
             out.append(margem + _mask_value(pendente, corpo) + (");" if fecha else ""))
             if fecha:
                 pendente = None
@@ -359,11 +387,15 @@ def _mask_block(lines: list[str]) -> str:
             line = line[: m.start(2)] + masked
         elif d and is_sensitive_header(d.group(1)):
             resto = d.group(2).strip()
-            if resto.startswith("(") and ")" not in resto:
-                # A lista continua nas linhas seguintes.
-                pendente = d.group(1)
-                line = line[: d.start(2)] + "(" + (" " + _mask_value(d.group(1), resto) if resto != "(" else "")
-            elif resto:
+            if not resto:
+                # `"Set-Cookie" =` sozinho: o `(` vem na linha seguinte.
+                pendente, abrindo = d.group(1), True
+            elif resto.startswith("("):
+                texto, continua = _mask_list_start(d.group(1), resto)
+                line = line[: d.start(2)] + texto
+                if continua:
+                    pendente = d.group(1)
+            else:
                 line = line[: d.start(2)] + _mask_value(d.group(1), resto) + (";" if resto.endswith(";") else "")
         line = _ANY_URL.sub(lambda u: redact_url(u.group(0), force=True), line)
         out.append(line)
@@ -459,8 +491,10 @@ class IOSDebugNetworkCapture:
                 continue
             try:
                 events = parser.feed(int(payload.get("pid") or 0), str(payload.get("message", "")))
-            except Exception:
-                logger.exception("Falha ao interpretar bloco do CFNetwork.")
+            except Exception as exc:
+                # So o tipo: a mensagem e o traceback podem citar trecho do
+                # bloco (cabecalhos), e este log vai para o engine.log.
+                logger.error("Falha ao interpretar bloco do CFNetwork (%s).", type(exc).__name__)
                 continue
             for event in events:
                 self._emit(event)

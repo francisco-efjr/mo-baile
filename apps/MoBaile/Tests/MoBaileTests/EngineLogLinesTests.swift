@@ -35,6 +35,22 @@ final class EngineLogLinesTests: XCTestCase {
         XCTAssertEqual(linhas.append(Data([0x6F, 0x6B, 0xFF, 0x0A])), ["ok\u{FFFD}"])
     }
 
+    /// Revisão da MEL-5 (R-01): um motor que despeja ~70 KB sem `\n` sai numa
+    /// linha só, e o buffer volta a zero em vez de crescer sem fim.
+    func testLinhaSemQuebraAcimaDoTetoSaiEOBufferZera() {
+        var linhas = EngineLogLines()
+        let pedaco = Data(repeating: 0x61, count: 10 * 1024)  // "a" × 10 KB
+        var emitidas: [String] = []
+        for _ in 0..<7 {
+            emitidas += linhas.append(pedaco)
+        }
+
+        XCTAssertEqual(emitidas.count, 1)
+        XCTAssertEqual(emitidas.first?.utf8.count, 70 * 1024)
+        XCTAssertNil(linhas.finish(), "o buffer devia ter voltado a zero")
+        XCTAssertEqual(linhas.append(Data("depois\n".utf8)), ["depois"])
+    }
+
     // MARK: - Mensagem de queda
 
     func testQuedaCitaOLogDoMotorQuandoConhecido() {

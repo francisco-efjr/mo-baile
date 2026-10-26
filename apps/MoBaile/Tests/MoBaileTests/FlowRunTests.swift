@@ -32,6 +32,20 @@ final class FlowRunTests: XCTestCase {
         XCTAssertEqual(estado.runState, .running)
     }
 
+    /// Um `flow.step` atrasado, depois do fim, não pode mover o destaque da
+    /// execução que já falhou (revisão da MEL-3).
+    func testFlowStepDepoisDoFimNaoMoveOPasso() async throws {
+        let (estado, sessao, _) = try novaSessao()
+        estado.runState = .failed
+        estado.currentRunStep = 2
+        estado.runStepTotal = 3
+
+        await sessao.handle(notificacao("flow.step", #"{"index":3,"total":4}"#))
+
+        XCTAssertEqual(estado.currentRunStep, 2)
+        XCTAssertEqual(estado.runStepTotal, 3)
+    }
+
     /// A regex `passo N` saiu: só `flow.step` move o destaque.
     func testLinhaDeLogQueCitaPassoNaoMoveODestaque() async throws {
         let (estado, sessao, _) = try novaSessao()

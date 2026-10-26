@@ -211,7 +211,10 @@ def log(msg):
 
 def announce_step(index, total):
     # Para o motor, não para quem lê: sem timestamp e fora do `log()`. O motor
-    # troca esta linha pela notificação `flow.step` e não a mostra.
+    # troca esta linha pela notificação `flow.step` e não a mostra. Rodado na
+    # mão (script exportado), fica calado: só o motor liga a variável.
+    if os.environ.get("MOBAILE_STEP_MARKER") != "1":
+        return
     print(STEP_MARKER + json.dumps({{"index": index, "total": total}}, separators=(",", ":")), flush=True)
 
 def verify_preconditions():
@@ -501,6 +504,10 @@ class FlowExecution(threading.Thread):
                     text=True,
                     bufsize=1,
                     universal_newlines=True,
+                    # Herda o ambiente (o PYTHONPYCACHEPREFIX da MEL-2 depende
+                    # disso) e liga o marcador de passo, que fora do motor fica
+                    # calado.
+                    env={**os.environ, "MOBAILE_STEP_MARKER": "1"},
                 )
 
             for line in iter(proc.stdout.readline, ""):
