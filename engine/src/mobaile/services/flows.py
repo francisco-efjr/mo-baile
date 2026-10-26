@@ -11,7 +11,7 @@ from pathlib import Path
 
 from mobaile.config import settings
 from mobaile.domain.errors import InvalidInputError
-from mobaile.security import validate_device_id, write_executable_script
+from mobaile.security import sweep_orphan_runner_scripts, validate_device_id, write_executable_script
 from mobaile.services.codegen import AutomationStep
 
 logger = logging.getLogger(__name__)
@@ -418,6 +418,9 @@ if __name__ == "__main__":
         os.chmod(target, 0o600)
         return target
 
+    # Órfãos de um motor morto por SIGKILL levam texto digitado: saem antes do
+    # novo script, que por ser recente nunca entra na varredura.
+    sweep_orphan_runner_scripts()
     return _TemporaryScript(write_executable_script(
         script_content, filename=f"flow_runner_{uuid.uuid4().hex}.py",
     ))

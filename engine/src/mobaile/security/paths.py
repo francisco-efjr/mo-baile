@@ -17,6 +17,7 @@ import os
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 _DIR_NAME = "mobaile-runtime"
@@ -68,6 +69,28 @@ def logs_dir() -> Path:
     finally:
         os.close(fd)
     return base
+
+
+def sweep_orphan_runner_scripts(max_age_s: float = 600.0) -> int:
+    """Apaga `flow_runner_*.py` esquecidos em `secure_runtime_dir()`.
+
+    O script do fluxo embute o texto digitado e é apagado ao fim da execução,
+    mas sobra se o motor morrer por SIGKILL. Só sai o que tem mais de
+    `max_age_s` (10 min): um recente pode ser de uma execução que acabou de
+    começar. Um mais velho que ainda esteja rodando já foi lido inteiro pelo
+    interpretador, e apagar o arquivo não o interrompe. Devolve quantos saíram.
+    """
+    limite = time.time() - max_age_s
+    apagados = 0
+    for caminho in secure_runtime_dir().glob("flow_runner_*.py"):
+        try:
+            info = caminho.lstat()
+            if stat.S_ISREG(info.st_mode) and info.st_mtime < limite:
+                caminho.unlink()
+                apagados += 1
+        except OSError:
+            continue  # sumiu entre o glob e o unlink, ou não é nosso para apagar
+    return apagados
 
 
 def write_executable_script(content: str, filename: str = "flow_runner.py") -> Path:

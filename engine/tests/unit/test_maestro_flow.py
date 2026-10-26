@@ -272,6 +272,17 @@ class ExecucaoTest(unittest.TestCase):
         self.assertEqual(aparelho.toques[-1], (540, 480), "centro do rotulo mais fundo, dentro do botao")
         self.assertFalse(any("segredo@exemplo.com" in linha for linha in linhas))
 
+    def test_mensagem_de_falha_nao_repete_o_valor_da_variavel(self):
+        # MEL-4 (d): `selector.describe()` repete o texto procurado, e a
+        # mensagem do resultado vai crua em `flow.finished`.
+        r, linhas, _ = runner(self.aparelho_login())
+        resultado = r.run(parse_flow("- assertVisible: ${SENHA}\n", env={"SENHA": "SEGREDO"}))
+        self.assertFalse(resultado.success)
+        self.assertIn("nao ficou visivel", resultado.message)
+        self.assertNotIn("SEGREDO", resultado.message)
+        self.assertNotIn("SEGREDO", resultado.failed_step or "")
+        self.assertFalse(any("SEGREDO" in linha for linha in linhas))
+
     def test_espera_a_tela_aparecer_sem_sleep_fixo(self):
         # A home leva 12 leituras para aparecer; o assert espera, dentro dos 17 s.
         aparelho = self.aparelho_login(atraso=12)

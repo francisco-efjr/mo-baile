@@ -75,7 +75,9 @@ escrita e a execução, é uma janela de troca de conteúdo.
 
 **Correção.** O arquivo vai para um diretório da sessão criado com `0700`, com
 permissão `0600`, aberto com `O_NOFOLLOW`. A execução usa
-`sys.executable <script>`, que dispensa bit de execução.
+`sys.executable <script>`, que dispensa bit de execução. O script embute o
+texto digitado e é apagado ao fim da execução; o que sobra de um motor morto
+por SIGKILL sai na geração do próximo script, se tiver mais de 10 minutos.
 
 ## 5. Credenciais do cliente guardadas em claro
 
@@ -88,7 +90,11 @@ Uma captura de tela durante uma demonstração vazaria credencial de produção.
 **Correção.** `mobaile.security.redaction` mascara `Authorization`, `Cookie`,
 `X-Api-Key` e afins nos cabeçalhos, e `password`, `token`, `cpf`, `cvv` e
 similares em corpo JSON. Fica ligado por padrão. `MOBAILE_REDACT=0` desliga,
-como decisão consciente do operador.
+como decisão consciente do operador, mas só na tela: o log bruto do CFNetwork
+em disco (`cfnetwork-diagnostics.log`, na pasta dos logs do motor, `0600`)
+continua mascarado, inclusive os cabeçalhos na forma de dicionário
+(`"Set-Cookie" = ( … );`). Texto digitado também não vai para o log do motor
+nem para a mensagem final de um flow do Maestro.
 
 ## 6. Consumo de memória sem limite no proxy
 

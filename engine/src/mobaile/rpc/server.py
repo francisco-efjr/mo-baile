@@ -47,7 +47,7 @@ from mobaile.adapters.analytics_logcat import FirebaseAnalyticsListener
 from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
 from mobaile.adapters.flow_devices import AndroidFlowDevice, IOSFlowDevice
-from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
+from mobaile.adapters.ios_cfnetwork import IOSDebugNetworkCapture, raw_log_path
 from mobaile.adapters.ios_wda import IOSBridge
 from mobaile.adapters.mjpeg import MJPEGReader
 from mobaile.adapters.proxy import MobileNetworkProxy
@@ -1298,7 +1298,11 @@ class EngineServer:
                 raise DeviceNotReadyError(devices[0]["problem"])
             udid = usable[0]["udid"]
         self.ios_netlog.start(udid)
-        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": str(RAW_LOG_PATH),
+        try:
+            raw_log: str | None = str(raw_log_path())
+        except OSError:
+            raw_log = None  # pasta dos logs recusada: os blocos brutos nao sao gravados
+        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": raw_log,
                 "source": "cfnetwork"}
 
     def netlog_stop(self, _params: dict[str, Any]) -> dict[str, Any]:

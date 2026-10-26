@@ -252,6 +252,39 @@ class TestFlowRunner(unittest.TestCase):
             self.assertFalse(execution.is_alive())
             self.assertTrue(os.path.exists(exported), "arquivo exportado pertence ao usuario")
 
+    def test_script_orfao_antigo_some_e_o_recente_fica(self):
+        # MEL-4 (b): o script embute o texto digitado e sobra depois de um
+        # SIGKILL no motor. O próximo script gerado varre os órfãos antigos;
+        # um recente pode ser de uma execução em andamento e fica.
+        with tempfile.TemporaryDirectory() as raiz, patch("tempfile.tempdir", raiz):
+            from mobaile.security import secure_runtime_dir
+
+            pasta = secure_runtime_dir()
+            antigo = pasta / "flow_runner_antigo.py"
+            recente = pasta / "flow_runner_recente.py"
+            outro = pasta / "nao_e_runner.py"
+            for arquivo in (antigo, recente, outro):
+                arquivo.write_text("TEXTO = 'SEGREDO'\n", encoding="utf-8")
+            vinte_minutos_atras = os.path.getmtime(antigo) - 20 * 60
+            os.utime(antigo, (vinte_minutos_atras, vinte_minutos_atras))
+            os.utime(outro, (vinte_minutos_atras, vinte_minutos_atras))
+
+            novo = generate_hidden_runner_script(steps=[], platform="android", device_id="emulator-5554")
+
+            self.assertFalse(antigo.exists(), "órfão antigo some")
+            self.assertTrue(recente.exists(), "script recente pode estar rodando")
+            self.assertTrue(outro.exists(), "só os scripts do runner são varridos")
+            self.assertTrue(os.path.exists(novo), "o script da execução corrente fica")
+
+            # O modo exportado não varre nada e continua onde o usuário pediu.
+            os.utime(recente, (vinte_minutos_atras, vinte_minutos_atras))
+            exportado = generate_hidden_runner_script(
+                steps=[], platform="android", device_id="emulator-5554",
+                output_path=os.path.join(raiz, "exportado.py"),
+            )
+            self.assertTrue(os.path.exists(exportado))
+            self.assertTrue(recente.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

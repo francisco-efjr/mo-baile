@@ -308,7 +308,11 @@ class ADBBridge:
             args = self._device_args(device_id) + build_adb_input_text_args(text)
             ret, _, _ = self._run_cmd(args, timeout=5)
             return ret == 0
-        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+        except subprocess.TimeoutExpired as exc:
+            # Nunca `str(exc)`: ele repete o `cmd`, com o texto digitado entre aspas.
+            logger.warning("Digitação recusada em %r: %s após %s s", device_id, type(exc).__name__, exc.timeout)
+            return False
+        except (InvalidInputError, ToolNotFoundError) as exc:
             logger.warning("Digitação recusada em %r: %s", device_id, exc)
             return False
 

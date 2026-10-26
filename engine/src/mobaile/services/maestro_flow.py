@@ -694,10 +694,15 @@ class FlowRunner:
         self._segredos: tuple[str, ...] = ()
         self._linhas: list[str] = []
 
-    def log(self, linha: str) -> None:
+    def _mascarar(self, texto: str) -> str:
+        """Troca por `***` o valor de cada `${VAR}` usado, inclusive como sai em `repr`."""
         for segredo in self._segredos:
             if len(segredo) >= 3:
-                linha = linha.replace(segredo, "***")
+                texto = texto.replace(segredo, "***").replace(repr(segredo)[1:-1], "***")
+        return texto
+
+    def log(self, linha: str) -> None:
+        linha = self._mascarar(linha)
         self._linhas.append(linha)
         self._log(linha)
 
@@ -732,8 +737,12 @@ class FlowRunner:
                         self._passo(passo, "onFlowComplete")
                 except (FlowCancelled, FlowFailed, EngineError) as exc:
                     self.log(f"onFlowComplete falhou: {exc}")
+        # A mensagem vai crua em `flow.finished` e pode trazer `selector.describe()`,
+        # que repete o valor de `${VAR}`: passa pela mesma mascara do log.
+        mensagem = self._mascarar(mensagem)
         self.log(("✔ " if sucesso else "✘ ") + mensagem)
-        return FlowResult(sucesso, mensagem, feitos, falha.describe() if falha else None, list(self._linhas))
+        return FlowResult(sucesso, mensagem, feitos, self._mascarar(falha.describe()) if falha else None,
+                          list(self._linhas))
 
     # --- passos
 

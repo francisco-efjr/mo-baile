@@ -78,16 +78,25 @@ def redaction_enabled() -> bool:
     return os.getenv("MOBAILE_REDACT", "1").strip().lower() not in ("0", "false", "no")
 
 
-def redact_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    """Devolve uma cópia com os headers sensíveis mascarados."""
-    if not redaction_enabled():
+def is_sensitive_header(name: str) -> bool:
+    """Header cujo valor nunca vai em claro (cookie, token, autorização)."""
+    return name.lower() in _SENSITIVE_HEADERS
+
+
+def redact_headers(headers: Mapping[str, str], *, force: bool = False) -> dict[str, str]:
+    """Devolve uma cópia com os headers sensíveis mascarados.
+
+    `force=True` ignora `MOBAILE_REDACT=0`: o opt-out vale para a tela, não
+    para o que vai para disco.
+    """
+    if not force and not redaction_enabled():
         return dict(headers)
     out: dict[str, str] = {}
     for key, value in headers.items():
-        if key.lower() in _SENSITIVE_HEADERS:
+        if is_sensitive_header(key):
             out[key] = f"{_MASK} ({len(value)} chars)"
         elif key.lower() in ("location", "content-location", "referer"):
-            out[key] = redact_url(value)
+            out[key] = redact_url(value, force=force)
         else:
             out[key] = value
     return out
@@ -136,9 +145,12 @@ def _redact_form(value: str) -> str:
     return "&".join(fields)
 
 
-def redact_url(url: str) -> str:
-    """Oculta userinfo e credenciais de query/fragment antes de guardar URLs."""
-    if not url or not redaction_enabled():
+def redact_url(url: str, *, force: bool = False) -> str:
+    """Oculta userinfo e credenciais de query/fragment antes de guardar URLs.
+
+    `force=True` ignora `MOBAILE_REDACT=0`, como em `redact_headers`.
+    """
+    if not url or (not force and not redaction_enabled()):
         return url
     try:
         parsed = urllib.parse.urlsplit(url)

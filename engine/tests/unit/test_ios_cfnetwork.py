@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import itertools
 
+import pytest
+
 from mobaile.adapters.ios_cfnetwork import BODY_UNAVAILABLE, PENDING_TIMEOUT_S, CFNetworkDiagParser
 from mobaile.adapters.ios_device_log import _CFNetworkFilter
 
@@ -137,8 +139,10 @@ def test_log_bruto_e_criado_so_para_o_dono(tmp_path, monkeypatch):
 
     from mobaile.adapters import ios_cfnetwork
 
-    caminho = tmp_path / "Logs" / "MoBaile" / "cfnetwork-diagnostics.log"
-    monkeypatch.setattr(ios_cfnetwork, "RAW_LOG_PATH", caminho)
+    # Mesma pasta dos outros logs do motor (`logs_dir()`), e nao mais
+    # `~/Library/Logs/MoBaile`.
+    monkeypatch.setenv("MOBAILE_LOG_DIR", str(tmp_path / "Logs" / "Mo baile"))
+    caminho = tmp_path / "Logs" / "Mo baile" / "cfnetwork-diagnostics.log"
     captura = ios_cfnetwork.IOSDebugNetworkCapture(emit=lambda _e: None, next_id=lambda: 1)
     captura._save_raw("bloco")
     assert stat.S_IMODE(caminho.stat().st_mode) == 0o600
@@ -151,11 +155,66 @@ def test_log_bruto_antigo_aberto_para_todos_fica_so_do_dono(tmp_path, monkeypatc
 
     from mobaile.adapters import ios_cfnetwork
 
+    monkeypatch.setenv("MOBAILE_LOG_DIR", str(tmp_path))
     caminho = tmp_path / "cfnetwork-diagnostics.log"
     caminho.write_text("antigo\n", encoding="utf-8")
     caminho.chmod(0o644)
-    monkeypatch.setattr(ios_cfnetwork, "RAW_LOG_PATH", caminho)
     captura = ios_cfnetwork.IOSDebugNetworkCapture(emit=lambda _e: None, next_id=lambda: 1)
     captura._save_raw("novo")
     assert stat.S_IMODE(caminho.stat().st_mode) == 0o600
     assert caminho.read_text(encoding="utf-8") == "antigo\nnovo\n\n"
+
+
+# ------------------------------------- MEL-4 (a): headers em forma de dicionario
+
+SET_COOKIE = """CFNetwork Diagnostics [3:60] 10:21:00.000 {
+  Response Received: <CFURLRequest 0x1 [0x2]> {url = https://api.exemplo.com/v1/login, cs = 0x0}
+         Response: <CFURLResponse 0x3 [0x2]> {url = https://api.exemplo.com/v1/login}
+          { Status Code: 200, Headers {
+    "Set-Cookie" =     (
+        "sid=SEGREDO; Path=/; HttpOnly",
+        "csrf=SEGREDO-DOIS"
+    );
+    Authorization =     ( "Bearer SEGREDO-TRES" );
+    "Content-Type" =     (
+        "application/json"
+    );
+} }
+} [3:60]"""
+
+
+@pytest.mark.parametrize("redact", ["1", "0"])
+def test_log_bruto_mascara_header_em_forma_de_dicionario(tmp_path, monkeypatch, redact):
+    """`"Set-Cookie" = (` com o valor nas linhas seguintes nao vai para o disco.
+
+    Vale tambem com `MOBAILE_REDACT=0` (D-E): o opt-out e da tela, nao do arquivo.
+    """
+    from mobaile.adapters import ios_cfnetwork
+
+    monkeypatch.setenv("MOBAILE_REDACT", redact)
+    monkeypatch.setenv("MOBAILE_LOG_DIR", str(tmp_path))
+    captura = ios_cfnetwork.IOSDebugNetworkCapture(emit=lambda _e: None, next_id=lambda: 1)
+    parser = CFNetworkDiagParser(lambda: 1, on_raw_block=captura._save_raw)
+    [evento] = parser.feed(10, SET_COOKIE, now=1.0)
+
+    gravado = (tmp_path / "cfnetwork-diagnostics.log").read_text(encoding="utf-8")
+    assert "SEGREDO" not in gravado
+    # O resto do bloco continua la, para o diagnostico servir.
+    assert '"Set-Cookie" =' in gravado
+    assert "Authorization =" in gravado
+    assert "application/json" in gravado
+    assert evento.response_headers["Content-Type"] == "application/json"
+
+
+def test_log_bruto_nao_segue_symlink(tmp_path, monkeypatch):
+    from mobaile.adapters import ios_cfnetwork
+
+    monkeypatch.setenv("MOBAILE_LOG_DIR", str(tmp_path / "logs"))
+    alvo = tmp_path / "alvo.txt"
+    alvo.write_text("", encoding="utf-8")
+    (tmp_path / "logs").mkdir(mode=0o700)
+    (tmp_path / "logs" / "cfnetwork-diagnostics.log").symlink_to(alvo)
+    captura = ios_cfnetwork.IOSDebugNetworkCapture(emit=lambda _e: None, next_id=lambda: 1)
+    with pytest.raises(OSError):
+        captura._save_raw("bloco")
+    assert alvo.read_text(encoding="utf-8") == ""
