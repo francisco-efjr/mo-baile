@@ -329,6 +329,9 @@ class FirebaseAnalyticsListener:
                 # responder — no app, janela travada sem erro.
                 stdin=subprocess.DEVNULL,
                 text=True,
+                # Um byte fora de UTF-8 no log levantava UnicodeDecodeError no
+                # `readline` e matava a thread de leitura (MEL-6).
+                errors="replace",
                 bufsize=1,
                 **popen_extra,
             )
@@ -401,14 +404,19 @@ class FirebaseAnalyticsListener:
             if not line:
                 continue
 
-            if source == "ios_device":
-                self._handle_device_line(line)
-            elif source == "ios_simulator":
-                for record in assembler.feed(line):
-                    self._emit(self._parse_ios_record(record))
-            # Filtra linhas de eventos do Firebase
-            elif any(marker in line for marker in ("Logging event", "logging event", "Event recorded:", "Log event:")):
-                self._emit(self._parse_line(line.strip(), platform=self.active_platform))
+            # Uma linha que o parser nao espera nao pode matar a thread: a
+            # escuta ficava muda com a flag ligada (MEL-6).
+            try:
+                if source == "ios_device":
+                    self._handle_device_line(line)
+                elif source == "ios_simulator":
+                    for record in assembler.feed(line):
+                        self._emit(self._parse_ios_record(record))
+                # Filtra linhas de eventos do Firebase
+                elif any(marker in line for marker in ("Logging event", "logging event", "Event recorded:", "Log event:")):
+                    self._emit(self._parse_line(line.strip(), platform=self.active_platform))
+            except Exception:
+                logger.debug("Linha de analytics ignorada.", exc_info=True)
 
         # O fim do laco sem `stop()` e o processo de log que morreu. A flag
         # continuava verdadeira e o `start` seguinte respondia "ja ligado".
@@ -426,6 +434,9 @@ class FirebaseAnalyticsListener:
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
+            return
+        if not isinstance(payload, dict):
+            # JSON valido que nao e objeto ("1", "[...]"): nao e do protocolo.
             return
         if "status" in payload:
             self._device_ready.set()

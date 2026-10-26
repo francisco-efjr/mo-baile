@@ -1677,9 +1677,7 @@ final class EngineSession {
         case "flow.log":
             struct Linha: Decodable { let line: String }
             guard let payload = decodeParams(notification, as: Linha.self) else { return }
-            state.runLog.append(
-                LogLine(timestamp: Date(), prefix: "RUN", message: payload.line)
-            )
+            appendRunLog(LogLine(timestamp: Date(), prefix: "RUN", message: payload.line))
 
         case "flow.step":
             // O passo atual vem do motor, nos dois runners. Antes saía de uma
@@ -1700,7 +1698,7 @@ final class EngineSession {
                 state.runState = payload.success ? .passed : .failed
                 prefixo = payload.success ? "PASS" : "FAIL"
             }
-            state.runLog.append(LogLine(timestamp: Date(), prefix: prefixo, message: payload.message))
+            appendRunLog(LogLine(timestamp: Date(), prefix: prefixo, message: payload.message))
 
         case "$/progress":
             guard let progresso = decodeParams(notification, as: EngineDTO.Progress.self),
@@ -1727,6 +1725,7 @@ final class EngineSession {
         case "analytics.event":
             guard let event = decodeParams(notification, as: EngineDTO.AnalyticsEventPayload.self) else { return }
             state.analyticsEvents.append(event.toModel())
+            trimTraffic()
 
         default:
             break
@@ -1742,6 +1741,16 @@ final class EngineSession {
         }
         if state.analyticsEvents.count > limit {
             state.analyticsEvents.removeFirst(state.analyticsEvents.count - limit)
+        }
+    }
+
+    /// O log da execução também tem teto: um fluxo longo (ou em laço) não
+    /// pode crescer a lista sem fim. Saem as linhas mais antigas.
+    private func appendRunLog(_ linha: LogLine) {
+        let limit = 5000
+        state.runLog.append(linha)
+        if state.runLog.count > limit {
+            state.runLog.removeFirst(state.runLog.count - limit)
         }
     }
 
