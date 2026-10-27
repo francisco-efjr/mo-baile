@@ -45,6 +45,9 @@ EXTENDED_WAIT_TIMEOUT_S = 10.0
 SETTLE_TRIES = 10
 SETTLE_INTERVAL_S = 0.2
 POLL_INTERVAL_S = 0.3
+# A arvore da ultima tela assentada serve a busca seguinte se tiver ate esta
+# idade, contada do fim da leitura. Qualquer acao no aparelho a descarta.
+SETTLED_CACHE_TTL_S = 2.0
 MAX_RETRIES = 3
 MAX_FLOW_DEPTH = 8
 MAX_FLOW_BYTES = 512 * 1024
@@ -665,6 +668,38 @@ _DIRECOES = {
 _ROLAGEM = {"DOWN": "UP", "UP": "DOWN", "LEFT": "RIGHT", "RIGHT": "LEFT"}
 
 
+# Tudo o que o runner pede ao aparelho e que nao e leitura.
+_ACOES_NO_APARELHO = frozenset({"tap", "type_text", "press_key", "swipe", "launch_app", "stop_app", "clear_state"})
+
+
+class _AparelhoVigiado:
+    """O `FlowDevice` do flow, com a ultima arvore lida e um aviso antes de cada acao.
+
+    O aviso vem antes da chamada, e nao depois do sucesso: um toque que estoura
+    o prazo pode ter chegado ao aparelho e mudado a tela.
+    """
+
+    def __init__(self, device: FlowDevice, antes_da_acao: Callable[[], None]):
+        self._device = device
+        self._antes_da_acao = antes_da_acao
+        self.ultima_leitura: str | None = None
+
+    def hierarchy(self) -> str | None:
+        self.ultima_leitura = self._device.hierarchy()
+        return self.ultima_leitura
+
+    def __getattr__(self, nome: str) -> Any:
+        valor = getattr(self._device, nome)
+        if nome not in _ACOES_NO_APARELHO:
+            return valor
+
+        def acao(*args: Any) -> Any:
+            self._antes_da_acao()
+            return valor(*args)
+
+        return acao
+
+
 class FlowRunner:
     """Roda um `Flow` num `FlowDevice`, com as esperas do Maestro.
 
@@ -684,7 +719,7 @@ class FlowRunner:
         lookup_timeout_s: float = LOOKUP_TIMEOUT_S,
         optional_lookup_timeout_s: float = OPTIONAL_LOOKUP_TIMEOUT_S,
     ):
-        self.device = device
+        self.device = _AparelhoVigiado(device, self._antes_da_acao)
         self._log = log
         self._cancelled = cancelled
         self._on_step = on_step
@@ -695,6 +730,14 @@ class FlowRunner:
         self._app_id: str | None = None
         self._segredos: tuple[str, ...] = ()
         self._linhas: list[str] = []
+        # Ultima tela assentada (arvore, fim da leitura) e a arvore lida antes da
+        # ultima acao, para saber se a tela mudou.
+        self._assentada: tuple[str, float] | None = None
+        self._antes: str | None = None
+
+    def _antes_da_acao(self) -> None:
+        self._assentada = None
+        self._antes = self.device.ultima_leitura
 
     def _mascarar(self, texto: str) -> str:
         """Troca por `***` o valor de cada `${VAR}` usado, inclusive como sai em `repr`."""
@@ -712,6 +755,7 @@ class FlowRunner:
         self._app_id = flow.app_id
         self._segredos = flow.secrets
         self._linhas = []
+        self._assentada, self._antes = None, None
         nome = flow.name or (flow.path.name if flow.path else "flow")
         self.log(f"Flow {nome}: {len(flow.steps)} comandos, app {flow.app_id or '(nenhum)'}")
         feitos = 0
@@ -782,30 +826,62 @@ class FlowRunner:
                          _invisivel(e) for e in elementos]
         return elementos
 
-    def _procurar(self, sel: Selector, prazo_s: float) -> tuple[UIElement | None, str]:
-        """Le a arvore ate o seletor casar ou o prazo acabar."""
+    def _procurar(self, sel: Selector, prazo_s: float, *, usar_cache: bool = True) -> tuple[UIElement | None, str]:
+        """Le a arvore ate o seletor casar ou o prazo acabar.
+
+        A primeira volta usa a tela que a ultima espera assentou, em vez de
+        le-la de novo; achar algo nela nao muda a tela, entao ela segue valendo
+        ate a proxima acao. Ela cai se nao casar, se uma leitura nova vier
+        diferente ou se passar da idade. Checagem negativa (`assertNotVisible`,
+        `when`) passa `usar_cache=False`: decidir que algo sumiu pede a tela de agora.
+        """
         limite = self._clock() + prazo_s
+        cache = self._assentada if usar_cache else None
+        leu = False
         while True:
             self._checar()
-            xml = self.device.hierarchy() or ""
+            if cache and self._clock() - cache[1] <= SETTLED_CACHE_TTL_S:
+                xml = cache[0]
+            else:
+                cache = None
+                xml = self.device.hierarchy() or ""
+                if self._assentada and xml != self._assentada[0]:
+                    self._assentada = None
+            leu = leu or bool(xml)
             elementos = self._elementos(xml) if xml else []
             achados = [i for i in select_elements(sel, elementos) if elementos[i].area > 0]
             if achados:
                 return elementos[achados[0]], xml
+            if cache:
+                cache = self._assentada = None
             if self._clock() >= limite:
+                if not leu:
+                    raise FlowFailed(f"o aparelho nao devolveu a hierarquia em {prazo_s:.0f} s")
                 return None, xml
             self._sleep(POLL_INTERVAL_S)
 
-    def _assentar(self, prazo_s: float | None = None) -> str | None:
-        """Espera duas leituras seguidas iguais da hierarquia (waitForAppToSettle)."""
+    def _assentada_agora(self, xml: str) -> str:
+        self._assentada = (xml, self._clock())
+        return xml
+
+    def _assentar(self, prazo_s: float | None = None, *, uma_leitura: bool = True) -> str | None:
+        """Espera duas leituras seguidas iguais da hierarquia (waitForAppToSettle).
+
+        Quando o leitor ja espera a tela ficar ociosa (`reads_wait_for_idle`,
+        o `uiautomator dump`), uma leitura basta, desde que a tela tenha mudado
+        desde antes da acao: tela igual pode ser a antiga, ainda esperando rede.
+        """
         anterior = self.device.hierarchy()
+        if (uma_leitura and prazo_s is None and anterior and anterior != self._antes
+                and getattr(self.device, "reads_wait_for_idle", False)):
+            return self._assentada_agora(anterior)
         limite = self._clock() + prazo_s if prazo_s else None
         for _ in range(SETTLE_TRIES if limite is None else 10_000):
             self._checar()
             self._sleep(SETTLE_INTERVAL_S)
             atual = self.device.hierarchy()
             if atual == anterior:
-                return atual
+                return self._assentada_agora(atual) if atual else atual
             anterior = atual
             if limite is not None and self._clock() >= limite:
                 break
@@ -864,7 +940,7 @@ class FlowRunner:
         limite = self._clock() + prazo
         while True:
             self._checar()
-            elemento, _ = self._procurar(passo.selector, 0)
+            elemento, _ = self._procurar(passo.selector, 0, usar_cache=False)
             if elemento is None:
                 return
             if self._clock() >= limite:
@@ -917,7 +993,8 @@ class FlowRunner:
             raise FlowFailed(f"nao foi possivel limpar o estado de {app}")
         if not self.device.launch_app(app):
             raise FlowFailed(f"nao foi possivel abrir {app}")
-        self._assentar()
+        # Partida a frio e o pior caso da espera: segue com duas leituras iguais.
+        self._assentar(uma_leitura=False)
 
     def _r_stopApp(self, passo: Step) -> None:
         if not self.device.stop_app(self._app(passo)):
@@ -932,10 +1009,10 @@ class FlowRunner:
         if "platform" in quando and quando["platform"] != self.device.platform.lower():
             self.log("  pulado: outra plataforma")
             return
-        if "visible" in quando and self._procurar(quando["visible"], 0)[0] is None:
+        if "visible" in quando and self._procurar(quando["visible"], 0, usar_cache=False)[0] is None:
             self.log("  pulado: condicao `visible` falsa")
             return
-        if "notVisible" in quando and self._procurar(quando["notVisible"], 0)[0] is not None:
+        if "notVisible" in quando and self._procurar(quando["notVisible"], 0, usar_cache=False)[0] is not None:
             self.log("  pulado: condicao `notVisible` falsa")
             return
         for sub in passo.steps:
@@ -948,6 +1025,7 @@ class FlowRunner:
                     self._passo(sub, "  retry")
                 return
             except FlowFailed as exc:
+                self._assentada = None
                 if tentativa == passo.max_retries:
                     raise
                 self.log(f"  tentativa {tentativa + 1} falhou ({exc}); repetindo")

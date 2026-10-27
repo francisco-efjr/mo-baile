@@ -898,8 +898,14 @@ class EngineServer:
             self._android_backend[device] = "adb"
             return xml
 
-        logger.info("uiautomator dump vazio para %s; memorizando backend Appium.", device)
-        self._android_backend[device] = "appium"
+        # So o SIGKILL prova que o aparelho nao tem dump. Um vazio por tela sem
+        # ocio ou por corrida com outra leitura abre o Appium para esta leitura,
+        # mas nao troca o backend do aparelho para sempre.
+        if self.adb.dump_killed.get(device):
+            logger.info("uiautomator dump morto para %s; memorizando backend Appium.", device)
+            self._android_backend[device] = "appium"
+        else:
+            logger.info("uiautomator dump vazio para %s; tentando o Appium nesta leitura.", device)
         # Entre o dump rapido e o Appium, que na primeira vez leva dezenas de
         # segundos: e o ponto natural para parar se o front ja desistiu.
         self._check_cancelled()
@@ -911,6 +917,50 @@ class EngineServer:
             return None
         self._progress("Lendo a hierarquia pelo Appium")
         return self.appium.get_page_source()
+
+    def _sessao_appium_aberta(self, device: str) -> bool:
+        return bool(self.appium.session_id and self.appium.session_platform == "android"
+                    and self.appium.session_udid == device)
+
+    def _preparar_leitura_do_flow(self, device: str) -> None:
+        """Abre a sessao do Appium antes do flow, quando o aparelho depende dela.
+
+        Roda na thread do RPC, com `$/progress` e cancelamento. Dentro do flow
+        nao ha nenhum dos dois, e abrir a sessao la travaria o Parar por
+        dezenas de segundos.
+        """
+        if self._android_backend.get(device) != "appium" or self._sessao_appium_aberta(device):
+            return
+        self._progress("Abrindo a sessao do Appium para ler a tela durante o fluxo")
+        ok, mensagem = self.appium.ensure_android_session(device)
+        if not ok:
+            raise EngineError(f"Este aparelho so devolve a hierarquia pelo Appium: {mensagem}")
+
+    def _leitor_do_flow(self, device: str) -> tuple[Callable[[], str | None], Callable[[], str | None]]:
+        """Leitor da arvore para a thread do flow e o backend da ultima leitura.
+
+        Uma sessao UiAutomator2 ja aberta le em centesimos de segundo, contra
+        cerca de 2 s do `uiautomator dump`, e e usada sempre que existir. O
+        leitor nunca abre sessao nem muda o backend memorizado do aparelho. A
+        arvore lida vira a atual, para o inspetor do espelho, que pede a sua a
+        cada tela assentada, achar a leitura pronta em vez de disputar o dump.
+        """
+        with self._state_lock:
+            epoch = self._session_epoch
+        estado: dict[str, str | None] = {"backend": None}
+
+        def ler() -> str | None:
+            xml, backend = None, None
+            if self._sessao_appium_aberta(device):
+                xml, backend = self.appium.get_page_source(), "appium"
+            if not xml and self._android_backend.get(device) != "appium":
+                xml, backend = self.adb.get_ui_hierarchy(device), "adb"
+            estado["backend"] = backend if xml else None
+            if xml:
+                self._store_hierarchy(xml, epoch)
+            return xml
+
+        return ler, lambda: estado["backend"]
 
     def _motivo_de_hierarquia_indisponivel(self) -> str:
         """Erro que diz o que fazer, e nao so que falhou.
@@ -1990,7 +2040,9 @@ class EngineServer:
         if sessao.platform is Platform.IOS:
             aparelho = IOSFlowDevice(self.ios, device_id)
         else:
-            aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=lambda: self._android_hierarchy(device_id))
+            self._preparar_leitura_do_flow(device_id)
+            ler, backend = self._leitor_do_flow(device_id)
+            aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=ler, backend=backend)
         with self._state_lock:
             if self._shutdown_done:
                 raise InvalidInputError("O motor esta encerrando.")

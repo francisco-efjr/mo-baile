@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 
 from PIL import Image
 
@@ -42,6 +43,14 @@ class ADBBridge:
         # Nome de dump único por processo: evita corrida entre duas instâncias
         # do app e não deixa artefato previsível no dispositivo.
         self._dump_remote_path = f"/data/local/tmp/mobaile_dump_{os.getpid()}.xml"
+        # Um dump por aparelho de cada vez. O arquivo remoto e o mesmo para o
+        # processo inteiro, e o `rm -f` de um dump apagava o arquivo de outro
+        # antes do `cat`: o flow e o inspetor do espelho leem ao mesmo tempo.
+        self._dump_locks: dict[str, threading.Lock] = {}
+        self._dump_locks_guard = threading.Lock()
+        # Serial -> o ultimo dump foi morto com SIGKILL (137). So isso prova que
+        # o aparelho nao tem `uiautomator dump`; timeout e tela sem ocio, nao.
+        self.dump_killed: dict[str, bool] = {}
         # Valores que o aparelho tinha antes de o proxy ser ligado, por serial.
         # O desmonte os devolve em vez de apagar: um proxy corporativo ou o
         # `captive_portal_mode` do aparelho nao pertencem a este motor.
@@ -248,7 +257,14 @@ class ADBBridge:
 
     def get_ui_hierarchy(self, device_id: str) -> str | None:
         """Dump da hierarquia via comando encadeado com fallback seguro."""
+        with self._dump_locks_guard:
+            trava = self._dump_locks.setdefault(device_id, threading.Lock())
+        with trava:
+            return self._dump_hierarchy(device_id)
+
+    def _dump_hierarchy(self, device_id: str) -> str | None:
         remote = self._dump_remote_path
+        self.dump_killed[device_id] = False
         try:
             args = self._device_args(device_id)
             # Tenta executar dump + cat em uma única sessão para evitar overhead de subprocessos adicionais
@@ -265,6 +281,7 @@ class ADBBridge:
                 # 137 é SIGKILL: no Android 14+ em aparelhos físicos, uiautomator dump
                 # é sumariamente morto pelo SO. Insistir no fallback apenas desperdiça 13 s.
                 logger.debug("uiautomator dump morto com SIGKILL (137) em %r; abortando fallback.", device_id)
+                self.dump_killed[device_id] = True
                 return None
 
             # Fallback seguro para chamadas individuais caso o shell composto nao responda

@@ -11,9 +11,12 @@ A sessao UiAutomator2 do Appium e o equivalente Android do WebDriverAgent.
 from __future__ import annotations
 
 import io
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+from mobaile.adapters.adb import ADBBridge
 from mobaile.adapters.appium import AppiumBridge
 from mobaile.domain.models import Platform
 from mobaile.rpc.server import EngineServer
@@ -54,7 +57,11 @@ class TestReservaPeloWebDriver(unittest.TestCase):
         """Após a primeira falha de uiautomator dump, o motor deve memorizar
         que este aparelho precisa de Appium e ir direto a ele nas próximas
         vezes, sem tentar adb.get_ui_hierarchy novamente."""
-        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=None) as mock_adb, \
+        def dump_morto(serial):
+            self.server.adb.dump_killed[serial] = True
+            return None
+
+        with patch.object(self.server.adb, "get_ui_hierarchy", side_effect=dump_morto) as mock_adb, \
              patch.object(self.server.appium, "ensure_android_session", return_value=(True, "ok")), \
              patch.object(self.server.appium, "get_page_source", return_value=XML) as mock_page_source:
             # Primeira chamada: descobre que precisa de Appium
@@ -70,6 +77,18 @@ class TestReservaPeloWebDriver(unittest.TestCase):
             self.assertEqual(self.server._android_hierarchy("ZY22L3CH3X"), XML)
             self.assertEqual(mock_adb.call_count, 1, "adb.get_ui_hierarchy não deveria ter sido chamado de novo")
             self.assertEqual(mock_page_source.call_count, 2)
+
+    def test_dump_vazio_sem_sigkill_nao_troca_o_backend_do_aparelho(self):
+        """Tela sem ocio ou corrida com outra leitura tambem devolvem vazio. Isso
+        abre o Appium para esta leitura, mas a proxima volta a tentar o dump: so
+        o 137 prova que o aparelho nao tem `uiautomator dump`."""
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=None) as mock_adb, \
+             patch.object(self.server.appium, "ensure_android_session", return_value=(True, "ok")), \
+             patch.object(self.server.appium, "get_page_source", return_value=XML):
+            self.assertEqual(self.server._android_hierarchy("ZY22L3CH3X"), XML)
+            self.assertNotEqual(self.server._android_backend.get("ZY22L3CH3X"), "appium")
+            self.server._android_hierarchy("ZY22L3CH3X")
+        self.assertEqual(mock_adb.call_count, 2)
 
     def test_as_duas_falhando_devolvem_none(self):
         with patch.object(self.server.adb, "get_ui_hierarchy", return_value=None), \
@@ -92,6 +111,101 @@ class TestReservaPeloWebDriver(unittest.TestCase):
     def test_erro_do_ios_aponta_para_o_wda(self):
         self.server.platform = Platform.IOS
         self.assertIn("WebDriverAgent", self.server._motivo_de_hierarquia_indisponivel())
+
+
+class TestLeitorDoFlow(unittest.TestCase):
+    """AUT-1: a thread do flow le a arvore sem abrir sessao nem trocar o backend."""
+
+    SERIAL = "emulator-5554"
+
+    def setUp(self):
+        self.server = EngineServer(out=io.StringIO())
+        self.server.platform = Platform.ANDROID
+        self.server.device_id = self.SERIAL
+
+    def tearDown(self):
+        self.server.shutdown()
+
+    def abrir_sessao(self):
+        self.server.appium.session_id = "s1"
+        self.server.appium.session_platform = "android"
+        self.server.appium.session_udid = self.SERIAL
+
+    def test_sessao_ja_aberta_le_pelo_appium_sem_dump(self):
+        self.abrir_sessao()
+        ler, backend = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.appium, "get_page_source", return_value=XML), \
+             patch.object(self.server.adb, "get_ui_hierarchy") as dump:
+            self.assertEqual(ler(), XML)
+        dump.assert_not_called()
+        self.assertEqual(backend(), "appium")
+
+    def test_sem_sessao_le_pelo_dump_e_a_arvore_vira_a_atual(self):
+        ler, backend = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=XML):
+            self.assertEqual(ler(), XML)
+        self.assertEqual(backend(), "adb")
+        self.assertEqual(self.server.current_xml, XML, "o inspetor do espelho acha a leitura pronta")
+
+    def test_nunca_abre_sessao_nem_troca_o_backend_dentro_do_flow(self):
+        ler, backend = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=None), \
+             patch.object(self.server.appium, "ensure_android_session") as sessao:
+            self.assertIsNone(ler())
+        sessao.assert_not_called()
+        self.assertIsNone(backend())
+        self.assertNotIn(self.SERIAL, self.server._android_backend)
+
+    def test_aparelho_que_depende_do_appium_abre_a_sessao_antes_do_flow(self):
+        self.server._android_backend[self.SERIAL] = "appium"
+        with patch.object(self.server.appium, "ensure_android_session", return_value=(True, "ok")) as sessao:
+            self.server._preparar_leitura_do_flow(self.SERIAL)
+        sessao.assert_called_once_with(self.SERIAL)
+        with patch.object(self.server.appium, "ensure_android_session", return_value=(False, "sem appium")), \
+             self.assertRaisesRegex(Exception, "so devolve a hierarquia pelo Appium"):
+            self.server._preparar_leitura_do_flow(self.SERIAL)
+
+    def test_aparelho_com_dump_nao_abre_sessao_antes_do_flow(self):
+        with patch.object(self.server.appium, "ensure_android_session") as sessao:
+            self.server._preparar_leitura_do_flow(self.SERIAL)
+        sessao.assert_not_called()
+
+
+class TestDumpDoAdb(unittest.TestCase):
+    def test_sigkill_e_registrado_e_outra_falha_nao(self):
+        ponte = ADBBridge(adb_path="adb")
+        ponte._run_cmd = lambda *a, **k: (137, b"", b"")
+        self.assertIsNone(ponte.get_ui_hierarchy("ZY22L3CH3X"))
+        self.assertTrue(ponte.dump_killed["ZY22L3CH3X"])
+        ponte._run_cmd = lambda *a, **k: (1, b"", b"")
+        self.assertIsNone(ponte.get_ui_hierarchy("ZY22L3CH3X"))
+        self.assertFalse(ponte.dump_killed["ZY22L3CH3X"])
+
+    def test_dois_dumps_do_mesmo_aparelho_nao_se_cruzam(self):
+        """O arquivo remoto e um so por processo: o `rm -f` de um dump apagava o
+        do outro. Com a trava, o segundo so comeca depois do primeiro."""
+        ponte = ADBBridge(adb_path="adb")
+        dentro, maximo = [0], [0]
+        trava = threading.Lock()
+
+        def run_cmd(args, **_k):
+            if "uiautomator" in " ".join(args):
+                with trava:
+                    dentro[0] += 1
+                    maximo[0] = max(maximo[0], dentro[0])
+                time.sleep(0.05)
+                with trava:
+                    dentro[0] -= 1
+                return 0, XML.encode(), b""
+            return 0, b"", b""
+
+        ponte._run_cmd = run_cmd
+        threads = [threading.Thread(target=ponte.get_ui_hierarchy, args=("emulator-5554",)) for _ in range(3)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        self.assertEqual(maximo[0], 1)
 
 
 class TestSessaoAndroidDoAppium(unittest.TestCase):

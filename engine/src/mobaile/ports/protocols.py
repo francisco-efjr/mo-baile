@@ -63,6 +63,11 @@ class FlowDevice(Protocol):
     Diferente de `InputSink`, o serial fica dentro do objeto: o flow roda num
     aparelho so, e as teclas vem com o nome do Maestro (`Enter`, `Back`), que
     cada plataforma traduz.
+
+    Opcional, fora do protocolo para nao mudar o `isinstance`: o atributo
+    `reads_wait_for_idle`, verdadeiro quando a ultima leitura de `hierarchy()`
+    ja esperou a tela ficar ociosa. O runner entao aceita uma leitura so como
+    tela assentada.
     """
 
     platform: str

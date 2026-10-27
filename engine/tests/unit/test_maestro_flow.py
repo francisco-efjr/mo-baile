@@ -366,6 +366,99 @@ def passo(n, locator, acao="click", coords=(10, 20), plataforma="android", nome=
                           platform=plataforma)
 
 
+class AparelhoQueContaLeituras(AparelhoFalso):
+    """Conta as leituras da arvore. Com `espera_ocio`, faz como o `uiautomator dump`."""
+
+    def __init__(self, *args, espera_ocio=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.leituras = 0
+        if espera_ocio:
+            self.reads_wait_for_idle = True
+
+    def hierarchy(self):
+        self.leituras += 1
+        return super().hierarchy()
+
+
+class LeituraRapidaTest(unittest.TestCase):
+    """AUT-1: menos leituras de ~2 s por comando, sem ler a tela velha."""
+
+    FLOW = "- tapOn: Entrar\n- assertVisible: Bem-vindo.*\n- back\n- assertVisible: Bem-vindo.*\n"
+
+    def aparelho(self, espera_ocio, atraso=0):
+        return AparelhoQueContaLeituras(
+            {"login": LOGIN, "home": HOME}, "login", {("login", 100, 400, 980, 560): ("home", atraso)},
+            espera_ocio=espera_ocio,
+        )
+
+    def test_leitor_que_espera_ocio_faz_menos_leituras_e_o_flow_passa(self):
+        rapido, comum = self.aparelho(espera_ocio=True), self.aparelho(espera_ocio=False)
+        for aparelho in (rapido, comum):
+            resultado = runner(aparelho)[0].run(parse_flow(self.FLOW))
+            self.assertTrue(resultado.success, resultado.message)
+        # tapOn: busca + 1 leitura de espera; assertVisible: a arvore assentada;
+        # back: a tela nao muda (guarda), entao 2 leituras iguais; assertVisible: cache.
+        self.assertEqual(rapido.leituras, 4)
+        self.assertGreater(comum.leituras, rapido.leituras)
+
+    def test_sem_a_capacidade_continua_exigindo_duas_leituras_iguais(self):
+        aparelho = self.aparelho(espera_ocio=False, atraso=1)
+        resultado = runner(aparelho)[0].run(parse_flow("- tapOn: Entrar\n"))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertEqual(aparelho.leituras, 4, "busca, tela antiga, tela nova, tela nova de novo")
+
+    def test_leitura_unica_igual_a_tela_de_antes_nao_conta_como_assentada(self):
+        # O toque fora do botao nao muda a tela: pode ser a tela antiga ainda
+        # esperando rede, entao a espera volta a pedir duas leituras iguais.
+        aparelho = self.aparelho(espera_ocio=True)
+        resultado = runner(aparelho)[0].run(parse_flow("- tapOn: Esqueci a senha\n"))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertEqual(aparelho.leituras, 3)
+
+    def test_acao_sem_espera_descarta_a_arvore_guardada(self):
+        # stopApp nao assenta a tela: o assert seguinte nao pode usar a arvore de antes.
+        leituras = {}
+        for nome, meio in (("sem", ""), ("com", "- stopApp\n")):
+            aparelho = self.aparelho(espera_ocio=True)
+            flow = parse_flow(f"appId: br.app\n---\n- back\n{meio}- assertVisible: Entrar\n")
+            self.assertTrue(runner(aparelho)[0].run(flow).success)
+            leituras[nome] = aparelho.leituras
+        self.assertEqual(leituras, {"sem": 1, "com": 2}, "o assert depois do stopApp relê a tela")
+
+    def test_assert_not_visible_nunca_usa_a_arvore_guardada(self):
+        # A home leva 2 leituras para trocar a tela. A espera do toque so ve o
+        # login, e a arvore guardada ainda mostra "Entrar": o assert negativo relê.
+        aparelho = self.aparelho(espera_ocio=False, atraso=2)
+        r = runner(aparelho)[0]
+        resultado = r.run(parse_flow("- tapOn: Entrar\n- assertNotVisible: Entrar\n"))
+        self.assertTrue(resultado.success, resultado.message)
+
+    def test_aparelho_sem_arvore_falha_dizendo_isso(self):
+        aparelho = self.aparelho(espera_ocio=True)
+        aparelho.hierarchy = lambda: None
+        r = runner(aparelho)[0]
+        r.lookup_timeout_s = 1
+        resultado = r.run(parse_flow("- tapOn: Entrar\n"))
+        self.assertFalse(resultado.success)
+        self.assertIn("nao devolveu a hierarquia", resultado.message)
+        nega = runner(aparelho)[0].run(parse_flow("- assertNotVisible: Entrar\n"))
+        self.assertFalse(nega.success, "sem arvore nao da para afirmar que algo sumiu")
+
+    def test_adapter_android_diz_quando_a_leitura_esperou_o_ocio(self):
+        class Adb:
+            pass
+
+        backend = {"valor": "adb"}
+        aparelho = AndroidFlowDevice(Adb(), "emulator-5554", hierarchy=lambda: "<hierarchy/>",
+                                     backend=lambda: backend["valor"])
+        self.assertTrue(aparelho.reads_wait_for_idle)
+        backend["valor"] = "appium"
+        self.assertFalse(aparelho.reads_wait_for_idle)
+        self.assertFalse(AndroidFlowDevice(Adb(), "emulator-5554", hierarchy=lambda: None).reads_wait_for_idle,
+                         "leitor injetado sem backend: nao presume nada")
+        self.assertTrue(AndroidFlowDevice(Adb(), "emulator-5554").reads_wait_for_idle, "o dump direto espera")
+
+
 class ExportacaoTest(unittest.TestCase):
     def test_cada_localizador_vira_seletor(self):
         self.assertEqual(selector_from_step(passo(1, '(AppiumBy.ID, "br.app:id/btn")')), {"id": "br\\.app:id/btn"})
