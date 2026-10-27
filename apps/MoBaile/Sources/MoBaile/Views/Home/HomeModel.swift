@@ -46,28 +46,10 @@ enum HomeNextStep: Equatable {
     }
 }
 
-/// Em que área o app abre.
-///
-/// Na primeira vez, sempre no Início. Depois, no Início só quando ele tem o
-/// que dizer: motor parado ou nenhum aparelho. Com aparelho conectado, vai
-/// direto ao trabalho, em Page Objects.
+/// O app sempre abre no Início (`AppState.atLaunch`). A chave marca que a
+/// pessoa já viu o Início da primeira vez.
 enum LaunchDestination {
     static let seenKey = "mobaile.inicioVisto"
-
-    /// `nil`: fica onde está. A pessoa que já trocou de área durante a
-    /// abertura (pela paleta, por atalho) não é levada de volta.
-    static func pick(firstRun: Bool, phase: LaunchPhase, deviceConnected: Bool, current: WorkspaceTab) -> WorkspaceTab? {
-        guard current == .pageObjects else { return nil }
-        switch phase {
-        case .startingEngine, .scanning:
-            return nil
-        case .failed:
-            return .home
-        case .ready:
-            if firstRun || !deviceConnected { return .home }
-            return nil
-        }
-    }
 }
 
 /// Textos da tela Início e da tela Ambiente.

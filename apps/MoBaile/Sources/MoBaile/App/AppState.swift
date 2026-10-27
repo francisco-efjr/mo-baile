@@ -222,14 +222,22 @@ class AppState {
     // MARK: - Actions
     
     /// Modo Zen: esconde barra lateral e inspector e deixa espelho e
-    /// workspace, que é onde o trabalho acontece.
+    /// workspace, que é onde o trabalho acontece. Ao sair, o inspector volta
+    /// como estava antes: sair do Zen não abre a hierarquia sozinho.
     func toggleZenMode() {
         zenMode.toggle()
         sidebarVisibility = zenMode ? .detailOnly : .all
-        inspectorVisible = !zenMode
+        if zenMode {
+            inspectorAntesDoZen = inspectorVisible
+            inspectorVisible = false
+        } else {
+            inspectorVisible = inspectorAntesDoZen
+        }
         mirrorVisible = true
         workspaceVisible = true
     }
+
+    @ObservationIgnored private var inspectorAntesDoZen = false
 
     func restoreAllPanels() {
         sidebarVisibility = .all
@@ -264,7 +272,9 @@ class AppState {
     /// Barra lateral: áreas do workspace e passos do fluxo.
     var sidebarVisibility: NavigationSplitViewVisibility = .all
     /// Inspector com a hierarquia e os atributos. É a escolha da pessoa; o que
-    /// aparece na janela é `inspectorShown`.
+    /// aparece na janela é `inspectorShown`. O app abre com ele fechado
+    /// (`atLaunch`), e só a pessoa o abre: botão da toolbar, ⌥⌘I, ⌘F na
+    /// hierarquia ou Mostrar Todos os Painéis.
     var inspectorVisible: Bool = true
     /// Sem aparelho, numa área que precisa de um, o inspector só repetiria o
     /// "Conecte um aparelho" do estado vazio. Ele sai da janela e volta ao
@@ -278,6 +288,25 @@ class AppState {
     func toggleInspector() {
         guard !inspectorSuppressed else { return }
         inspectorVisible.toggle()
+    }
+
+    /// O espelho (o telefone) só existe com aparelho, nas áreas que precisam
+    /// dele. Esconder deixa o workspace com a coluna inteira; ⌥1.
+    var canToggleMirror: Bool { isDeviceConnected && workspaceTab.needsDevice }
+
+    func toggleMirror() {
+        guard canToggleMirror else { return }
+        withAnimation(Motion.smooth()) { mirrorVisible.toggle() }
+    }
+
+    /// Estado da janela ao abrir o app: sempre no Início e com a hierarquia
+    /// fechada. O padrão do modelo (Page Objects, inspector aberto) continua
+    /// o das prévias e dos testes.
+    static func atLaunch() -> AppState {
+        let estado = AppState()
+        estado.workspaceTab = .home
+        estado.inspectorVisible = false
+        return estado
     }
 
     /// A busca da hierarquia mora no inspector: sem ele na janela não há

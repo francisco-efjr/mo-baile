@@ -80,3 +80,12 @@ compara cada variável de `palettes.css` com o token Swift. Uma paleta é clara
 ou escura e impõe a aparência; a Praia segue a Aparência. A seleção nativa de
 lista e tabela continua na cor de destaque do app/sistema (`AccentColor` é
 fixo no `Assets.car`).
+
+## Adendo (3.13.0): Liquid Glass de verdade
+
+O vidro deixou de ser só o do sistema mais o Rodar. A paleta de comandos, a
+cápsula do Ambiente na Início e o trilho do splash ganharam vidro próprio, por
+papel, com recuo no macOS 14 e 15 e superfície opaca com Reduzir transparência.
+A decisão, os limites (vidro sobre vidro, conteúdo) e as paletas estão no
+[ADR 0006](0006-liquid-glass-real.md).
+

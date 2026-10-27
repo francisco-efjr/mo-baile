@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// Ordem do design system: título e subtítulo da seção · aparelho (pop-up
 /// agrupado por iOS e Android) · [Gravar do aparelho, Gravar a tela, 60 FPS
-/// no Android] · Rodar (a única cápsula tingida) · Buscar · Inspector.
+/// no Android] · Rodar (a única cápsula tingida) · Buscar · Espelho · Inspector.
 ///
 /// O seletor Repassar toque | Gravar passo saiu na 3.10.0: um clique no
 /// espelho sempre faz as duas coisas (toca no aparelho e grava o passo), e
@@ -19,7 +19,14 @@ struct MainToolbar: ToolbarContent {
     let subtitle: String
 
     var body: some ToolbarContent {
-        if #available(macOS 15.0, *) {
+        // No macOS 26 cada item ganha uma cápsula de vidro; o título é texto da
+        // janela, não controle, e fica sem ela.
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) {
+                SectionTitleView(title: title, subtitle: subtitle)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else if #available(macOS 15.0, *) {
             ToolbarItem(placement: .navigation) {
                 SectionTitleView(title: title, subtitle: subtitle)
             }
@@ -35,14 +42,27 @@ struct MainToolbar: ToolbarContent {
             ScreenRecordingButton()
             ScrcpyButton()
         }
-        ToolbarItem(placement: .primaryAction) {
-            RunAutomationButton()
+        // O Rodar desenha a própria cápsula de vidro tingido; no macOS 26 fica
+        // fora da cápsula compartilhada, senão seria vidro sobre vidro.
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .primaryAction) {
+                RunAutomationButton()
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                RunAutomationButton()
+            }
         }
         ToolbarItem(placement: .primaryAction) {
             HierarchySearchButton()
         }
-        // O inspector é um painel da área, não mais o `.inspector` do SwiftUI,
-        // e o botão dele vem para o fim da barra principal.
+        // Os painéis que se escondem ficam no fim da barra principal: o
+        // espelho (o telefone) e o inspector, que não é mais o `.inspector` do
+        // SwiftUI e sim um painel da área.
+        ToolbarItem(placement: .primaryAction) {
+            MirrorToggleButton()
+        }
         ToolbarItem(placement: .primaryAction) {
             InspectorToggleButton()
         }
@@ -232,7 +252,7 @@ struct ScrcpyButton: View {
 
 // MARK: - Rodar
 
-/// A única cápsula tingida da toolbar.
+/// A única cápsula tingida da toolbar (`mbProminentGlassButton`).
 struct RunAutomationButton: View {
     @Environment(AppState.self) private var appState
     @Environment(EngineSession.self) private var session
@@ -244,7 +264,7 @@ struct RunAutomationButton: View {
         } label: {
             Label("Rodar Automação", systemImage: "play.fill")
         }
-        .prominentGlassButton(Self.podeRodar(appState) && estadoDaJanela != .inactive)
+        .mbProminentGlassButton(Self.podeRodar(appState) && estadoDaJanela != .inactive)
         .disabled(!Self.podeRodar(appState))
         .help(dica)
     }
@@ -292,6 +312,26 @@ struct HierarchySearchButton: View {
     }
 }
 
+/// Esconde e mostra o espelho do aparelho. O ícone diz o estado: o telefone
+/// riscado é o espelho oculto.
+struct MirrorToggleButton: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Button {
+            appState.toggleMirror()
+        } label: {
+            Label(appState.mirrorVisible ? "Ocultar Espelho" : "Mostrar Espelho",
+                  systemImage: appState.mirrorVisible ? "iphone" : "iphone.slash")
+        }
+        .disabled(!appState.canToggleMirror)
+        .help(appState.canToggleMirror
+              ? (appState.mirrorVisible ? "Ocultar o espelho do aparelho (⌥1)" : "Mostrar o espelho do aparelho (⌥1)")
+              : "O espelho aparece com um aparelho conectado, em Page Objects, Rede e Analytics")
+        .accessibilityValue(appState.mirrorVisible ? "visível" : "oculto")
+    }
+}
+
 struct InspectorToggleButton: View {
     @Environment(AppState.self) private var appState
 
@@ -306,21 +346,5 @@ struct InspectorToggleButton: View {
               ? "O inspector volta ao conectar um aparelho"
               : (appState.inspectorShown ? "Ocultar Inspector (⌥⌘I)" : "Mostrar Inspector (⌥⌘I)"))
         .accessibilityValue(appState.inspectorShown ? "visível" : "oculto")
-    }
-}
-
-extension View {
-    /// Botão primário tingido: vidro tingido no macOS 26, preenchido antes.
-    /// Desabilitado ou com a janela inativa, volta ao estilo padrão: a cápsula
-    /// perde o tom, o ícone continua branco e o botão some no tema claro (D2).
-    @ViewBuilder
-    func prominentGlassButton(_ ativo: Bool = true) -> some View {
-        if !ativo {
-            self
-        } else if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent)
-        } else {
-            self.buttonStyle(.borderedProminent)
-        }
     }
 }

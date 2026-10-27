@@ -129,6 +129,33 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(state.inspectorVisible)
     }
 
+    /// Sair do Zen devolve o inspector como estava: fechado continua fechado.
+    @MainActor
+    func testSairDoZenNaoAbreAHierarquia() {
+        let state = AppState.atLaunch()
+        state.toggleZenMode()
+        state.toggleZenMode()
+        XCTAssertFalse(state.inspectorVisible)
+    }
+
+    /// O telefone (espelho) se esconde só onde ele existe: com aparelho, nas
+    /// áreas que precisam dele.
+    @MainActor
+    func testEsconderOEspelho() {
+        let state = AppState()
+        state.workspaceTab = .pageObjects
+        state.toggleMirror()
+        XCTAssertTrue(state.mirrorVisible, "sem aparelho não há espelho para esconder")
+        state.selectedDevice = "7303D258"
+        state.toggleMirror()
+        XCTAssertFalse(state.mirrorVisible)
+        state.workspaceTab = .home
+        XCTAssertFalse(state.canToggleMirror)
+        state.workspaceTab = .network
+        state.toggleMirror()
+        XCTAssertTrue(state.mirrorVisible)
+    }
+
     /// D3: sem aparelho o inspector sai da janela e volta ao conectar, sem
     /// perder a escolha da pessoa. No Relatório ele fica, porque mostra o Figma.
     func testInspectorSaiSemAparelhoEVoltaAoConectar() {

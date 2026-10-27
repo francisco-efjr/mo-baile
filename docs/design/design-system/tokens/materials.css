@@ -1,5 +1,16 @@
 /* Liquid Glass (Regular) — só para a camada de navegação e controles flutuantes.
-   Nunca vidro sobre vidro; sobre vidro, separar com --fill-*. */
+   Nunca vidro sobre vidro; sobre vidro, separar com --fill-*.
+
+   No app (3.13, ADR 0006) o vidro é o do macOS 26 (`glassEffect`), e esta
+   folha é a aproximação para a web. Cada uso no app tem um papel
+   (`GlassRole` em Views/DesignSystem/Glass.swift):
+     flutuante → .mb-glass--flutuante  painel solto (paleta de comandos)
+     capsula   → .mb-glass--capsula    controle sobre conteúdo liso; tom --fill-primary
+     midia     → .mb-glass--midia      vidro transparente sobre imagem (splash)
+     Rodar     → .mb-tb-item--tinted   o único vidro tingido com o destaque
+   Toolbar, barra lateral, popovers, sheets e menus recebem o vidro do sistema:
+   o app não pinta por cima deles. No macOS 14 e 15 o papel cai no material
+   (flutuante) ou no preenchimento do tema (capsula, midia). */
 :root{
   --glass-bg: rgba(255,255,255,.62);
   --glass-bg-strong: rgba(255,255,255,.80);
@@ -12,6 +23,12 @@
   --glass-shadow-scrolled: 0 2px 6px rgba(20,21,67,.14), 0 8px 22px rgba(20,21,67,.14); /* @kind shadow */
   --glass-shadow-large: 0 2px 8px rgba(20,21,67,.12), 0 14px 36px rgba(20,21,67,.16); /* @kind shadow */
   --glass-tint: rgba(194,69,110,.88);
+  /* Vidro transparente (Glass.clear), só sobre mídia; véu branco para o
+     trilho continuar visível sobre o céu do splash. */
+  --glass-clear-bg: rgba(255,255,255,.30);
+  --glass-clear-filter: blur(6px) saturate(1.8); /* @kind other */
+  /* Tom da cápsula: vidro sobre fundo liso não tem o que refratar. */
+  --glass-capsule-tint: var(--fill-primary);
   --menu-bg: rgba(246,246,250,.80);
   --menubar-bg: rgba(240,248,252,.55);
 }
@@ -31,6 +48,8 @@
   --glass-bg: #F7F7FA;
   --glass-bg-strong: #F7F7FA;
   --glass-filter: none; /* @kind other */
+  --glass-clear-bg: #FFFFFF;
+  --glass-clear-filter: none; /* @kind other */
   --menu-bg: #F4F4F7;
   --menubar-bg: #ECECF1;
   --bg-sidebar: var(--bg-sidebar-solid);

@@ -167,8 +167,13 @@ final class WindowSnapshotTests: XCTestCase {
 
     /// `partindoDe`: abre a janela nesse tamanho e só depois encolhe, como quem
     /// arrasta a borda; sem ele a janela já nasce no tamanho pedido.
+    ///
+    /// Devolve se o app estava ativo na captura. Inativo, o macOS tira o tom de
+    /// tudo (vidro tingido do Rodar, botões em destaque), e o macOS só ativa o
+    /// processo de teste se o app da frente ceder o foco.
+    @discardableResult
     private func fotografar<V: View>(_ view: V, tamanho: CGSize, nome: String, escuro: Bool = false, tema: ThemeManager? = nil,
-                                     partindoDe inicial: CGSize? = nil) throws {
+                                     partindoDe inicial: CGSize? = nil) throws -> Bool {
         let pasta = try destino()
         tema?.setMode(escuro ? .dark : .light)
         let controller = NSHostingController(rootView: view.preferredColorScheme(escuro ? .dark : .light))
@@ -195,22 +200,23 @@ final class WindowSnapshotTests: XCTestCase {
         janela.setContentSize(inicial == nil ? tamanho : CGSize(width: max(tamanho.width, janela.contentMinSize.width),
                                                                 height: max(tamanho.height, janela.contentMinSize.height)))
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        let ativo = NSApp.isActive
+        if !ativo { print("AVISO \(nome): app inativo na captura, sem o tom do destaque") }
         if ProcessInfo.processInfo.environment["MOBAILE_MEDIR"] != nil {
             print("MEDIDA \(nome): pedido=\(tamanho) janela=\(janela.frame.size) minimo=\(janela.contentMinSize) "
                   + "fitting=\(controller.view.fittingSize) tela=\(janela.screen?.frame.size ?? .zero) escala=\(janela.backingScaleFactor)")
         }
 
-        var imagem: CGImage?
-        imagem = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(janela.windowNumber), [.boundsIgnoreFraming, .bestResolution])
-        if imagem == nil, let quadro = janela.contentView?.superview {
-            let rep = quadro.bitmapImageRepForCachingDisplay(in: quadro.bounds)!
-            quadro.cacheDisplay(in: quadro.bounds, to: rep)
-            imagem = rep.cgImage
-        }
+        // Só o servidor de janelas compõe o Liquid Glass. O `cacheDisplay`, que
+        // era o plano B, desenha a janela sem o vidro e sem avisar: a foto
+        // sairia errada. Sem a captura do servidor, o teste falha.
+        let imagem = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(janela.windowNumber),
+                                             [.boundsIgnoreFraming, .bestResolution])
         janela.orderOut(nil)
-        let cg = try XCTUnwrap(imagem, "sem imagem da janela")
+        let cg = try XCTUnwrap(imagem, "sem captura do servidor de janelas (tela bloqueada ou sem permissão de Gravação de Tela)")
         let png = try XCTUnwrap(NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]))
         try png.write(to: pasta.appendingPathComponent("\(nome).png"))
+        return ativo
     }
 
     private func janela(_ estado: AppState, _ sessao: EngineSession, _ tema: ThemeManager) -> some View {
@@ -423,6 +429,9 @@ extension WindowSnapshotTests {
         var tamanho = CGSize(width: 1280, height: 800)
         /// `false`: a cena impõe a aparência (paleta alternativa) e sai uma vez só.
         var doisTemas = true
+        /// Aparência da janela na cena única: a da paleta, senão a toolbar sai
+        /// clara sobre uma paleta escura.
+        var escura = false
         let montar: (_ escuro: Bool) throws -> (AnyView, ThemeManager)
     }
 
@@ -474,7 +483,7 @@ extension WindowSnapshotTests {
         }
         return [
             Cena(id: "01-splash", titulo: "Splash de abertura",
-                 conferir: "Mascote, título, barra de progresso no destaque, texto de boot",
+                 conferir: "Mascote, título, trilho de vidro transparente com a barra no destaque, texto de boot",
                  tamanho: CGSize(width: 640, height: 380),
                  montar: { _ in
                      (AnyView(SplashView(progress: SplashProgress(message: "Procurando aparelhos e simuladores…",
@@ -679,6 +688,7 @@ extension WindowSnapshotTests {
             Cena(id: "11-paleta-terracota", titulo: "Janela com a paleta Terracota (escura)",
                  conferir: "Paleta impõe a aparência; barra lateral na cor da paleta",
                  doisTemas: false,
+                 escura: true,
                  montar: { _ in
                      let (e, s, t) = self.ambiente(area: .network)
                      t.setPalette("wearstler")
@@ -693,24 +703,115 @@ extension WindowSnapshotTests {
                      t.setPalette("salvia")
                      return (AnyView(self.janela(e, s, t)), t)
                  }),
+            Cena(id: "11c-paleta-costes", titulo: "Janela com a paleta Costes (escura), Rodar disponível",
+                 conferir: "Rodar em vidro tingido de dourado com rótulo escuro (onAccent), legível (com o app ativo)",
+                 doisTemas: false,
+                 escura: true,
+                 montar: { _ in
+                     let (e, s, t) = self.ambiente()
+                     t.setPalette("garcia")
+                     return (AnyView(self.janela(e, s, t).preferredColorScheme(.dark)), t)
+                 }),
+            Cena(id: "11d-vidro-nas-paletas", titulo: "Vidro nas 12 aparências (macOS 26)",
+                 conferir: "Rodar tingido com o destaque e rótulo legível (com o app ativo; inativo, neutro), cápsula visível, painel de vidro, em toda paleta",
+                 tamanho: CGSize(width: 800, height: 520), doisTemas: false,
+                 montar: { _ in (AnyView(AmostraDeVidro.todas()), ThemeManager(preview: PraiaLightTheme())) }),
+            Cena(id: "11e-vidro-recuo-macos14", titulo: "Recuo do vidro no macOS 14 e 15 (MOBAILE_SEM_VIDRO)",
+                 conferir: "Mesmas amostras com o caminho antigo: botão preenchido, cápsula de preenchimento, material com borda e sombra",
+                 tamanho: CGSize(width: 800, height: 520), doisTemas: false,
+                 montar: { _ in
+                     setenv("MOBAILE_SEM_VIDRO", "1", 1)
+                     return (AnyView(AmostraDeVidro.todas(forcarTom: true)), ThemeManager(preview: PraiaLightTheme()))
+                 }),
+            Cena(id: "12-paleta-de-comandos", titulo: "Paleta de comandos (Liquid Glass)",
+                 conferir: "Painel de vidro do sistema sobre a janela, sem borda nem sombra próprias; lista legível",
+                 montar: { _ in
+                     let (e, s, t) = self.ambiente()
+                     e.commandPalettePresented = true
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "13-reduzir-transparencia", titulo: "Início e paleta com Reduzir transparência",
+                 conferir: "Cápsula do Ambiente e paleta em superfície opaca do tema, com borda; nada translúcido do app",
+                 tamanho: CGSize(width: 1280, height: 1000),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: true, area: .home)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     e.commandPalettePresented = true
+                     return (AnyView(self.janela(e, s, t).environment(\._accessibilityReduceTransparency, true)), t)
+                 }),
         ]
     }
 
     func testCatalogoDeTelas() throws {
         let pasta = try destino()
         var manifesto: [[String: Any]] = []
-        for cena in cenas {
+        var inativas: [String] = []
+        // MOBAILE_CENA=11c refaz só as cenas com esse prefixo, sem tocar no
+        // catalogo.json.
+        let filtro = ProcessInfo.processInfo.environment["MOBAILE_CENA"]
+        for cena in cenas where filtro.map({ cena.id.hasPrefix($0) }) ?? true {
             var entrada: [String: Any] = ["id": cena.id, "titulo": cena.titulo, "conferir": cena.conferir]
-            for escuro in cena.doisTemas ? [false, true] : [false] {
+            for escuro in cena.doisTemas ? [false, true] : [cena.escura] {
                 let (view, tema) = try cena.montar(escuro)
                 let nome = cena.doisTemas ? "\(cena.id)-\(escuro ? "escuro" : "claro")" : cena.id
-                try fotografar(view, tamanho: cena.tamanho, nome: nome, escuro: escuro,
-                               tema: cena.doisTemas ? tema : nil)
+                defer { unsetenv("MOBAILE_SEM_VIDRO") }
+                let ativo = try fotografar(view, tamanho: cena.tamanho, nome: nome, escuro: escuro,
+                                           tema: cena.doisTemas ? tema : nil)
+                if !ativo { inativas.append("\(nome).png") }
                 entrada[cena.doisTemas ? (escuro ? "escuro" : "claro") : "unica"] = "\(nome).png"
             }
             manifesto.append(entrada)
         }
-        let dados = try JSONSerialization.data(withJSONObject: ["telas": manifesto], options: [.prettyPrinted, .sortedKeys])
+        guard filtro == nil else { return }
+        let dados = try JSONSerialization.data(withJSONObject: ["telas": manifesto, "capturadasComAppInativo": inativas], options: [.prettyPrinted, .sortedKeys])
         try dados.write(to: pasta.appendingPathComponent("catalogo.json"))
+    }
+}
+
+/// Amostra do vidro num tema: Rodar (vidro tingido com o destaque), a cápsula
+/// do Ambiente e um painel flutuante, sobre o fundo da janela do tema. Usa os
+/// modificadores de verdade (`Glass.swift`), fora da toolbar, para ver as doze
+/// aparências numa imagem. O tom só aparece com o app ativo na captura.
+private struct AmostraDeVidro: View {
+    let nome: String
+    let tema: any ThemeTokens
+    var forcarTom = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(nome).font(DSFont.subheadlineSemibold).foregroundStyle(tema.labelSecondary)
+            // Como o Rodar de verdade: com o app inativo o tom sai (D2), e no
+            // vidro do macOS 26 o próprio sistema tira o tom de app inativo. O
+            // recuo é desenhado pelo app e pode mostrar o tom para conferir o
+            // rótulo `onAccent`.
+            Button {} label: { Label("Rodar Automação", systemImage: "play.fill") }
+                .mbProminentGlassButton(forcarTom || NSApp.isActive)
+            HStack(spacing: 6) {
+                Circle().fill(tema.warningFill).frame(width: 7, height: 7)
+                Text("Ambiente: 3 de 4").font(DSFont.mono(11)).foregroundStyle(tema.labelPrimary)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .mbGlass(.capsula, in: Capsule(), interactive: true)
+            Text("Painel flutuante").font(DSFont.callout).foregroundStyle(tema.labelPrimary)
+                .padding(10)
+                .mbGlass(.flutuante, in: RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous))
+        }
+        .padding(14)
+        .frame(width: 200, height: 170, alignment: .topLeading)
+        .background(tema.bgWindow)
+        .environment(ThemeManager(preview: tema))
+        .environment(\.colorScheme, tema.isDark ? .dark : .light)
+    }
+
+    static func todas(forcarTom: Bool = false) -> some View {
+        let temas: [(String, any ThemeTokens)] = [("Praia clara", PraiaLightTheme()), ("Praia escura", PraiaDarkTheme()),
+                                                  ("Praia escura · contraste", PraiaDarkTheme(highContrast: true))]
+            + PaletteSpec.all.map { ($0.name, PaletteTheme(spec: $0, highContrast: false) as any ThemeTokens) }
+        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(200), spacing: 0), count: 4), spacing: 0) {
+            ForEach(Array(temas.enumerated()), id: \.offset) { _, par in AmostraDeVidro(nome: par.0, tema: par.1, forcarTom: forcarTom) }
+        }
+        .fixedSize()
     }
 }

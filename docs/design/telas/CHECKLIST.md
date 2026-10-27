@@ -10,6 +10,13 @@ que foi para [`arquivo-2.x/`](arquivo-2.x/) (as telas de lá não existem mais).
   as duas versões lado a lado.
 - **Revisão rápida:** [`folha-de-contato.png`](folha-de-contato.png), todas as
   telas claras numa imagem só.
+- **3.13 · Liquid Glass de verdade** ([ADR 0006](../../adr/0006-liquid-glass-real.md)):
+  cenas 11c a 13 e o trilho de vidro do splash. Capturado com o app de testes
+  **inativo** (o macOS só ativa o processo se o app da frente ceder o foco):
+  nessas imagens o sistema tira o tom do vidro, e o Rodar aparece neutro, como
+  no app com a janela inativa. A lista sai em `capturadasComAppInativo` no
+  `catalogo.json`. O tom e o rótulo `onAccent` estão provados no recuo (11e)
+  e no `GlassTests`. `MOBAILE_CENA=11` refaz só as cenas que começam com 11.
 - Cenário de dados: iOS, iPhone 16 (393×852 pt), Page Object
   `cadastro_demo_objs`, seis passos gravados, seis requisições, três
   eventos; Relatório com as fixtures do motor (7 validações).
@@ -26,6 +33,11 @@ MOBAILE_SNAPSHOT_DIR="$(cd ../.. && pwd)/docs/design/telas" \
 cd ../.. && python3 tools/catalogo_telas.py docs/design/telas
 ```
 
+Numa tela Retina as PNGs saem em 2x. No repositório ficam em 1x, para não
+dobrar o peso: gere numa pasta temporária e reduza para a metade da largura
+(`sips --resampleWidth <largura/2> origem.png --out docs/design/telas/origem.png`)
+antes de rodar o `catalogo_telas.py`.
+
 As cenas estão em `WindowSnapshotTests.swift` (`cenas`). Tela nova no app,
 cena nova lá. As janelas são de verdade (`NSWindow` com toolbar, barra lateral e
 inspector), por isso dá para revisar o Liquid Glass, a toolbar e o menu ».
@@ -37,7 +49,7 @@ observação e na lista no fim).
 
 | # | Tela / estado | Claro | Escuro | O que conferir | Status | Observação |
 |---|---|---|---|---|---|---|
-| 01 | Splash de abertura | [claro](01-splash-claro.png) | [escuro](01-splash-escuro.png) | Mascote, título, barra de progresso no destaque, texto de boot | ✅ | Corrigido na 3.3: fica até o app estar pronto, com a fase escrita ("Procurando aparelhos e simuladores…"), mínimo de 2,5 s e teto de 12 s. Não segue o tema, de propósito. |
+| 01 | Splash de abertura | [claro](01-splash-claro.png) | [escuro](01-splash-escuro.png) | Mascote, título, trilho de vidro transparente com a barra no destaque, texto de boot | ✅ | Corrigido na 3.3: fica até o app estar pronto, com a fase escrita ("Procurando aparelhos e simuladores…"), mínimo de 2,5 s e teto de 12 s. Não segue o tema, de propósito. |
 | 02 | Sem dispositivo, procurando | [claro](02-sem-dispositivo-procurando-claro.png) | [escuro](02-sem-dispositivo-procurando-escuro.png) | Estado vazio enquanto o motor não respondeu | ⚠️ | O inspector mostra "Conecte um aparelho para ver a hierarquia" ao lado do estado vazio que diz a mesma coisa: ocupa 260 pt sem função. |
 | 02b | Sem dispositivo, diagnóstico medido | [claro](02b-sem-dispositivo-diagnostico-claro.png) | [escuro](02b-sem-dispositivo-diagnostico-escuro.png) | Cartões iOS e Android, ações, último scan | ✅ | Ícone, cor e texto em cada checagem. Mesmo ponto do inspector vazio. |
 | 03 | Page Objects sem passos | [claro](03-page-objects-inicial-claro.png) | [escuro](03-page-objects-inicial-escuro.png) | Espelho, editores vazios, inspector, toolbar | ⚠️ | O botão Rodar desabilitado fica quase invisível no claro (play branco sobre cápsula clara). O menu » aparece mesmo com a janela larga. |
@@ -66,6 +78,11 @@ observação e na lista no fim).
 | 10c | Ajustes › Paletas | [claro](10c-ajustes-paletas-claro.png) | [escuro](10c-ajustes-paletas-escuro.png) | Galeria, prévias, contrastes | ✅ | |
 | 11 | Paleta Terracota (escura) | [paleta](11-paleta-terracota.png) | — | Paleta impõe a aparência | ✅ | |
 | 11b | Paleta Sálvia & Palha (clara) | [paleta](11b-paleta-salvia.png) | — | Mesma estrutura, outra identidade | ✅ | |
+| 11c | Paleta Costes (escura) | [paleta](11c-paleta-costes.png) | — | Rodar em vidro tingido de dourado, rótulo escuro | ✅ | Com o app inativo o Rodar sai neutro (D2). |
+| 11d | Vidro nas 12 aparências (macOS 26) | [amostra](11d-vidro-nas-paletas.png) | — | Rodar, cápsula e painel em toda paleta | ✅ | Cápsula com tom do tema: vidro sobre fundo liso sumia no escuro. |
+| 11e | Recuo do macOS 14 e 15 | [amostra](11e-vidro-recuo-macos14.png) | — | Botão preenchido com `onAccent`, cápsula de preenchimento, material com borda e sombra | ✅ | `MOBAILE_SEM_VIDRO=1`. Aproxima o recuo: a captura num 14/15 de verdade fica pendente. |
+| 12 | Paleta de comandos | [claro](12-paleta-de-comandos-claro.png) | [escuro](12-paleta-de-comandos-escuro.png) | Painel de vidro do sistema, sem borda nem sombra próprias | ✅ | |
+| 13 | Reduzir transparência | [claro](13-reduzir-transparencia-claro.png) | [escuro](13-reduzir-transparencia-escuro.png) | Cápsula e paleta opacas, com borda | ✅ | Só o vidro do app: o do sistema segue a preferência real do Mac. |
 
 ## Achados
 
