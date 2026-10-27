@@ -87,6 +87,11 @@ METHODS: dict[str, dict[str, Any]] = {
     "devices.watch_stop": _spec(),
     # Ambiente e inicializacao
     "diagnostics.check": _spec(LANE_QUERY, 30, progress=True),
+    # O que esta instalado (tela Inicio). So procura arquivo: e rapido.
+    "setup.check": _spec(LANE_QUERY, 10),
+    # Le o mesmo diagnostico do setup.check e lista simuladores e emuladores.
+    "home.summary": _spec(LANE_QUERY, 20),
+    "home.forget_recent": _spec(),
     "simulators.list": _spec(LANE_QUERY),
     "simulators.boot": _spec(LANE_ENVIRONMENT, 180, progress=True),
     "simulators.shutdown": _spec(LANE_ENVIRONMENT),
@@ -142,6 +147,11 @@ METHODS: dict[str, dict[str, Any]] = {
     "flow.run": _spec(LANE_SERVICES, 30),
     "flow.stop": _spec(LANE_SERVICES, 60),
     "flow.status": _spec(LANE_SERVICES),
+    # Flow declarativo no formato do Maestro. Validar e exportar nao tocam
+    # aparelho; rodar divide a trava e as notificacoes com `flow.run`.
+    "flow.maestro_check": _spec(),
+    "flow.maestro_export": _spec(),
+    "flow.maestro_run": _spec(LANE_SERVICES, 30),
     # Escuta passiva. `start` e `stop` na mesma fila, para o `stop` nunca passar
     # na frente de um `start` ainda em andamento. `status` so le uma referencia
     # e fica na rapida: nao ha ordem a preservar, e esperar um dump de 60 s para
@@ -156,6 +166,9 @@ METHODS: dict[str, dict[str, Any]] = {
     "report.audit": _spec(LANE_REPORT, 60, progress=True),
     "report.export": _spec(LANE_REPORT, 120, progress=True),
     "report.import": _spec(LANE_REPORT, 600, progress=True),
+    # Edição de um card: lê ou grava um arquivo pequeno, sem progresso.
+    "report.card": _spec(LANE_REPORT),
+    "report.card_update": _spec(LANE_REPORT),
 }
 
 # Tudo que o motor empurra sem `id`. O teste de deriva confere esta lista contra
@@ -167,10 +180,12 @@ NOTIFICATIONS: tuple[str, ...] = (
     "proxy.event",
     "analytics.event",
     "device.changed",
+    "home.changed",
     "passive.step",
     "passive.skipped",
     "passive.text",
     "flow.log",
+    "flow.step",
     "flow.finished",
     PROGRESS,
 )
@@ -181,12 +196,17 @@ def lane_of(method: str) -> str:
     return METHODS.get(method, {}).get("lane", LANE_FAST)
 
 
-def hello_payload(engine_version: str) -> dict[str, Any]:
-    """Resultado de `engine.hello`. Copia a tabela para ninguem altera-la por fora."""
+def hello_payload(engine_version: str, log_path: str | None = None) -> dict[str, Any]:
+    """Resultado de `engine.hello`. Copia a tabela para ninguem altera-la por fora.
+
+    `log_path` e o arquivo de log deste motor, ou `None` quando ele subiu so
+    com stderr. Campo aditivo: o protocolo continua na mesma versao.
+    """
     return {
         "protocol_version": PROTOCOL_VERSION,
         "engine_version": engine_version,
         "capabilities": list(CAPABILITIES),
         "methods": {name: dict(spec) for name, spec in METHODS.items()},
         "notifications": list(NOTIFICATIONS),
+        "log_path": log_path,
     }

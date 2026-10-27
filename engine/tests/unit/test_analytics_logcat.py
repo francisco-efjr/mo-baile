@@ -274,6 +274,62 @@ class TestAnalyticsListener(unittest.TestCase):
             self.assertTrue(any("log.tag.FirebaseAnalytics VERBOSE" in cmd for cmd in executed_cmds))
 
 
+class TestEscutaQueNaoMorre(unittest.TestCase):
+    """MEL-6: uma linha estranha nao mata a thread de leitura (a escuta ficava muda com a flag ligada)."""
+
+    MENSAGEM = TestAnalyticsListener.IOS_DEBUG_RECORD.split(" ", 5)[5]
+
+    def setUp(self):
+        self.listener = FirebaseAnalyticsListener()
+        self.recebidos = []
+        self.listener.add_event_callback(self.recebidos.append)
+
+    def _linha_valida(self) -> str:
+        import json
+
+        return json.dumps({"time": "2026-10-01 10:22:01.482", "process": "MeuApp", "pid": 321, "message": self.MENSAGEM})
+
+    def _ler(self, source: str, saida: str) -> None:
+        import io
+        from unittest.mock import MagicMock
+
+        self.listener.active_platform = "ios"
+        self.listener.active_source = source
+        self.listener._is_running = True
+        self.listener._proc = MagicMock()
+        self.listener._proc.stdout = io.StringIO(saida)
+        self.listener._stream_reader()
+
+    def test_json_que_nao_e_objeto_nao_mata_a_leitura_do_iphone(self):
+        # "1" e JSON valido, mas nao e objeto: `"status" in 1` levantava TypeError.
+        self._ler("ios_device", "1\n" + '["lista"]\n' + self._linha_valida() + "\n")
+        self.assertEqual([e.event_name for e in self.recebidos], ["interaction_pedido_pessoal"])
+
+    def test_excecao_numa_linha_nao_derruba_as_seguintes(self):
+        from unittest.mock import patch
+
+        original = self.listener._parse_ios_record
+        chamadas = []
+
+        def parser(record):
+            chamadas.append(record)
+            if len(chamadas) == 1:
+                raise ValueError("registro que o parser nao esperava")
+            return original(record)
+
+        with patch.object(self.listener, "_parse_ios_record", side_effect=parser):
+            self._ler("ios_device", self._linha_valida() + "\n" + self._linha_valida() + "\n")
+        self.assertEqual(len(chamadas), 2)
+        self.assertEqual(len(self.recebidos), 1)
+
+    def test_popen_troca_byte_fora_de_utf8_em_vez_de_levantar(self):
+        from unittest.mock import patch
+
+        with patch("subprocess.Popen") as popen, patch("threading.Thread"):
+            self.assertTrue(self.listener.start(platform="ios", device_id="ABCD-1234"))
+        self.assertEqual(popen.call_args[1].get("errors"), "replace")
+
+
 class TestFilaDeEventosLimitada(unittest.TestCase):
     """COD-1: sem consumidor (caso do app nativo), a fila nao cresce sem fim."""
 

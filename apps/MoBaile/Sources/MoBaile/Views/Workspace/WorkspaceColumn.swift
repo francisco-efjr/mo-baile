@@ -15,6 +15,8 @@ struct WorkspacePane: View {
     var body: some View {
         ZStack {
             switch appState.workspaceTab {
+            case .home:
+                HomeView().transition(.opacity)
             case .pageObjects:
                 PageObjectsView().transition(.opacity)
             case .network:
@@ -23,6 +25,8 @@ struct WorkspacePane: View {
                 AnalyticsInspectorView().transition(.opacity)
             case .report:
                 ReportView().transition(.opacity)
+            case .environment:
+                EnvironmentView().transition(.opacity)
             }
         }
         .animation(Motion.crossfade, value: appState.workspaceTab)

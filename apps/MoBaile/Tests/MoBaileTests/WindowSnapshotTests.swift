@@ -165,7 +165,10 @@ final class WindowSnapshotTests: XCTestCase {
 
     // MARK: - Captura
 
-    private func fotografar<V: View>(_ view: V, tamanho: CGSize, nome: String, escuro: Bool = false, tema: ThemeManager? = nil) throws {
+    /// `partindoDe`: abre a janela nesse tamanho e só depois encolhe, como quem
+    /// arrasta a borda; sem ele a janela já nasce no tamanho pedido.
+    private func fotografar<V: View>(_ view: V, tamanho: CGSize, nome: String, escuro: Bool = false, tema: ThemeManager? = nil,
+                                     partindoDe inicial: CGSize? = nil) throws {
         let pasta = try destino()
         tema?.setMode(escuro ? .dark : .light)
         let controller = NSHostingController(rootView: view.preferredColorScheme(escuro ? .dark : .light))
@@ -174,21 +177,23 @@ final class WindowSnapshotTests: XCTestCase {
         // não mostra a largura pedida.
         controller.sizingOptions = [.minSize]
         let janela = NSWindow(
-            contentRect: NSRect(origin: NSPoint(x: 40, y: 40), size: tamanho),
+            contentRect: NSRect(origin: NSPoint(x: 40, y: 40), size: inicial ?? tamanho),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false
         )
         janela.appearance = NSAppearance(named: escuro ? .darkAqua : .aqua)
         janela.toolbarStyle = .unified
         janela.contentViewController = controller
-        janela.setContentSize(tamanho)
+        janela.setContentSize(inicial ?? tamanho)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         janela.makeKeyAndOrderFront(nil)
         RunLoop.main.run(until: Date().addingTimeInterval(1.0))
         // O SwiftUI ajusta a janela ao tamanho mínimo do conteúdo depois do
         // primeiro layout; reaplicar o tamanho deixa as capturas comparáveis.
-        janela.setContentSize(tamanho)
+        // Abaixo do mínimo, a janela para no mínimo, como no arraste da borda.
+        janela.setContentSize(inicial == nil ? tamanho : CGSize(width: max(tamanho.width, janela.contentMinSize.width),
+                                                                height: max(tamanho.height, janela.contentMinSize.height)))
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
         if ProcessInfo.processInfo.environment["MOBAILE_MEDIR"] != nil {
             print("MEDIDA \(nome): pedido=\(tamanho) janela=\(janela.frame.size) minimo=\(janela.contentMinSize) "
@@ -365,6 +370,37 @@ final class WindowSnapshotTests: XCTestCase {
         t.setPalette("salvia")
         try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "11-janela-salvia")
     }
+
+    // MARK: - Telas pequenas
+
+    /// Todas as áreas no tamanho mínimo e num notebook de 13" (1280×720 úteis),
+    /// com o inspector aberto. Com MOBAILE_MEDIR, imprime o mínimo da janela.
+    func testTelasPequenas() throws {
+        let tamanhos = [CGSize(width: 980, height: 600), CGSize(width: 1280, height: 720)]
+        let areas: [(String, () throws -> (AppState, EngineSession, ThemeManager))] = [
+            ("page-objects", { self.ambiente() }),
+            ("rede", { self.ambiente(area: .network) }),
+            ("analytics", { self.ambiente(area: .analytics) }),
+            ("sem-dispositivo", { self.ambiente(conectado: false) }),
+            ("relatorio-vazio", { self.ambiente(conectado: false, area: .report) }),
+            ("relatorio-spec", { try self.ambienteDoRelatorio(comRelatorio: false) }),
+            ("relatorio", { try self.ambienteDoRelatorio() }),
+            ("relatorio-fora-da-spec", {
+                let (e, s, t) = try self.ambienteDoRelatorio()
+                e.reportFilter = .outOfSpec
+                e.selectedReportExtraID = e.report?.extras.first?.id
+                return (e, s, t)
+            }),
+        ]
+        for tamanho in tamanhos {
+            for (nome, montar) in areas {
+                let (e, s, t) = try montar()
+                try fotografar(janela(e, s, t), tamanho: tamanho,
+                               nome: "pequena-\(Int(tamanho.width))x\(Int(tamanho.height))-\(nome)", tema: t,
+                               partindoDe: CGSize(width: 1440, height: 900))
+            }
+        }
+    }
 }
 
 // MARK: - Catálogo de telas (docs/design/telas)
@@ -451,6 +487,61 @@ extension WindowSnapshotTests {
                  conferir: "Cartões iOS e Android com checagens reais, um só próximo passo em destaque, rodapé da última verificação",
                  montar: { _ in
                      let (e, _, t) = self.ambiente(conectado: false)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02c-inicio-falta-instalar", titulo: "Início no dia a dia, sem aparelho",
+                 conferir: "Saudação, cápsula do ambiente com a pendência, alvos com Iniciar e o aviso Só espelho com Resolver, "
+                    + "atalho do Relatório, áreas com ⌘1–⌘4, recentes e novidades; Ambiente com contagem no rodapé da barra lateral",
+                 tamanho: CGSize(width: 1280, height: 1100),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .home)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02d-inicio-sem-python", titulo: "Início, Mac sem Python que sirva",
+                 conferir: "O motor não sobe: o Início ainda diz o que falta e oferece instalar e reiniciar",
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .home)
+                     let mensagem = EngineLocator.unsuitableMessage(found: ["/usr/bin/python3 (Python 3.9.6, antigo demais)"])
+                     let s = EngineSession(state: e, restartPolicy: .init(delays: [0], maxAttempts: 0)) {
+                         throw EngineError.pythonUnsuitable(mensagem)
+                     }
+                     self.esperar { await s.connect() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02e-inicio-aparelho-conectado", titulo: "Início no dia a dia, aparelho conectado",
+                 conferir: "Miniatura do último quadro, chip da plataforma, ações em cápsula, status vivos à direita",
+                 tamanho: CGSize(width: 1280, height: 1000),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: true, area: .home)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02f-inicio-primeira-vez", titulo: "Início, primeira vez nesta máquina",
+                 conferir: "Três passos: motor pronto, Android e iOS com o que foi achado e o sugerido em destaque, conectar desabilitado",
+                 tamanho: CGSize(width: 1280, height: 1000),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .home)
+                     var respostas = try self.resultadosDasFixtures()
+                     var resumo = try XCTUnwrap(
+                         JSONSerialization.jsonObject(with: try XCTUnwrap(respostas["home.summary"])) as? [String: Any]
+                     )
+                     resumo["state"] = "first_run"
+                     respostas["home.summary"] = try JSONSerialization.data(withJSONObject: resumo)
+                     let s = EngineSession(state: e, client: FakeEngine(respostas: respostas))
+                     self.esperar { await s.refreshEnvironment() }
+                     return (AnyView(self.janela(e, s, t)), t)
+                 }),
+            Cena(id: "02g-ambiente", titulo: "Ambiente",
+                 conferir: "Resumo por grupo, pendência com comando e Instalar no Terminal, tabela Área × iOS × Android, "
+                    + "componentes por grupo com o pendente antes",
+                 tamanho: CGSize(width: 1280, height: 1400),
+                 montar: { _ in
+                     let (e, _, t) = self.ambiente(conectado: false, area: .environment)
                      let s = EngineSession(state: e, client: FakeEngine(respostas: try self.resultadosDasFixtures()))
                      self.esperar { await s.refreshEnvironment() }
                      return (AnyView(self.janela(e, s, t)), t)

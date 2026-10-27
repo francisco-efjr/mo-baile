@@ -21,9 +21,12 @@ Concorrencia:
 from __future__ import annotations
 
 import base64
+import faulthandler
 import io
 import json
 import logging
+import logging.handlers
+import os
 import pathlib
 import queue
 import re
@@ -46,7 +49,8 @@ from mobaile.adapters.adb import ADBBridge
 from mobaile.adapters.analytics_logcat import FirebaseAnalyticsListener
 from mobaile.adapters.android_okhttp_log import AndroidDebugNetworkCapture
 from mobaile.adapters.appium import AppiumBridge
-from mobaile.adapters.ios_cfnetwork import RAW_LOG_PATH, IOSDebugNetworkCapture
+from mobaile.adapters.flow_devices import AndroidFlowDevice, IOSFlowDevice
+from mobaile.adapters.ios_cfnetwork import IOSDebugNetworkCapture, raw_log_path
 from mobaile.adapters.ios_wda import IOSBridge
 from mobaile.adapters.mjpeg import MJPEGReader
 from mobaile.adapters.proxy import MobileNetworkProxy
@@ -67,15 +71,21 @@ from mobaile.domain.models import LocatorStrategy, Platform, UIElement
 from mobaile.rpc import contract, protocol
 from mobaile.security import (
     build_adb_input_text_args,
+    logs_dir,
+    redact_urls_in_text,
     validate_coordinate,
     validate_device_id,
+    validate_integer,
+    validate_number,
 )
-from mobaile.services import flows
+from mobaile.services import flows, maestro_flow
 from mobaile.services.codegen import CodeGenerator
 from mobaile.services.devices import DeviceWatcher
 from mobaile.services.diagnostics import DiagnosticsService
 from mobaile.services.hierarchy import UIHierarchyParser
+from mobaile.services.home import HomeService
 from mobaile.services.report import ReportService
+from mobaile.services.setup import SetupService
 from mobaile.services.streaming import RealTimeStreamEngine
 
 logger = logging.getLogger(__name__)
@@ -188,8 +198,11 @@ def _dentro_de(caminho: pathlib.Path, raiz: pathlib.Path) -> bool:
 class EngineServer:
     """Estado da sessao e tabela de metodos."""
 
-    def __init__(self, out=None) -> None:
+    def __init__(self, out=None, log_path: str | None = None) -> None:
         self._out = out or sys.stdout
+        # Arquivo de log deste motor, ou `None` se ele subiu só com stderr.
+        # Vai no `engine.hello` e no `engine.info` para o front citar na queda.
+        self.log_path = log_path
         self._write_lock = threading.Lock()
         self._running = True
         self._shutdown_done = False
@@ -224,6 +237,9 @@ class EngineServer:
         self.codegen = CodeGenerator()
         self.appium = AppiumBridge()
         self.diagnostics = DiagnosticsService(adb=self.adb, ios=self.ios, appium=self.appium)
+        self.setup = SetupService(adb=self.adb, appium=self.appium, scrcpy=self.scrcpy)
+        # Lê `self.setup` a cada chamada: o gerador de fixtures troca o serviço.
+        self.home = HomeService(setup=lambda: self.setup, ios=self.ios, adb=self.adb)
         self.report = ReportService(ocr=VisionOCR())
 
         # Estado de sessao. Escrito pelas filas, pelo vigia de dispositivos e
@@ -233,6 +249,8 @@ class EngineServer:
         self._session_epoch = 0
         self.platform: Platform = Platform.ANDROID
         self.device_id: str | None = None
+        # Ultima auditoria (titulo, subtitulo, spec): o export atualiza o recente dela.
+        self._ultimo_relatorio: tuple[str, str, str] | None = None
         self.current_xml: str | None = None
         # (serial, porta) do aparelho Android em que `proxy.start` ligou o
         # proxy global e o `adb reverse`. O desmonte usa este registro, e nao o
@@ -279,6 +297,9 @@ class EngineServer:
             "devices.watch_start": self.devices_watch_start,
             "devices.watch_stop": self.devices_watch_stop,
             "diagnostics.check": self.diagnostics_check,
+            "setup.check": self.setup_check,
+            "home.summary": self.home_summary,
+            "home.forget_recent": self.home_forget_recent,
             "simulators.list": self.simulators_list,
             "simulators.boot": self.simulators_boot,
             "simulators.shutdown": self.simulators_shutdown,
@@ -320,6 +341,9 @@ class EngineServer:
             "flow.run": self.flow_run,
             "flow.stop": self.flow_stop,
             "flow.status": self.flow_status,
+            "flow.maestro_check": self.flow_maestro_check,
+            "flow.maestro_export": self.flow_maestro_export,
+            "flow.maestro_run": self.flow_maestro_run,
             "passive.start": self.passive_start,
             "passive.stop": self.passive_stop,
             "passive.status": self.passive_status,
@@ -327,6 +351,8 @@ class EngineServer:
             "report.audit": self.report_audit,
             "report.export": self.report_export,
             "report.import": self.report_import,
+            "report.card": self.report_card,
+            "report.card_update": self.report_card_update,
         }
 
     # -------------------------------------------------------------- transporte
@@ -477,7 +503,7 @@ class EngineServer:
                 f"Protocolo incompativel: o front fala a versao {cliente} e o motor, a versao "
                 f"{contract.PROTOCOL_VERSION}. Atualize o Mo baile para que os dois andem juntos."
             )
-        return contract.hello_payload(__version__)
+        return contract.hello_payload(__version__, log_path=self.log_path)
 
     def engine_info(self, _params: dict[str, Any]) -> dict[str, Any]:
         sessao = self._sessao()
@@ -494,6 +520,7 @@ class EngineServer:
             "page_objects_key": settings.page_objects_key,
             "proxy": {"host": settings.proxy_host, "port": settings.proxy_port, "running": self.proxy.is_running()},
             "methods": sorted(self.methods),
+            "log_path": self.log_path,
         }
 
     def engine_shutdown(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -551,14 +578,9 @@ class EngineServer:
         gravacao do passo), entao nao ha relogio do aparelho a corrigir. A
         janela termina no passo seguinte, se ele vier antes do prazo.
         """
-        try:
-            step_num = int(params.get("step_num"))
-        except (TypeError, ValueError) as exc:
-            raise InvalidInputError("step_num precisa ser um numero inteiro.") from exc
-        before = float(params.get("before_s", self._CORRELATE_BEFORE_S))
-        after = float(params.get("after_s", self._CORRELATE_AFTER_S))
-        if not (0 <= before <= 60 and 0 <= after <= 60):
-            raise InvalidInputError("before_s e after_s precisam ficar entre 0 e 60 segundos.")
+        step_num = validate_integer(params.get("step_num"), "step_num", minimum=0, maximum=1_000_000)
+        before = validate_number(params.get("before_s", self._CORRELATE_BEFORE_S), "before_s", minimum=0, maximum=60)
+        after = validate_number(params.get("after_s", self._CORRELATE_AFTER_S), "after_s", minimum=0, maximum=60)
 
         passos = self.codegen.get_steps()
         passo = next((p for p in passos if p.step_num == step_num), None)
@@ -602,7 +624,9 @@ class EngineServer:
         interface nao faz polling, e o aparelho aparece sozinho ao ser plugado.
         """
         self.devices_watch_stop({})
-        interval = float(params.get("poll_interval") or settings.poll_interval)
+        interval = validate_number(
+            params.get("poll_interval") or settings.poll_interval, "poll_interval", minimum=0.01, maximum=3600,
+        )
 
         def on_changed(platform: str, device_id: str) -> None:
             # Selecao implicita: se o alvo detectado e o unico, ele vira o alvo
@@ -623,6 +647,7 @@ class EngineServer:
                     self.current_xml = None
                     self._session_epoch += 1
             self.notify("device.changed", {"platform": platform, "device_id": device_id or None})
+            self.notify("home.changed", {"reason": "device"})
 
         self._watcher = DeviceWatcher(
             adb_bridge=self.adb,
@@ -659,6 +684,38 @@ class EngineServer:
         self._progress("Verificando o ambiente Android", 50)
         android = self.diagnostics.android_diagnostics().to_dict()
         return {"ios": ios, "android": android}
+
+    def setup_check(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """O que esta instalado e o que cada area precisa (tela Inicio).
+
+        A plataforma da sessao vai primeiro no proximo passo: quem esta no
+        Android ve o que falta para o Android antes do que falta para o iOS.
+        """
+        with self._state_lock:
+            plataforma = self.platform.value
+        return self.setup.run(platform_in_use=plataforma)
+
+    def home_summary(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Tela Inicio: primeira vez ou dia a dia, alvos, recentes e novidades."""
+        with self._state_lock:
+            plataforma = self.platform.value
+            device_id = self.device_id
+        return self.home.summary(platform_in_use=plataforma, device_id=device_id)
+
+    def home_forget_recent(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Tira um item do "Continuar de onde parou" (o arquivo sumiu)."""
+        caminho = params.get("path")
+        if not isinstance(caminho, str) or not caminho.strip():
+            raise InvalidInputError("Passe `path`, o caminho do item.")
+        removido = self.home.recents.forget(caminho)
+        if removido:
+            self.notify("home.changed", {"reason": "recent"})
+        return {"removed": removido}
+
+    def _remember(self, kind: str, title: str, subtitle: str, path: str) -> None:
+        """Guarda o item nos recentes da Inicio e avisa a interface."""
+        if self.home.recents.record(kind, title, subtitle, path):
+            self.notify("home.changed", {"reason": "recent"})
 
     def simulators_list(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Todos os simuladores instalados, e nao so os que ja estao ligados."""
@@ -771,7 +828,9 @@ class EngineServer:
         if image is None:
             raise EngineError("Nao foi possivel capturar a tela do dispositivo.")
         max_width = params.get("max_width")
-        payload = self._encode_png(image, int(max_width) if max_width else None)
+        payload = self._encode_png(
+            image, validate_integer(max_width, "max_width", minimum=16, maximum=16384) if max_width else None,
+        )
         # A captura leva segundos; se o alvo mudou no meio, o front precisa
         # saber de qual aparelho a imagem veio para nao mostra-la no lugar errado.
         payload["device_id"] = sessao.device_id
@@ -941,14 +1000,12 @@ class EngineServer:
 
     def stream_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self.stream_stop({})
-        fps = float(params.get("fps") or settings.stream_fps)
-        max_width = int(params.get("max_width") or STREAM_MAX_WIDTH)
+        fps = validate_number(params.get("fps") or settings.stream_fps, "fps", minimum=0.1, maximum=120)
+        max_width = validate_integer(params.get("max_width") or STREAM_MAX_WIDTH, "max_width", minimum=16, maximum=16384)
         fmt = str(params.get("format") or settings.stream_format).lower()
         if fmt not in ("jpeg", "png"):
             raise InvalidInputError(f"Formato de quadro invalido: {fmt!r}")
-        quality = int(params.get("quality") or settings.stream_quality)
-        if not 10 <= quality <= 95:
-            raise InvalidInputError("quality precisa ficar entre 10 e 95.")
+        quality = validate_integer(params.get("quality") or settings.stream_quality, "quality", minimum=10, maximum=95)
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
@@ -1053,8 +1110,8 @@ class EngineServer:
             raise EngineError("Binário do scrcpy não encontrado. Instale com 'brew install scrcpy'.")
 
         device = self._require_device()
-        fps = int(params.get("fps") or 60)
-        max_size = int(params.get("max_size") or 1080)
+        fps = validate_integer(params.get("fps") or 60, "fps", minimum=1, maximum=240)
+        max_size = validate_integer(params.get("max_size") or 1080, "max_size", minimum=16, maximum=16384)
         always_on_top = bool(params.get("always_on_top", True))
         title = str(params.get("title") or f"Mo baile — {device}")
 
@@ -1250,7 +1307,11 @@ class EngineServer:
                 raise DeviceNotReadyError(devices[0]["problem"])
             udid = usable[0]["udid"]
         self.ios_netlog.start(udid)
-        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": str(RAW_LOG_PATH),
+        try:
+            raw_log: str | None = str(raw_log_path())
+        except OSError:
+            raw_log = None  # pasta dos logs recusada: os blocos brutos nao sao gravados
+        return {"running": self.ios_netlog.is_running(), "device_id": udid, "raw_log": raw_log,
                 "source": "cfnetwork"}
 
     def netlog_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -1259,7 +1320,7 @@ class EngineServer:
         return {"running": self.ios_netlog.is_running() or self.android_netlog.is_running()}
 
     def proxy_events(self, params: dict[str, Any]) -> dict[str, Any]:
-        limit = int(params.get("limit") or 200)
+        limit = validate_integer(params.get("limit") or 200, "limit", minimum=1, maximum=1_000_000)
         events = self.proxy.events_history[-limit:]
         return {"events": [event.to_dict() for event in events], "total": len(self.proxy.events_history)}
 
@@ -1420,7 +1481,7 @@ class EngineServer:
         return {"running": self.analytics.is_running()}
 
     def analytics_events(self, params: dict[str, Any]) -> dict[str, Any]:
-        limit = int(params.get("limit") or 200)
+        limit = validate_integer(params.get("limit") or 200, "limit", minimum=1, maximum=1_000_000)
         events = list(self.analytics.events_history)[-limit:]
         return {"events": [event.to_dict() for event in events]}
 
@@ -1541,6 +1602,7 @@ class EngineServer:
             escritos.append(str(arquivo))
 
         logger.info("Page Object gravado em %s", destino)
+        self._remember("page_object", f"{chave}.py", "Page Object · Python/Appium", escritos[0])
         return {"saved": True, "paths": escritos, "directory": str(destino)}
 
     # ------------------------------------------------------- escuta passiva
@@ -1789,14 +1851,7 @@ class EngineServer:
             self.notify("flow.log", {"line": linha})
 
         def ao_terminar(sucesso: bool, mensagem: str) -> None:
-            with self._state_lock:
-                self._flow_running = False
-                self._flow_thread = None
-                cancelado = self._flow_cancelled
-            self.notify(
-                "flow.finished",
-                {"success": sucesso and not cancelado, "message": mensagem},
-            )
+            self._notify_flow_finished(sucesso, mensagem, self._release_flow())
 
         try:
             ok, motivo = flows.verify_preconditions(
@@ -1819,6 +1874,7 @@ class EngineServer:
                 self._flow_thread = flows.run_flow_in_background(
                     script, ao_sair, ao_terminar,
                     sensitive_texts=[p.input_text for p in passos if p.input_text],
+                    on_step=self._notify_flow_step,
                 )
         except Exception:
             with self._state_lock:
@@ -1826,6 +1882,29 @@ class EngineServer:
                 self._flow_thread = None
             raise
         return {"running": True, "steps": len(passos), "script": script}
+
+    def _release_flow(self) -> bool:
+        """Solta a trava de execucao. Devolve se a execucao tinha sido cancelada."""
+        with self._state_lock:
+            self._flow_running = False
+            self._flow_thread = None
+            return self._flow_cancelled
+
+    def _notify_flow_step(self, index: int, total: int) -> None:
+        """Inicio de um passo de nivel superior; `index` comeca em 1."""
+        self.notify("flow.step", {"index": index, "total": total})
+
+    def _notify_flow_finished(self, success: bool, message: str, cancelled: bool) -> None:
+        """Fim da execucao, igual para `flow.run` e `flow.maestro_run`.
+
+        Parar nao e falhar: `cancelled` deixa o front mostrar a parada como
+        parada. `success` continua falso numa execucao cancelada, para o front
+        antigo, que nao le `cancelled`, nao contar como aprovada.
+        """
+        self.notify(
+            "flow.finished",
+            {"success": success and not cancelled, "message": message, "cancelled": cancelled},
+        )
 
     def flow_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Pede a interrupcao. Idempotente.
@@ -1848,6 +1927,99 @@ class EngineServer:
     def flow_status(self, _params: dict[str, Any]) -> dict[str, Any]:
         with self._state_lock:
             return {"running": self._flow_running, "cancelled": self._flow_cancelled}
+
+    # ------------------------------------------ flow declarativo (formato Maestro)
+
+    @staticmethod
+    def _ler_flow_maestro(params: dict[str, Any]) -> maestro_flow.Flow:
+        env = params.get("env") or {}
+        if not isinstance(env, dict):
+            raise InvalidInputError("`env` precisa ser um mapa NOME: valor.")
+        if params.get("yaml"):
+            return maestro_flow.parse_flow(str(params["yaml"]), env=env)
+        if params.get("path"):
+            return maestro_flow.load_flow(str(params["path"]), env=env)
+        raise InvalidInputError("Passe `yaml` (o texto do flow) ou `path` (um arquivo .yaml).")
+
+    def flow_maestro_check(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Valida um flow no formato do Maestro sem tocar o aparelho."""
+        return {"valid": True, **self._ler_flow_maestro(params).summary()}
+
+    def flow_maestro_export(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Os passos gravados como flow do Maestro. Texto digitado vira `${VARIAVEL}`.
+
+        Com `save: true`, grava em `~/Documents/Mo baile/flows/`, a mesma raiz
+        do `codegen.save`, sem sobrescrever arquivo existente.
+        """
+        passos = self.codegen.get_steps()
+        if not passos:
+            raise InvalidInputError("Nenhum passo gravado para exportar.")
+        nome = params.get("name")
+        yaml_texto, variaveis = maestro_flow.export_steps(
+            passos, app_id=params.get("app_id") or None, name=str(nome) if nome else None,
+        )
+        resultado: dict[str, Any] = {"yaml": yaml_texto, "variables": variaveis, "steps": len(passos)}
+        if params.get("save"):
+            raiz = pathlib.Path.home() / "Documents" / "Mo baile"
+            pasta = raiz / "flows"
+            base = re.sub(r"[^A-Za-z0-9_-]+", "_", str(nome or "flow")).strip("_")[:64] or "flow"
+            arquivo = pasta / f"{base}.yaml"
+            contador = 2
+            while arquivo.exists():
+                arquivo = pasta / f"{base}_{contador}.yaml"
+                contador += 1
+            if not _dentro_de(arquivo, raiz):
+                raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
+            pasta.mkdir(parents=True, exist_ok=True)
+            arquivo.write_text(yaml_texto, encoding="utf-8")
+            resultado["path"] = str(arquivo)
+            self._remember("maestro", arquivo.name, f"Flow do Maestro · {len(passos)} passos", str(arquivo))
+        return resultado
+
+    def flow_maestro_run(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Roda um flow do Maestro no alvo ativo, com as esperas do Maestro.
+
+        Divide com `flow.run` a trava de execucao, `flow.stop` e as
+        notificacoes `flow.log`/`flow.finished`: para a interface e o mesmo
+        "fluxo rodando". Validacao vem antes da trava, para erro de YAML nao
+        ocupar o aparelho.
+        """
+        flow = self._ler_flow_maestro(params)
+        sessao = self._require_session()
+        device_id = sessao.device_id or ""
+        if sessao.platform is Platform.IOS:
+            aparelho = IOSFlowDevice(self.ios, device_id)
+        else:
+            aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=lambda: self._android_hierarchy(device_id))
+        with self._state_lock:
+            if self._shutdown_done:
+                raise InvalidInputError("O motor esta encerrando.")
+            if self._flow_running:
+                raise InvalidInputError("Ja existe uma execucao em andamento.")
+            self._flow_running = True
+            self._flow_cancelled = False
+
+        caminho_flow = str(params["path"]) if params.get("path") and not params.get("yaml") else None
+
+        def ao_terminar(sucesso: bool, mensagem: str) -> None:
+            cancelado = self._release_flow()
+            self._notify_flow_finished(sucesso, mensagem, cancelado)
+            if caminho_flow and not cancelado:
+                estado = "passou" if sucesso else "falhou"
+                self._remember("maestro", pathlib.Path(caminho_flow).name,
+                               f"Flow do Maestro · última execução {estado}", caminho_flow)
+
+        execucao = maestro_flow.FlowThread(
+            flow, aparelho, lambda linha: self.notify("flow.log", {"line": linha}), ao_terminar,
+            on_step=self._notify_flow_step,
+        )
+        with self._state_lock:
+            self._flow_thread = execucao
+            if self._flow_cancelled:
+                # `flow.stop` chegou entre a trava e aqui: o flow nem comeca.
+                execucao.cancel()
+        execucao.start()
+        return {"running": True, **flow.summary()}
 
     def codegen_steps(self, _params: dict[str, Any]) -> dict[str, Any]:
         return {"steps": [step.to_dict() for step in self.codegen.get_steps()]}
@@ -1886,16 +2058,30 @@ class EngineServer:
                 raise InvalidInputError(f"O log {log_path.name} não tem eventos do Firebase Analytics.")
         else:
             raise InvalidInputError(f"Origem do log desconhecida: {source!r}. Use session ou file.")
-        return self.report.audit(
+        resultado = self.report.audit(
             params.get("spec_path"), items, source=source, log_path=log_path, platform=platform,
             progress=self._progress,
         )
+        resumo = resultado["summary"]
+        divergencias = resumo["divergent"] + resumo["missing"]
+        conformidade = f"{resumo['compliance_rate']:.1f}".replace(".", ",")
+        self._ultimo_relatorio = (
+            f"Relatório · {resultado['spec']['projeto']}",
+            f"{divergencias} {'divergência' if divergencias == 1 else 'divergências'} · {conformidade}% conforme",
+            resultado["spec"]["path"],
+        )
+        self._remember("report", *self._ultimo_relatorio)
+        return resultado
 
     def report_export(self, params: dict[str, Any]) -> dict[str, Any]:
         """Grava board, HTML, Markdown e TSV do ultimo relatorio."""
-        return self.report.export(
+        resultado = self.report.export(
             params.get("directory"), progress=self._progress, check_cancelled=self._check_cancelled,
         )
+        if self._ultimo_relatorio:
+            titulo, subtitulo, caminho = self._ultimo_relatorio
+            self._remember("report", titulo, f"{subtitulo} · exportado em HTML", caminho)
+        return resultado
 
     def report_import(self, params: dict[str, Any]) -> dict[str, Any]:
         """OCR dos prints dos cards do Figma: grava o rascunho da spec e a revisao."""
@@ -1909,6 +2095,14 @@ class EngineServer:
             params.get("prints_dir"), projeto=projeto, platform=platform, spec_path=params.get("spec_path"),
             progress=self._progress, check_cancelled=self._check_cancelled,
         )
+
+    def report_card(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Um card da spec como está no JSON, para editar no app."""
+        return self.report.card(params.get("spec_path"), params.get("card_index"))
+
+    def report_card_update(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Grava os textos editados de um card na spec e devolve o resumo relido."""
+        return self.report.update_card(params.get("spec_path"), params.get("card_index"), params.get("card"))
 
     # ------------------------------------------------------------------- loop
 
@@ -2165,14 +2359,145 @@ class EngineServer:
             self.shutdown()
 
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+LOG_FILE_NAME = "engine.log"
+# Despejo do faulthandler (queda no C, travamento fatal). Arquivo proprio, e
+# nao o `engine.log`: a rotacao fecha o descritor do log, e o faulthandler
+# escreveria num numero de descritor que o sistema ja pode ter dado a outro
+# arquivo.
+FAULT_FILE_NAME = "engine-faults.log"
+LOG_MAX_BYTES = 1024 * 1024
+LOG_BACKUPS = 3
+
+# O que `configure_logging` instalou, para reconfigurar sem duplicar.
+_log_handlers: list[logging.Handler] = []
+# Mantido aberto pela vida do processo: o faulthandler guarda so o numero do
+# descritor e escreve nele no meio de uma queda, sem Python para reabrir nada.
+_fault_file = None
+
+
+def _open_private(path: pathlib.Path, *, truncate: bool = False):
+    """Abre para acrescentar, so para o dono (0600), sem seguir symlink."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_TRUNC if truncate else os.O_APPEND)
+    fd = os.open(path, flags, 0o600)
+    try:
+        # Arquivo de versao anterior, ou criado sob outro umask, fica so com o dono.
+        os.fchmod(fd, 0o600)
+        return os.fdopen(fd, "w" if truncate else "a", encoding="utf-8")
+    except OSError:
+        os.close(fd)
+        raise
+
+
+class _PrivateRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """`RotatingFileHandler` cujo arquivo, inclusive o recriado na rotacao, e 0600.
+
+    O `open()` padrao obedece ao umask e deixaria o log legivel por todos.
+    """
+
+    def _open(self):
+        return _open_private(pathlib.Path(self.baseFilename))
+
+
+class _RedactingFilter(logging.Filter):
+    """Passa a mensagem, os argumentos e o traceback por `redact_url`.
+
+    Fica nos handlers, e nao num logger: filtro de logger nao ve o que sobe
+    dos loggers filhos. A mensagem ja sai formatada e sem argumentos, para
+    nenhum handler voltar a montar o texto original.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            mensagem = record.getMessage()
+        except Exception:
+            # Argumento que nao casa com o formato: o `handleError` do logging
+            # imprimiria a mensagem e os argumentos crus no stderr. Vai o par
+            # redigido, sem montar.
+            mensagem = f"{record.msg} {record.args!r}"
+        record.msg = redact_urls_in_text(mensagem)
+        record.args = None
+        if record.exc_info and not record.exc_text:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            # O Formatter reaproveita `exc_text` quando ja esta preenchido, e
+            # um handler que formatou antes deste pode te-lo deixado em claro.
+            record.exc_text = redact_urls_in_text(record.exc_text)
+        if record.stack_info:
+            record.stack_info = redact_urls_in_text(record.stack_info)
+        return True
+
+
+def shutdown_logging() -> None:
+    """Desfaz o que `configure_logging` instalou (testes e reconfiguracao)."""
+    global _fault_file
+    raiz = logging.getLogger()
+    for handler in _log_handlers:
+        raiz.removeHandler(handler)
+        handler.close()
+    _log_handlers.clear()
+    if _fault_file is not None:
+        faulthandler.disable()
+        _fault_file.close()
+        _fault_file = None
+
+
+def configure_logging(stream=None) -> str | None:
+    """Log do motor no stderr e em `logs_dir()/engine.log`.
+
+    O stderr continua: quem roda o motor no terminal, e o front, leem por ali.
+    O arquivo e o que sobra quando o app foi aberto pelo Finder, onde o
+    stderr do app nao vai para lugar nenhum. Arquivo 0600 em pasta 0700,
+    1 MB x 3 copias, URLs redigidas nos dois destinos. Texto digitado nao
+    entra em log nenhum: os adapters nao o passam ao `logger`.
+
+    Sem pasta de logs (symlink, arquivo no lugar, sem permissao), o motor
+    sobe so com o stderr e devolve `None`, que vira `log_path: null`.
+    """
+    global _fault_file
+    shutdown_logging()
+    raiz = logging.getLogger()
+    raiz.setLevel(logging.INFO)
+    formato = logging.Formatter(LOG_FORMAT)
+    filtro = _RedactingFilter()
+
+    # Log vai para stderr: stdout e canal exclusivo do protocolo.
+    saida = logging.StreamHandler(stream or sys.stderr)
+    saida.setFormatter(formato)
+    saida.addFilter(filtro)
+    raiz.addHandler(saida)
+    _log_handlers.append(saida)
+
+    try:
+        pasta = logs_dir()
+        caminho = pasta / LOG_FILE_NAME
+        arquivo = _PrivateRotatingFileHandler(
+            caminho, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8"
+        )
+    except OSError as exc:
+        logger.warning("Log do motor so no stderr: %s", exc)
+        return None
+    arquivo.setFormatter(formato)
+    arquivo.addFilter(filtro)
+    raiz.addHandler(arquivo)
+    _log_handlers.append(arquivo)
+
+    despejo = pasta / FAULT_FILE_NAME
+    try:
+        # Despejo nao tem rotacao: so cresce numa queda. Passou do teto do
+        # log, recomeca do zero na subida seguinte.
+        grande = despejo.is_file() and despejo.stat().st_size > LOG_MAX_BYTES
+        _fault_file = _open_private(despejo, truncate=grande)
+        faulthandler.enable(file=_fault_file, all_threads=True)
+    except OSError as exc:
+        logger.warning("Despejo de queda desligado: %s", exc)
+    logger.info("Motor %s, log em %s", __version__, caminho)
+    return str(caminho)
+
+
 def serve() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        # Log vai para stderr: stdout e canal exclusivo do protocolo.
-        stream=sys.stderr,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    server = EngineServer()
+    log_path = configure_logging()
+    server = EngineServer(log_path=log_path)
 
     def ao_receber_sigterm(_signum, _frame) -> None:
         """SIGTERM vira pedido de parada, nunca excecao.

@@ -3,9 +3,12 @@ import SwiftUI
 /// Toolbar unificada da janela (Liquid Glass no macOS 26).
 ///
 /// Ordem do design system: título e subtítulo da seção · aparelho (pop-up
-/// agrupado por iOS e Android) · Repassar toque | Gravar passo · [Gravar do
-/// aparelho, Gravar a tela, 60 FPS no Android] · Rodar (a única cápsula
-/// tingida) · Buscar · Inspector. Com pouco espaço, o próprio macOS manda os
+/// agrupado por iOS e Android) · [Gravar do aparelho, Gravar a tela, 60 FPS
+/// no Android] · Rodar (a única cápsula tingida) · Buscar · Inspector.
+///
+/// O seletor Repassar toque | Gravar passo saiu na 3.10.0: um clique no
+/// espelho sempre faz as duas coisas (toca no aparelho e grava o passo), e
+/// ao lado do título fica só a escolha do aparelho. Com pouco espaço, o próprio macOS manda os
 /// itens de menor prioridade para o menu ».
 ///
 /// A seleção iOS | Android saiu da barra: ela foi absorvida pelo pop-up de
@@ -24,9 +27,6 @@ struct MainToolbar: ToolbarContent {
         ToolbarItem(placement: .navigation) {
             DeviceMenu()
         }
-        ToolbarItem(placement: .navigation) {
-            InteractionModePicker()
-        }
         if #available(macOS 26.0, *) {
             ToolbarSpacer(.flexible, placement: .primaryAction)
         }
@@ -41,12 +41,17 @@ struct MainToolbar: ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             HierarchySearchButton()
         }
+        // O inspector é um painel da área, não mais o `.inspector` do SwiftUI,
+        // e o botão dele vem para o fim da barra principal.
+        ToolbarItem(placement: .primaryAction) {
+            InspectorToggleButton()
+        }
     }
 }
 
 // MARK: - Título
 
-/// Título e subtítulo da seção, à esquerda do aparelho e do modo do clique.
+/// Título e subtítulo da seção, à esquerda do aparelho.
 struct SectionTitleView: View {
     @Environment(ThemeManager.self) private var themeManager
     let title: String
@@ -134,29 +139,6 @@ struct DeviceMenu: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Modo do clique
-
-/// O que um clique no espelho faz: repassar o toque ou gravar um passo.
-struct InteractionModePicker: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        @Bindable var state = appState
-        Picker("Ação do clique no espelho", selection: $state.interactionMode) {
-            ForEach(InteractionMode.allCases) { modo in
-                Label(modo.displayName, systemImage: modo.symbolName)
-                    .tag(modo)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelStyle(.titleAndIcon)
-        .labelsHidden()
-        .fixedSize()
-        .disabled(!appState.isDeviceConnected)
-        .help("Define o que acontece ao clicar no espelho")
     }
 }
 

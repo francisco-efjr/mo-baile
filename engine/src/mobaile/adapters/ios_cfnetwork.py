@@ -15,7 +15,7 @@ Limites, de proposito escritos aqui:
   proprios nao aparecem;
 - o formato do texto nao e documentado pela Apple e muda entre versoes do iOS.
   O parser e tolerante e, para diagnostico, os blocos brutos (com headers
-  sensiveis mascarados) ficam em `RAW_LOG_PATH`;
+  sensiveis mascarados) ficam em `raw_log_path()`, na pasta dos logs do motor;
 - corpo de requisicao e resposta normalmente nao vem no log.
 
 Cada bloco do log tem a forma:
@@ -49,11 +49,13 @@ from pathlib import Path
 from mobaile.adapters import ios_device_log
 from mobaile.domain.errors import AdapterError, InvalidInputError
 from mobaile.domain.models import NetworkEvent
-from mobaile.security import redact_headers, redact_url, validate_device_id
+from mobaile.security import is_sensitive_header, logs_dir, redact_headers, redact_url, validate_device_id
 
 logger = logging.getLogger(__name__)
 
-RAW_LOG_PATH = Path.home() / "Library" / "Logs" / "MoBaile" / "cfnetwork-diagnostics.log"
+# Ate a 3.11 o arquivo ficava em `~/Library/Logs/MoBaile/`; agora fica com os
+# outros logs do motor (`logs_dir()`). O arquivo antigo nao e apagado.
+RAW_LOG_NAME = "cfnetwork-diagnostics.log"
 RAW_LOG_MAX_BYTES = 5 * 1024 * 1024
 # Requisicao sem resposta no log por mais que isso vira evento com erro.
 PENDING_TIMEOUT_S = 60.0
@@ -70,6 +72,8 @@ _URL_FIELD = re.compile(r"\b(?:url|URL)\s*[=:]\s*(https?://[^,}\s]+)")
 _STATUS = re.compile(r"Status Code:\s*(\d{3})")
 _HEADER_LINE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9\-]*):\s?(.*)$")
 _DICT_PAIR = re.compile(r'^\s*"?([^"=]+?)"?\s*=\s*\(?\s*"?(.*?)"?\s*\)?\s*;?\s*$')
+# Chave da forma de dicionario no bloco bruto: `"Set-Cookie" = (` ou `Cookie = "x";`.
+_DICT_KEY = re.compile(r'^\s*"?([A-Za-z0-9][A-Za-z0-9\-]*)"?\s*=\s*(.*)$')
 # Qualquer URL dentro de uma linha do bloco bruto, para passar por `redact_url`.
 _ANY_URL = re.compile(r"https?://[^\s,}>\"]+")
 _ERROR = re.compile(r"Error Domain=(\S+)\s+Code=(-?\d+)(?:.*?\"(.*?)\")?")
@@ -314,19 +318,86 @@ def _headers_from_dict(lines: list[str]) -> dict[str, str]:
     return headers
 
 
+def raw_log_path() -> Path:
+    """Arquivo do log bruto. Levanta `OSError` se a pasta dos logs for recusada."""
+    return logs_dir() / RAW_LOG_NAME
+
+
+def _mask_value(name: str, value: str) -> str:
+    # `force`: o arquivo em disco ignora `MOBAILE_REDACT=0` (D-E); o opt-out
+    # vale para a tela.
+    return redact_headers({name: value.strip('"(); ,')}, force=True)[name]
+
+
+def _mask_list_start(name: str, resto: str) -> tuple[str, bool]:
+    """Inicio `( ...` de uma lista sensivel: texto mascarado e se ela continua.
+
+    A lista so fecha na mesma linha se ela termina em `)` (ou `);`): um `)`
+    no meio e do valor (`( "a=(1)",`) e nao fecha nada.
+    """
+    if not resto.rstrip(" ;").endswith(")"):
+        primeiro = resto[1:].strip()
+        return "(" + (" " + _mask_value(name, primeiro) if primeiro else ""), True
+    return _mask_value(name, resto) + (";" if resto.endswith(";") else ""), False
+
+
 def _mask_block(lines: list[str]) -> str:
     """Bloco bruto com headers sensiveis e credenciais de URL mascarados.
 
     O bloco vai para um arquivo em disco: token na query string ou usuario e
-    senha na URL nao podem ir junto (SEC-3).
+    senha na URL nao podem ir junto (SEC-3). Os headers da resposta vem na
+    forma de dicionario, `"Set-Cookie" = (` com o valor nas linhas seguintes
+    ate `);`, entao a chave sensivel fica pendente ate a lista fechar, como em
+    `_headers_from_dict`. Com `"Set-Cookie" =` sozinho na linha, o `(` vem na
+    seguinte: a chave fica pendente ate ele.
     """
     out = []
+    pendente: str | None = None
+    abrindo = False  # chave sensivel vista, `(` ainda por vir
     for line in lines:
+        corpo = line.strip()
+        margem = line[: len(line) - len(line.lstrip())]
+        if pendente is not None and corpo.startswith((")", "}")):
+            pendente, abrindo = None, False
+        elif abrindo and not corpo:
+            out.append(line)
+            continue
+        elif abrindo:
+            if corpo.startswith("("):
+                texto, continua = _mask_list_start(pendente, corpo)
+            else:
+                # Valor solto, sem lista: mascara e encerra.
+                texto, continua = _mask_value(pendente, corpo) + (";" if corpo.endswith(";") else ""), False
+            out.append(margem + texto)
+            abrindo = False
+            if not continua:
+                pendente = None
+            continue
+        elif pendente is not None:
+            # Valor de lista em linha propria: `"sid=..."`, `"a=1",` ou `"b=2");`.
+            fecha = corpo.endswith((")", ");"))
+            out.append(margem + _mask_value(pendente, corpo) + (");" if fecha else ""))
+            if fecha:
+                pendente = None
+            continue
         m = _HEADER_LINE.match(line)
+        d = _DICT_KEY.match(line)
         if m and m.group(1).lower() not in _NOT_HEADERS:
-            masked = redact_headers({m.group(1): m.group(2)})[m.group(1)]
+            masked = redact_headers({m.group(1): m.group(2)}, force=True)[m.group(1)]
             line = line[: m.start(2)] + masked
-        line = _ANY_URL.sub(lambda u: redact_url(u.group(0)), line)
+        elif d and is_sensitive_header(d.group(1)):
+            resto = d.group(2).strip()
+            if not resto:
+                # `"Set-Cookie" =` sozinho: o `(` vem na linha seguinte.
+                pendente, abrindo = d.group(1), True
+            elif resto.startswith("("):
+                texto, continua = _mask_list_start(d.group(1), resto)
+                line = line[: d.start(2)] + texto
+                if continua:
+                    pendente = d.group(1)
+            else:
+                line = line[: d.start(2)] + _mask_value(d.group(1), resto) + (";" if resto.endswith(";") else "")
+        line = _ANY_URL.sub(lambda u: redact_url(u.group(0), force=True), line)
         out.append(line)
     return "\n".join(out)
 
@@ -420,8 +491,10 @@ class IOSDebugNetworkCapture:
                 continue
             try:
                 events = parser.feed(int(payload.get("pid") or 0), str(payload.get("message", "")))
-            except Exception:
-                logger.exception("Falha ao interpretar bloco do CFNetwork.")
+            except Exception as exc:
+                # So o tipo: a mensagem e o traceback podem citar trecho do
+                # bloco (cabecalhos), e este log vai para o engine.log.
+                logger.error("Falha ao interpretar bloco do CFNetwork (%s).", type(exc).__name__)
                 continue
             for event in events:
                 self._emit(event)
@@ -433,16 +506,17 @@ class IOSDebugNetworkCapture:
     def _save_raw(self, block: str) -> None:
         """Acrescenta o bloco ao log bruto, legivel so pelo dono (0600)."""
         with self._raw_lock:
-            RAW_LOG_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            # mkdir nao muda pasta que ja existia, e o .log.1 de versao anterior
-            # pode ter nascido 0644: os dois ficam so com o dono.
-            os.chmod(RAW_LOG_PATH.parent, 0o700)
-            if RAW_LOG_PATH.exists() and RAW_LOG_PATH.stat().st_size > RAW_LOG_MAX_BYTES:
-                RAW_LOG_PATH.replace(RAW_LOG_PATH.with_suffix(".log.1"))
-            rotacionado = RAW_LOG_PATH.with_suffix(".log.1")
-            if rotacionado.exists():
+            # `logs_dir()` cria a pasta 0700, corrige a que ja existia e recusa
+            # symlink no lugar dela.
+            caminho = raw_log_path()
+            rotacionado = caminho.with_suffix(".log.1")
+            if caminho.is_file() and not caminho.is_symlink() and caminho.stat().st_size > RAW_LOG_MAX_BYTES:
+                caminho.replace(rotacionado)
+            # O .log.1 copiado a mao ou de versao anterior pode ter nascido 0644.
+            if rotacionado.is_file() and not rotacionado.is_symlink():
                 os.chmod(rotacionado, 0o600)
-            fd = os.open(RAW_LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            # O_NOFOLLOW: nao escreve num symlink plantado no lugar do arquivo.
+            fd = os.open(caminho, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
             # Arquivo de versao anterior pode ter nascido 0644.
             os.fchmod(fd, 0o600)
             with os.fdopen(fd, "a", encoding="utf-8") as fh:

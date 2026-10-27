@@ -16,10 +16,45 @@
     },
     {
       "claro" : "02b-sem-dispositivo-diagnostico-claro.png",
-      "conferir" : "Cartões iOS e Android com checagens reais, ações sugeridas, rodapé do último scan",
+      "conferir" : "Cartões iOS e Android com checagens reais, um só próximo passo em destaque, rodapé da última verificação",
       "escuro" : "02b-sem-dispositivo-diagnostico-escuro.png",
       "id" : "02b-sem-dispositivo-diagnostico",
       "titulo" : "Sem dispositivo, diagnóstico medido"
+    },
+    {
+      "claro" : "02c-inicio-falta-instalar-claro.png",
+      "conferir" : "Saudação, cápsula do ambiente com a pendência, alvos com Iniciar e o aviso Só espelho com Resolver, atalho do Relatório, áreas com ⌘1–⌘4, recentes e novidades; Ambiente com contagem no rodapé da barra lateral",
+      "escuro" : "02c-inicio-falta-instalar-escuro.png",
+      "id" : "02c-inicio-falta-instalar",
+      "titulo" : "Início no dia a dia, sem aparelho"
+    },
+    {
+      "claro" : "02d-inicio-sem-python-claro.png",
+      "conferir" : "O motor não sobe: o Início ainda diz o que falta e oferece instalar e reiniciar",
+      "escuro" : "02d-inicio-sem-python-escuro.png",
+      "id" : "02d-inicio-sem-python",
+      "titulo" : "Início, Mac sem Python que sirva"
+    },
+    {
+      "claro" : "02e-inicio-aparelho-conectado-claro.png",
+      "conferir" : "Miniatura do último quadro, chip da plataforma, ações em cápsula, status vivos à direita",
+      "escuro" : "02e-inicio-aparelho-conectado-escuro.png",
+      "id" : "02e-inicio-aparelho-conectado",
+      "titulo" : "Início no dia a dia, aparelho conectado"
+    },
+    {
+      "claro" : "02f-inicio-primeira-vez-claro.png",
+      "conferir" : "Três passos: motor pronto, Android e iOS com o que foi achado e o sugerido em destaque, conectar desabilitado",
+      "escuro" : "02f-inicio-primeira-vez-escuro.png",
+      "id" : "02f-inicio-primeira-vez",
+      "titulo" : "Início, primeira vez nesta máquina"
+    },
+    {
+      "claro" : "02g-ambiente-claro.png",
+      "conferir" : "Resumo por grupo, pendência com comando e Instalar no Terminal, tabela Área × iOS × Android, componentes por grupo com o pendente antes",
+      "escuro" : "02g-ambiente-escuro.png",
+      "id" : "02g-ambiente",
+      "titulo" : "Ambiente"
     },
     {
       "claro" : "03-page-objects-inicial-claro.png",

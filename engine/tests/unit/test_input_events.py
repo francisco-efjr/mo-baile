@@ -1,3 +1,4 @@
+import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -83,6 +84,19 @@ class TestPassiveListener(unittest.TestCase):
             mock_run.return_value = (0, b"Physical size: 1080x2400\n", b"")
             size = bridge.get_screen_size("DEV123")
             self.assertEqual(size, (1080, 2400))
+
+    def test_timeout_na_digitacao_nao_loga_o_texto(self):
+        # MEL-4 (c): str(TimeoutExpired) repete o `cmd`, e o texto digitado
+        # vai nele entre aspas.
+        bridge = ADBBridge()
+        timeout = subprocess.TimeoutExpired(["adb", "-s", "DEV123", "shell", "input text 'SEGREDO'"], 5)
+        with patch.object(bridge, "_run_cmd", side_effect=timeout), \
+                self.assertLogs("mobaile.adapters.adb", level="DEBUG") as logs:
+            self.assertFalse(bridge.type_text("DEV123", "SEGREDO"))
+        saida = "\n".join(logs.output)
+        self.assertNotIn("SEGREDO", saida)
+        self.assertIn("TimeoutExpired", saida)
+        self.assertIn("5", saida)
 
     def test_adb_bridge_get_digitizer_bounds_parsing(self):
         bridge = ADBBridge()

@@ -54,6 +54,48 @@ Inspector: "Card do Figma" — seção, card, evento, fluxo, variação e o prin
 | Operação longa | sobreposição com `ProgressView` + `dsCard` | mostra a mensagem do `$/progress` do motor; sem vidro, porque é conteúdo |
 | Importação | `.sheet` 560×520 | lista de dúvidas por card; "Usar Esta Spec" só habilita se o rascunho valida |
 
+## HTML exportado
+
+Desde a 3.8.0 o `relatorio.html` do Exportar é a própria aba Relatório fora do
+app, num arquivo único que abre em qualquer navegador e sem internet
+(`engine/src/mobaile/services/report/html_report.py`).
+
+- **Identidade**: toolbar de vidro com o ícone do app, barra lateral com as
+  seções da spec (ponto com o pior status de cada uma), conteúdo liso, e o
+  rodapé em letras miúdas "Gerado pelo Mo baile X.Y.Z · data".
+- **Design system inteiro embutido**: `html/design_system.css` é a
+  concatenação de `docs/design/design-system/styles.css` (tokens das quatro
+  aparências, vidro, molas e as classes `.mb-*`), gerada por
+  `tools/sync_report_assets.py`; os glifos vêm do `Icon.jsx`. O teste
+  `test_report_html.py` falha se o design system mudar e a cópia não.
+- **Aparência**: segue o sistema (claro, escuro, Aumentar contraste, Reduzir
+  movimento e Reduzir transparência) e tem o seletor Automático/Claro/Escuro
+  na toolbar, lembrado no navegador.
+- **Período do log** (3.9.0): ao lado da plataforma, em destaque, a data e
+  a hora do primeiro ao último evento do log auditado, com a duração ("Log
+  08/10 10:00:00 até 10:06:00 · 6 min"). O logcat traz dia e mês; o log do
+  iOS, o ano também; sem data, fica só a hora. O Markdown leva a mesma linha.
+- **Resumo**: anel de conformidade com OK, divergentes e não disparadas; os
+  quadros de contagem também filtram.
+- **Filtro e busca**: o mesmo segmentado do app (Todas, Pedem Ação,
+  Divergentes, Não Disparadas, OK, Fora da Spec) e busca em evento,
+  parâmetro, valor e divergência. Atalhos: `/` busca, `1`–`6` filtram, `t`
+  troca cards e tabela, `b` expande os blocos.
+- **Cards**: print do card (clique amplia num popover de vidro) e uma coluna
+  por fluxo; cada validação tem a tabela Parâmetro · Obtido · Esperado do
+  painel Validação, e o "Bloco" (o mesmo texto do board) com Copiar.
+- **Tabela**: as colunas da tabela do app, ordenáveis; a linha leva ao card.
+- **Movimento**: Motion 13.5.1 (MIT, embutido) com as molas do design system
+  (snappy 0,35 s/0,15 e smooth 0,5 s/0). Toda animação termina em até 1,5 s
+  mesmo sem quadros, e com Reduzir movimento tudo vira esmaecer. Sem
+  JavaScript, ou na impressão, o conteúdo aparece inteiro.
+- **Segurança**: texto da spec e do log sempre escapado; a política de
+  conteúdo bloqueia rede e só autoriza os três scripts embutidos pelo hash.
+
+Atualizar o Motion: baixar o pacote `motion` do npm, conferir o `integrity`
+com `npm view motion@X dist.integrity`, copiar `dist/motion.js` para
+`html/motion.min.js` e trocar `MOTION_VERSION`.
+
 ## Texto
 
 - Botões no infinitivo com maiúscula nas palavras principais: "Auditar",

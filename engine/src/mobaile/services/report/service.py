@@ -9,7 +9,9 @@ que o servidor RPC chama:
 - `export`: grava o board Excalidraw, o HTML, o Markdown e o TSV do último
   relatório;
 - `import_prints`: lê os prints dos cards com OCR e grava o rascunho da spec,
-  com a lista do que revisar.
+  com a lista do que revisar;
+- `card` e `update_card`: leem e gravam um card da spec, para corrigir o que o
+  OCR leu sem abrir o JSON.
 
 O nome dos arquivos, a pasta padrão e o texto de cada variação são regra do
 produto e moram aqui: a interface só mostra e escolhe caminhos.
@@ -20,6 +22,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -97,7 +100,8 @@ class ReportService:
 
     # ------------------------------------------------------------------- spec
 
-    def load_spec(self, raw_path: object) -> tuple[SpecTemplate, Path]:
+    @staticmethod
+    def _read_spec_json(raw_path: object) -> tuple[Any, Path]:
         path = validate_input_file(raw_path, label="spec", max_bytes=MAX_SPEC_BYTES, suffixes=(".json",))
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -107,6 +111,10 @@ class ReportService:
             raise InvalidInputError(
                 f"A spec {path.name} não é um JSON válido (linha {exc.lineno}, coluna {exc.colno})."
             ) from exc
+        return data, path
+
+    def load_spec(self, raw_path: object) -> tuple[SpecTemplate, Path]:
+        data, path = self._read_spec_json(raw_path)
         spec = SpecTemplate.from_dict(data)
         if spec.prints_dir and not Path(spec.prints_dir).expanduser().is_absolute():
             # Relativo à spec, como no tag_audit: a pasta da demanda anda junto.
@@ -179,6 +187,7 @@ class ReportService:
         self, report: AuditReport, spec_path: Path, *, source: str, log_path: Path | None = None,
     ) -> dict[str, Any]:
         stats = report.log_stats
+        prints = _print_paths(report.spec)
         return {
             "spec": self.spec_summary(report.spec, spec_path),
             "platform": report.platform,
@@ -194,7 +203,7 @@ class ReportService:
                 "extras": len(report.extras),
                 "alerts": len(report.alerts),
             },
-            "results": [self._result_payload(report, i, r) for i, r in enumerate(report.results)],
+            "results": [self._result_payload(report, i, r, prints) for i, r in enumerate(report.results)],
             "extras": [e.to_dict() for e in report.extras],
             "alerts": [a.to_dict() for a in report.alerts],
             "observations": "\n".join(observation_lines(report)),
@@ -203,18 +212,18 @@ class ReportService:
         }
 
     @staticmethod
-    def _result_payload(report: AuditReport, index: int, result: VariantResult) -> dict[str, Any]:
+    def _result_payload(
+        report: AuditReport, index: int, result: VariantResult, prints: list[str | None],
+    ) -> dict[str, Any]:
         spec = report.spec
         card = spec.cards[result.variant.card_index]
         flow = result.variant.flow
-        prints_dir = Path(spec.prints_dir) if spec.prints_dir else None
-        print_path = prints_dir / card.print_name if prints_dir and card.print_name else None
         return {
             "id": index,
             "card_index": result.variant.card_index,
             "section": card.secao,
             "card_title": card.titulo or card.evento,
-            "print_path": str(print_path) if print_path and print_path.is_file() else None,
+            "print_path": prints[result.variant.card_index],
             "flow": flow,
             "flow_label": spec.fluxos.get(flow, flow) if flow else None,
             "event": result.variant.event,
@@ -223,6 +232,11 @@ class ReportService:
             "checks": [
                 {"field": c.field, "expected": c.expected, "obtained": _display(c.obtained), "ok": c.ok}
                 for c in result.checks
+            ],
+            # O que a variação espera, já com o fluxo aplicado e na ordem do
+            # card. Na não disparada é a única fonte dos valores (não há checks).
+            "expected": [
+                {"key": key, "value": _display(value)} for key, value in result.variant.expected.items()
             ],
             "matched": _matched_payload(result.matched),
             "occurrences": result.occurrences,
@@ -233,6 +247,45 @@ class ReportService:
             "divergences": divergences_text(result),
             "block": variant_block_text(result, flow_short_label(report, flow)),
         }
+
+    # --------------------------------------------------------- edição do card
+
+    def card(self, raw_path: object, raw_index: object) -> dict[str, Any]:
+        """O card como está no JSON, para o formulário de edição."""
+        data, _path, index = self._card_source(raw_path, raw_index)
+        return card_payload(data, index)
+
+    def update_card(self, raw_path: object, raw_index: object, raw_card: object) -> dict[str, Any]:
+        """Grava os textos editados de um card e devolve a spec relida.
+
+        Só os campos do formulário mudam (seção, título, evento, parâmetros,
+        variações e a observação em texto); o print, `por_fluxo`,
+        `params_por_fluxo`, uma `obs` por fluxo e chaves desconhecidas ficam
+        como estavam. A spec inteira é validada antes de gravar, e a gravação
+        troca o arquivo de uma vez: um erro nunca deixa o JSON pela metade.
+        """
+        data, path, index = self._card_source(raw_path, raw_index)
+        data["cards"][index] = edited_card(raw_card, data["cards"][index], index + 1)
+        SpecTemplate.from_dict(data)
+        temporary = path.with_name(f".{path.name}.mobaile-tmp")
+        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
+        logger.info("Card %d da spec %s editado", index + 1, path.name)
+        spec, path = self.load_spec(str(path))
+        return {"spec": self.spec_summary(spec, path), "card": card_payload(data, index)}
+
+    def _card_source(self, raw_path: object, raw_index: object) -> tuple[dict[str, Any], Path, int]:
+        data, path = self._read_spec_json(raw_path)
+        cards = data.get("cards") if isinstance(data, dict) else None
+        if not isinstance(cards, list) or not cards:
+            raise InvalidInputError(f"A spec {path.name} não tem cards.")
+        if isinstance(raw_index, bool) or not isinstance(raw_index, int):
+            raise InvalidInputError("card_index precisa ser um número inteiro.")
+        if not 0 <= raw_index < len(cards):
+            raise InvalidInputError(f"O card {raw_index + 1} não existe: a spec tem {len(cards)}.")
+        if not isinstance(cards[raw_index], dict):
+            raise InvalidInputError(f"card {raw_index + 1}: cada card precisa ser um objeto JSON.")
+        return data, path, raw_index
 
     # -------------------------------------------------------------- exportação
 
@@ -336,6 +389,93 @@ class ReportService:
         }
 
 
+def _pairs(values: Any) -> list[dict[str, Any]]:
+    """Objeto do JSON como lista de pares: a ordem dos parâmetros é a do card."""
+    if not isinstance(values, dict):
+        return []
+    return [{"key": key, "value": value} for key, value in values.items()]
+
+
+def card_payload(data: dict[str, Any], index: int) -> dict[str, Any]:
+    card = data["cards"][index]
+    obs = card.get("obs")
+    variacoes = card.get("variacoes")
+    return {
+        "card_index": index,
+        "cards": len(data["cards"]),
+        "secao": card.get("secao") if isinstance(card.get("secao"), str) else None,
+        "titulo": card.get("titulo") if isinstance(card.get("titulo"), str) else None,
+        "evento": card.get("evento") if isinstance(card.get("evento"), str) else None,
+        "print": card.get("print") if isinstance(card.get("print"), str) else None,
+        "params": _pairs(card.get("params")),
+        "variacoes": [_pairs(v) for v in variacoes] if isinstance(variacoes, list) else [],
+        # Observação por fluxo não cabe num campo de texto: fica só no JSON.
+        "obs": obs if isinstance(obs, str) else None,
+        "obs_por_fluxo": isinstance(obs, dict),
+        "params_por_fluxo": sorted((card.get("params_por_fluxo") or {}).keys())
+        if isinstance(card.get("params_por_fluxo"), dict) else [],
+    }
+
+
+def _object_from_pairs(raw: Any, where: str) -> dict[str, Any]:
+    if not isinstance(raw, list):
+        raise InvalidInputError(f"{where} precisa ser uma lista de pares chave e valor.")
+    result: dict[str, Any] = {}
+    for pair in raw:
+        if not isinstance(pair, dict) or "key" not in pair or "value" not in pair:
+            raise InvalidInputError(f"{where}: cada item precisa ter key e value.")
+        key = pair["key"].strip() if isinstance(pair["key"], str) else ""
+        if not key:
+            raise InvalidInputError(f"{where}: há um parâmetro sem nome.")
+        if key in result:
+            raise InvalidInputError(f"{where}: o parâmetro {key!r} aparece duas vezes.")
+        result[key] = pair["value"]
+    return result
+
+
+def edited_card(raw: object, original: dict[str, Any], number: int) -> dict[str, Any]:
+    """Aplica o formulário sobre o card original, sem tocar no que ele não mostra."""
+    where = f"card {number}"
+    if not isinstance(raw, dict):
+        raise InvalidInputError(f"{where}: o card editado precisa ser um objeto.")
+    card = dict(original)
+    for field_name in ("secao", "titulo", "evento"):
+        if field_name not in raw:
+            continue
+        value = raw[field_name]
+        if value is not None and not isinstance(value, str):
+            raise InvalidInputError(f"{where}: '{field_name}' precisa ser texto.")
+        text = (value or "").strip()
+        if text:
+            card[field_name] = text
+        elif field_name == "evento":
+            raise InvalidInputError(f"{where}: o evento não pode ficar vazio.")
+        else:
+            card.pop(field_name, None)
+    if "params" in raw:
+        card["params"] = _object_from_pairs(raw["params"], f"{where}.params")
+    if "variacoes" in raw:
+        if not isinstance(raw["variacoes"], list):
+            raise InvalidInputError(f"{where}: 'variacoes' precisa ser uma lista.")
+        variacoes = [
+            _object_from_pairs(v, f"{where}.variacoes[{i}]") for i, v in enumerate(raw["variacoes"], 1)
+        ]
+        variacoes = [v for v in variacoes if v]
+        if variacoes:
+            card["variacoes"] = variacoes
+        else:
+            card.pop("variacoes", None)
+    if "obs" in raw and not isinstance(original.get("obs"), dict):
+        obs = raw["obs"]
+        if obs is not None and not isinstance(obs, str):
+            raise InvalidInputError(f"{where}: 'obs' precisa ser texto.")
+        if obs and obs.strip():
+            card["obs"] = obs.strip()
+        else:
+            card.pop("obs", None)
+    return card
+
+
 def validate_spec_destination(raw: object) -> Path:
     """Caminho de gravação do rascunho: `.json`, e nunca por cima de outro arquivo."""
     if not isinstance(raw, str) or not raw.strip():
@@ -344,6 +484,17 @@ def validate_spec_destination(raw: object) -> Path:
     if path.suffix.lower() != ".json":
         raise InvalidInputError(f"O rascunho da spec precisa terminar em .json: {path.name}")
     return unique_path(path)
+
+
+def _print_paths(spec: SpecTemplate) -> list[str | None]:
+    """Caminho do print de cada card, quando o arquivo existe. Um card tem várias
+    variações: o disco é consultado uma vez por card, e não uma por variação."""
+    prints_dir = Path(spec.prints_dir) if spec.prints_dir else None
+    out: list[str | None] = []
+    for card in spec.cards:
+        path = prints_dir / card.print_name if prints_dir and card.print_name else None
+        out.append(str(path) if path and path.is_file() else None)
+    return out
 
 
 def _matched_payload(event: TagEvent | None) -> dict[str, Any] | None:

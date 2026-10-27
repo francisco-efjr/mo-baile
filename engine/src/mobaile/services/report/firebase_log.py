@@ -30,25 +30,30 @@ from mobaile.services.report.rules import clean_colon_spacing, strip_event_suffi
 ANDROID_LINE = re.compile(r"Logging event:\s*origin=([^,]+),name=([^,]+),params=(Bundle\[.*\])\s*$")
 LOGCAT_TIME = re.compile(r"^(?:\d{2}-\d{2}\s+)?(\d{2}:\d{2}:\d{2}\.\d{3})")
 LOG_DATE = re.compile(r"^(?:(\d{4})-)?(\d{2}-\d{2})\s")
+_NESTING = re.compile(r"[\[\]{}]")
+_SEPARATORS = re.compile(r"[\[\]{},]")
 
 
 def _split_top_level(text: str) -> list[str]:
     """Divide por vírgulas que não estão dentro de [] ou {}."""
-    parts: list[str] = []
-    depth = 0
-    current = ""
-    for ch in text:
-        if ch in "[{":
-            depth += 1
-        elif ch in "]}":
-            depth -= 1
-        if ch == "," and depth == 0:
-            parts.append(current)
-            current = ""
-        else:
-            current += ch
-    if current.strip():
-        parts.append(current)
+    if _NESTING.search(text) is None:
+        parts = text.split(",")
+    else:
+        # Só os caracteres que importam são visitados, e não o texto inteiro.
+        parts: list[str] = []
+        depth = start = 0
+        for found in _SEPARATORS.finditer(text):
+            ch = found.group()
+            if ch in "[{":
+                depth += 1
+            elif ch in "]}":
+                depth -= 1
+            elif depth == 0:
+                parts.append(text[start:found.start()])
+                start = found.end()
+        parts.append(text[start:])
+    if not parts[-1].strip():
+        parts.pop()
     return parts
 
 
@@ -145,7 +150,7 @@ def events_from_items(
     stats = {"total_lidos": len(items), "da_plataforma": 0, "duplicados": 0, "uteis": 0}
     seen: set[tuple[Any, ...]] = set()
     events: list[TagEvent] = []
-    order: dict[int, str] = {}
+    order: list[str] = []
     for index, item in enumerate(items):
         if detect_platform(item) != platform:
             continue
@@ -177,7 +182,7 @@ def events_from_items(
                 continue
             seen.add(key)
         date = LOG_DATE.match(raw)
-        order[len(events)] = f"{date.group(2) if date else ''} {time_str or ''}"
+        order.append(f"{date.group(2) if date else ''} {time_str or ''}")
         events.append(
             TagEvent(
                 id=item.get("id", index),
@@ -189,6 +194,7 @@ def events_from_items(
                 origin=origin or None,
             )
         )
-    events = [event for _, event in sorted(enumerate(events), key=lambda pair: order[pair[0]])]
+    # `sorted` é estável: empate de horário fica na ordem do arquivo.
+    events = [events[i] for i in sorted(range(len(events)), key=order.__getitem__)]
     stats["uteis"] = len(events)
     return events, stats

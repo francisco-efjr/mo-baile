@@ -258,6 +258,9 @@ class AuditReport:
     log_stats: dict[str, int] = field(default_factory=dict)
     extras: list[ExtraEvent] = field(default_factory=list)
     alerts: list[ExtraEvent] = field(default_factory=list)
+    # Primeiro e último evento útil do log, em ordem de horário: o período auditado.
+    first_event: TagEvent | None = None
+    last_event: TagEvent | None = None
 
     @property
     def total(self) -> int:

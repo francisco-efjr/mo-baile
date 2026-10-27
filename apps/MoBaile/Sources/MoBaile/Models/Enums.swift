@@ -45,24 +45,46 @@ enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
 }
 
 enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
-    case pageObjects, network, analytics, report
+    case home, pageObjects, network, analytics, report, environment
     var id: String { rawValue }
     var displayName: String {
         switch self {
+        case .home: return "Início"
         case .pageObjects: return "Page Objects"
         case .network: return "Rede HTTP"
         case .analytics: return "Analytics"
         case .report: return "Relatório"
+        case .environment: return "Ambiente"
         }
     }
 
-    /// O Relatório trabalha com arquivos (spec e log) e funciona sem aparelho;
-    /// as outras áreas precisam de um conectado.
-    var needsDevice: Bool { self != .report }
+    /// Início, Relatório e Ambiente funcionam sem aparelho: o Início recebe e
+    /// oferece os alvos, o Relatório trabalha com arquivos (spec e log) e o
+    /// Ambiente mostra o que está instalado. As outras áreas precisam de um
+    /// aparelho conectado.
+    var needsDevice: Bool { ![.home, .report, .environment].contains(self) }
+
+    /// As áreas de trabalho: a seção Workspace da barra lateral. O Início fica
+    /// acima dela e o Ambiente, fixo no rodapé.
+    static var workspaceAreas: [WorkspaceTab] { allCases.filter { $0 != .home && $0 != .environment } }
+
+    /// Atalho de teclado: ⌘0 no Início, ⌘1 a ⌘4 nas áreas, na ordem da barra
+    /// lateral, e ⌘5 no Ambiente (3.11.0). O ⌘, continua nos Ajustes.
+    var shortcutDigit: Character {
+        Character("\(WorkspaceTab.allCases.firstIndex(of: self) ?? 0)")
+    }
 }
 
+/// Parada pedida pelo usuário não é caso próprio: volta a `.idle`, com a
+/// linha `STOP` no log (D-A da rodada 3.12.0).
 enum RunState: Equatable, Sendable {
     case idle, running, passed, failed
+}
+
+/// Quem disparou a execução. Só `flow.run` roda os passos gravados; no flow do
+/// Maestro a lista de passos gravados não corresponde ao que está rodando.
+enum RunSource: Equatable, Sendable {
+    case recordedSteps, maestro
 }
 
 enum DaemonState: String, Sendable {
@@ -82,32 +104,6 @@ enum ThemeMode: String, CaseIterable, Identifiable, Codable, Sendable {
     var id: String { rawValue }
 }
 
-
-/// O que um clique no espelho significa.
-///
-/// Eram tres modos. "Inspecionar" saiu: o painel de atributos ja e preenchido
-/// em qualquer modo, entao ele nao fazia nada que os outros dois nao fizessem,
-/// e ocupava espaco na barra obrigando a trocar de modo a toa.
-enum InteractionMode: String, CaseIterable, Identifiable, Sendable {
-    case forward
-    case record
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .forward: return "Repassar toque"
-        case .record: return "Gravar passo"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .forward: return "hand.tap"
-        case .record: return "record.circle"
-        }
-    }
-}
 
 /// O que uma confirmação de limpeza apaga.
 enum ClearKind: String, Identifiable, Sendable {

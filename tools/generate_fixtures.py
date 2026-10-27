@@ -23,6 +23,7 @@ import base64
 import contextlib
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -43,7 +44,9 @@ from relatorio_ocr import CARD_CHECKOUT, CARD_INTERACTION  # noqa: E402
 from mobaile.domain.models import AnalyticsEvent, NetworkEvent  # noqa: E402
 from mobaile.rpc import contract, protocol  # noqa: E402
 from mobaile.rpc.server import EngineServer  # noqa: E402
+from mobaile.services.home import RecentStore  # noqa: E402
 from mobaile.services.report import ReportService  # noqa: E402
+from mobaile.services.setup import Probe, SetupService  # noqa: E402
 
 FIXTURE_PATH = REPO_ROOT / "apps/MoBaile/Tests/MoBaileTests/Fixtures/engine_payloads.json"
 
@@ -77,6 +80,21 @@ SIMULADORES = [
 AVDS = ["Pixel_9", "Pixel_9_Pro"]
 
 
+CHANGELOG_EXEMPLO = """# Changelog
+
+## [9.9.0] - 2026-10-24
+
+### Adicionado
+
+- **Tela Início nova.** Boas-vindas, aparelho e recentes.
+- **Tela Ambiente.** O diagnóstico de instalação, à parte.
+
+## [9.8.0] - 2026-10-01
+
+- **Antiga.** Não aparece.
+"""
+
+
 @contextlib.contextmanager
 def ambiente_fixo(server: EngineServer):
     """Congela tudo que o motor le do ambiente da maquina.
@@ -91,6 +109,10 @@ def ambiente_fixo(server: EngineServer):
     que e o que ela deveria estar medindo.
     """
     server.adb.adb_path = "adb"
+    # O gerador nao chama `configure_logging`: o caminho do log e o de um Mac
+    # de referencia, para a suite Swift decodificar o campo preenchido.
+    server.log_path = "/Users/qa/Library/Logs/Mo baile/engine.log"
+    server.adb.emulator_path = "/Users/qa/Library/Android/sdk/emulator/emulator"
     with contextlib.ExitStack() as stack:
         fixar = stack.enter_context
         fixar(patch.object(server.adb, "is_available", return_value=True))
@@ -113,6 +135,23 @@ def ambiente_fixo(server: EngineServer):
             server.appium, "ensure_wda",
             return_value=(True, "WebDriverAgent respondendo em http://localhost:8100."),
         ))
+        # Tela Inicio: Android pronto e iOS sem o driver XCUITest, o caso que
+        # mostra item faltando, proximo passo e area parcial de uma vez.
+        server.setup = SetupService(
+            adb=server.adb, appium=server.appium, scrcpy=server.scrcpy, system="macos",
+            probe=Probe(
+                which=lambda nome: f"/opt/homebrew/bin/{nome}" if nome in ("xcrun", "node", "swiftc") else None,
+                is_file=lambda caminho: caminho.endswith("/usr/bin/simctl"),
+                realpath=lambda c: "/opt/homebrew/lib/node_modules/appium/index.js" if c.endswith("/appium") else c,
+                find_spec=lambda nome: object() if nome == "Quartz" else None,
+                version_of={"Pillow": "11.3.0", "requests": "2.32.3"}.get,
+                read_text=lambda caminho: '{"version": "2.11.0"}' if caminho.endswith("appium/package.json") else None,
+                home="/Users/qa",
+                environ={},
+                python_version="3.12.7",
+                python_path="/opt/homebrew/bin/python3",
+            ),
+        )
         yield
 
 
@@ -194,6 +233,12 @@ def relatorio(server: EngineServer, call) -> dict:
                 "prints_dir": str(prints), "projeto": "Demanda", "platform": "android",
             }),
             "erro_report_sessao_vazia": call("report.audit", {"spec_path": str(spec_path), "source": "session"}),
+            # Depois da auditoria e do export: a edição regrava a spec.
+            "report.card": call("report.card", {"spec_path": str(spec_path), "card_index": 2}),
+            "report.card_update": call("report.card_update", {
+                "spec_path": str(spec_path), "card_index": 1,
+                "card": {"titulo": "Parcelas", "obs": "Conferido com produto"},
+            }),
         }
         return _trocar_caminhos(saida, (str(pasta), tmp), PASTA_RELATORIO)
 
@@ -247,6 +292,21 @@ def build() -> dict:
         # Ambiente e inicializacao. Estes sete decodificam nos DTOs novos do
         # front, que ate agora compilavam sem nunca terem visto saida do motor.
         fixtures["diagnostics.check"] = call("diagnostics.check")
+        fixtures["setup.check"] = call("setup.check")
+        # Tela Inicio: recentes num arquivo descartavel com relogio fixo, e as
+        # novidades de um CHANGELOG de exemplo, para a fixture nao mudar a cada
+        # versao nem depender do historico de quem gera.
+        with tempfile.TemporaryDirectory() as pasta_home:
+            pasta_home = pathlib.Path(pasta_home)
+            (pasta_home / "CHANGELOG.md").write_text(CHANGELOG_EXEMPLO, encoding="utf-8")
+            server.home.recents = RecentStore(pasta_home / "recentes.json", clock=lambda: 1757030000.0)
+            server.home.recents.record(
+                "report", "Relatório · Demanda", "2 divergências · 42,9% conforme",
+                "/Users/qa/Documents/Mo baile/specs/demanda.json",
+            )
+            server.home._changelog = lambda: pasta_home / "CHANGELOG.md"
+            server.home._version = "9.9.0"
+            fixtures["home.summary"] = call("home.summary")
         fixtures["simulators.list"] = call("simulators.list")
         fixtures["simulators.boot"] = call("simulators.boot", {"udid": SIMULADORES[0]["udid"]})
         fixtures["emulators.list"] = call("emulators.list")
@@ -300,6 +360,17 @@ def build() -> dict:
         for chave in ("fps", "capture_ms", "skipped"):
             quadro["params"][chave] = 0
         fixtures["notif_stream.frame"] = quadro
+
+        # Execucao de fluxo, pelos mesmos helpers que os dois runners usam. Fica
+        # o `flow.finished` de uma parada, que e o caso que o front antigo
+        # confundia com falha (3.12.0).
+        out.seek(0)
+        out.truncate()
+        server._notify_flow_step(2, 3)
+        server._notify_flow_finished(False, "Automação cancelada.", True)
+        avisos = [json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip()]
+        fixtures["notif_flow.step"] = next(m for m in avisos if m.get("method") == "flow.step")
+        fixtures["notif_flow.finished"] = next(m for m in avisos if m.get("method") == "flow.finished")
 
     traffic = NetworkEvent(
         id=7, timestamp=1757030000.5, time_str="14:32:10.123", method="POST",
@@ -390,6 +461,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="so confere; nao escreve")
     args = parser.parse_args(argv)
+    # Gerar as fixtures salva Page Object e audita relatorio: os recentes da
+    # tela Inicio iriam para o Mac de quem gera. Vao para uma pasta descartavel.
+    os.environ["MOBAILE_DATA_DIR"] = tempfile.mkdtemp(prefix="mobaile-fixtures-")
     destination = FIXTURE_PATH
     if args.check:
         return check(destination)

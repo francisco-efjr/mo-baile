@@ -16,6 +16,12 @@ Dois detalhes que decidem se isso funciona na pratica:
    comando e derruba o WDA junto. O usuario veria o indicador ficar verde e
    voltar a vermelho sozinho, que e o tipo de sintoma que consome uma tarde.
 
+3. **So em loopback.** O Appium escuta em `0.0.0.0` por padrao e nao tem
+   autenticacao: subido sem `--address`, qualquer maquina da mesma rede
+   comandava o aparelho conectado. O servidor proprio sobe em `127.0.0.1`, na
+   porta da `APPIUM_URL`; se ela aponta para fora do loopback ou para a porta
+   0 (o harness de QA), o motor nao sobe servidor nenhum.
+
 `requests` e importado dentro de cada metodo que fala HTTP. Carregado no topo,
 ele custava uns 45 ms em toda subida do motor, inclusive nas que nunca chegam a
 falar com o Appium.
@@ -34,7 +40,7 @@ from typing import TYPE_CHECKING
 
 from mobaile.config import settings
 from mobaile.domain.errors import ToolNotFoundError
-from mobaile.security import validate_device_id
+from mobaile.security import logs_dir, redact_url, validate_device_id
 
 if TYPE_CHECKING:
     import requests
@@ -45,6 +51,10 @@ logger = logging.getLogger(__name__)
 SERVER_BOOT_TIMEOUT = 45.0
 # Compilar e instalar o WDA na primeira vez e lento; nas seguintes, nem tanto.
 WDA_SESSION_TIMEOUT = 300.0
+# Porta padrao do Appium, para APPIUM_URL sem porta.
+DEFAULT_APPIUM_PORT = 4723
+# Nomes de loopback aceitos na APPIUM_URL. `localhost` resolve para os dois.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class AppiumBridge:
@@ -111,9 +121,63 @@ class AppiumBridge:
         with self._lock:
             return self._start_server_locked()
 
+    def _local_endpoint(self) -> tuple[str, int] | None:
+        """Endereco e porta do servidor proprio, ou `None` se nao cabe subir um.
+
+        A porta vem da URL tal como esta: porta 0 e o jeito de dizer "nao fale
+        com Appium nenhum" (o harness de QA usa), e trocar 0 por 4723 subiria
+        o Appium real e esperaria a toa.
+        """
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.base_url)
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        host = (parsed.hostname or "").lower()
+        if host not in _LOOPBACK_HOSTS:
+            return None
+        if port is None:
+            port = DEFAULT_APPIUM_PORT
+        if port == 0:
+            return None
+        # O cliente fala com [::1] quando a URL diz ::1; os demais nomes chegam
+        # ao 127.0.0.1.
+        return ("::1" if host == "::1" else "127.0.0.1"), port
+
+    @staticmethod
+    def _open_log():
+        """Abre `appium.log` na pasta de logs, so para o dono (0600)."""
+        try:
+            log_path = logs_dir() / "appium.log"
+            # O_NOFOLLOW: nao escreve num symlink plantado no lugar do arquivo.
+            fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+        except OSError as exc:
+            logger.warning("Log do Appium desligado: %s", exc)
+            return subprocess.DEVNULL, Path("/dev/null")
+        try:
+            # Arquivo de versao anterior, ou criado sob outro umask, fica so com o dono.
+            os.fchmod(fd, 0o600)
+            return os.fdopen(fd, "a", encoding="utf-8"), log_path
+        except OSError as exc:
+            # Arquivo de outro dono: segue sem log, como antes, e sem vazar o descritor.
+            os.close(fd)
+            logger.warning("Log do Appium desligado: %s", exc)
+            return subprocess.DEVNULL, Path("/dev/null")
+
     def _start_server_locked(self) -> tuple[bool, str]:
         if self.is_running():
             return True, "Servidor Appium ja estava no ar."
+
+        endpoint = self._local_endpoint()
+        if endpoint is None:
+            return False, (
+                f"Servidor Appium indisponivel em {redact_url(self.base_url)}. O Mo baile so "
+                "sobe o Appium proprio em 127.0.0.1; com a APPIUM_URL apontando para "
+                "outro lugar, suba o servidor por la."
+            )
+        address, port = endpoint
 
         binary = self.locate_appium()
         if not binary:
@@ -122,17 +186,12 @@ class AppiumBridge:
                 detail="Procurado no PATH, no Homebrew e nos caminhos globais do npm.",
             )
 
-        log_path = Path.home() / "Library" / "Logs" / "mobaile-appium.log"
-        try:
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            log_file = log_path.open("a", encoding="utf-8")
-        except OSError:
-            log_file = subprocess.DEVNULL
-            log_path = Path("/dev/null")
+        log_file, log_path = self._open_log()
 
         try:
             self._process = subprocess.Popen(
-                [binary, "--log-timestamp", "--local-timezone"],
+                [binary, "--address", address, "--port", str(port),
+                 "--log-timestamp", "--local-timezone"],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
@@ -140,6 +199,10 @@ class AppiumBridge:
             )
         except OSError as exc:
             return False, f"Nao foi possivel iniciar o Appium: {exc}"
+        finally:
+            # O filho herdou o descritor; o nosso nao precisa ficar aberto.
+            if log_file is not subprocess.DEVNULL:
+                log_file.close()
 
         deadline = time.time() + SERVER_BOOT_TIMEOUT
         while time.time() < deadline:

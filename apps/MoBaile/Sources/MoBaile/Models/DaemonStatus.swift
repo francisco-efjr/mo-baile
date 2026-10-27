@@ -10,6 +10,6 @@ struct DaemonStatusMap: Sendable {
 struct LogLine: Identifiable, Sendable {
     let id: UUID = UUID()
     let timestamp: Date
-    let prefix: String   // "INFO", "RUN", "PASS", "FAIL", "HTTP", "FA"
+    let prefix: String   // "INFO", "RUN", "PASS", "FAIL", "STOP", "HTTP", "FA"
     let message: String
 }

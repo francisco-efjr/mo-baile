@@ -35,11 +35,11 @@ struct HTTPInspectorView: View {
                     action: { Task { await session.toggleProxy() } }
                 )
             } else {
-                VSplitView {
+                VerticalSplit(storageKey: "alturaTabelaRede", topHeight: 100...640,
+                              idealTopHeight: 260, minBottomHeight: 120) {
                     HTTPTableView()
-                        .frame(minHeight: 100, idealHeight: 260)
+                } bottom: {
                     detalhe
-                        .frame(minHeight: 120, idealHeight: 260)
                 }
             }
         }
@@ -48,14 +48,11 @@ struct HTTPInspectorView: View {
 
     @ViewBuilder
     private var detalhe: some View {
-        let theme = themeManager.current
         if let selected = appState.selectedRequest {
-            HStack(spacing: 0) {
+            AdaptivePair(labels: ("Request", "Response"), minSideBySide: 580) {
                 RequestDetailView(event: selected)
-                    .frame(maxWidth: .infinity)
-                Rectangle().fill(theme.separator).frame(width: 1)
+            } second: {
                 ResponseDetailView(event: selected)
-                    .frame(maxWidth: .infinity)
             }
         } else {
             EmptyState(icon: "info.circle", text: "Selecione uma requisição para ver os detalhes.", compact: true)

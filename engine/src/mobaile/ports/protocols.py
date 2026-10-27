@@ -57,6 +57,36 @@ class InputSink(Protocol):
 
 
 @runtime_checkable
+class FlowDevice(Protocol):
+    """Um alvo ja escolhido, do jeito que o runner de flow declarativo o usa.
+
+    Diferente de `InputSink`, o serial fica dentro do objeto: o flow roda num
+    aparelho so, e as teclas vem com o nome do Maestro (`Enter`, `Back`), que
+    cada plataforma traduz.
+    """
+
+    platform: str
+
+    def hierarchy(self) -> str | None: ...
+
+    def screen_size(self) -> tuple[int, int]: ...
+
+    def tap(self, x: int, y: int) -> bool: ...
+
+    def type_text(self, text: str) -> bool: ...
+
+    def press_key(self, key: str) -> bool: ...
+
+    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int) -> bool: ...
+
+    def launch_app(self, app_id: str) -> bool: ...
+
+    def stop_app(self, app_id: str) -> bool: ...
+
+    def clear_state(self, app_id: str) -> bool: ...
+
+
+@runtime_checkable
 class TrafficSource(Protocol):
     """Fonte de eventos HTTP observados."""
 

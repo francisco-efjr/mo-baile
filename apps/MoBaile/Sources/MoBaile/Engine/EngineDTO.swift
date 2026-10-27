@@ -381,6 +381,30 @@ enum EngineDTO {
         let script: String
     }
 
+    /// `flow.step`: começou o passo `index` (a partir de 1) de `total`, nos
+    /// dois runners (3.12.0).
+    struct FlowStep: Decodable {
+        let index: Int
+        let total: Int
+    }
+
+    /// `flow.finished`. `cancelled` chegou na 3.12.0; sem ele (motor anterior),
+    /// vale `false`.
+    struct FlowFinished: Decodable {
+        let success: Bool
+        let message: String
+        let cancelled: Bool
+
+        private enum CodingKeys: String, CodingKey { case success, message, cancelled }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            success = try c.decode(Bool.self, forKey: .success)
+            message = try c.decode(String.self, forKey: .message)
+            cancelled = try c.decodeIfPresent(Bool.self, forKey: .cancelled) ?? false
+        }
+    }
+
     struct SaveResult: Decodable {
         let saved: Bool
         let paths: [String]
@@ -485,11 +509,15 @@ enum EngineDTO {
         /// método decide aqui o prazo de cada chamada. Uma fonte de verdade só.
         let methods: [String: MethodSpec]
         let notifications: [String]
+        /// Arquivo de log do motor, ou `nil` se ele subiu só com stderr (ou é
+        /// anterior ao campo). Citado na mensagem de queda.
+        let logPath: String?
 
         enum CodingKeys: String, CodingKey {
             case capabilities, methods, notifications
             case protocolVersion = "protocol_version"
             case engineVersion = "engine_version"
+            case logPath = "log_path"
         }
     }
 
@@ -535,9 +563,12 @@ enum EngineDTO {
         let pageObjectsKey: String
         let proxy: ProxyInfo
         let methods: [String]
+        /// O mesmo `log_path` do `engine.hello`.
+        let logPath: String?
 
         enum CodingKeys: String, CodingKey {
             case version, platform, proxy, methods
+            case logPath = "log_path"
             case deviceId = "device_id"
             case adbPath = "adb_path"
             case adbAvailable = "adb_available"

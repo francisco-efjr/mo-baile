@@ -50,6 +50,13 @@ final class EngineSession {
     private(set) var lastScan: Date?
     private(set) var isBooting = false
 
+    /// O que está instalado (`setup.check`), para a tela Início. `nil` antes
+    /// da primeira checagem ou com o motor fora do ar.
+    private(set) var setup: EngineDTO.Setup?
+    /// Tela Início (`home.summary`). Relido quando o motor avisa `home.changed`.
+    private(set) var home: EngineDTO.HomeSummary?
+    private(set) var lastSetupCheck: Date?
+
     /// Resultado do handshake: versão do motor e tabela de métodos.
     private(set) var hello: EngineDTO.Hello?
 
@@ -330,6 +337,7 @@ final class EngineSession {
         }
         hello = resposta
         await client.useMethodTable(resposta.methods)
+        await client.useLogPath(resposta.logPath)
     }
 
     private func install(_ client: any EngineCalling) {
@@ -440,7 +448,8 @@ final class EngineSession {
                 restartTask = nil
             }
         }
-        var motivo = EngineError.processTerminated(status).localizedDescription
+        // `hello` ainda é o do motor que caiu: é o log dele que conta a queda.
+        var motivo = EngineError.processTerminated(status, logPath: hello?.logPath).localizedDescription
         while !Task.isCancelled {
             // A janela conta tentativas, com ou sem sucesso: um motor que sobe e
             // cai de novo logo depois também esgota o limite, em vez de ficar
@@ -624,12 +633,77 @@ final class EngineSession {
     /// Relê diagnóstico, simuladores e emuladores.
     func refreshEnvironment() async {
         guard let client else { return }
+        await refreshSetup()
         diagnostics = try? await client.call("diagnostics.check", as: EngineDTO.Diagnostics.self)
         // Lista de simuladores falha em Mac sem Xcode; o diagnóstico já explica
         // isso, então aqui a falha vira lista vazia e não erro na tela.
         simulators = (try? await client.call("simulators.list", as: EngineDTO.SimulatorList.self))?.simulators ?? []
         avds = (try? await client.call("emulators.list", as: EngineDTO.AvdList.self))?.avds ?? []
         lastScan = Date()
+    }
+
+    /// Relê só o que está instalado. É barato (o motor só procura arquivos):
+    /// a tela Início chama toda vez que o app volta ao primeiro plano, que é
+    /// quando a pessoa termina uma instalação no Terminal.
+    func refreshSetup() async {
+        guard let client else { return }
+        if let novo = try? await client.call("setup.check", as: EngineDTO.Setup.self) {
+            setup = novo
+        }
+        lastSetupCheck = Date()
+        await refreshHome()
+    }
+
+    /// Relê o que a tela Início mostra. O motor avisa por `home.changed`
+    /// quando muda (aparelho chegou, recente novo); não há polling.
+    func refreshHome() async {
+        guard let client else { return }
+        if let novo = try? await client.call("home.summary", as: EngineDTO.HomeSummary.self) {
+            home = novo
+        }
+    }
+
+    /// Reabre um item de "Continuar de onde parou". Arquivo que sumiu sai da
+    /// lista: o motor não confere sozinho, porque os caminhos costumam estar em
+    /// ~/Documents e conferir faria o macOS pedir acesso à pasta a cada abertura.
+    func openRecent(_ item: EngineDTO.HomeRecent) async {
+        guard FileManager.default.fileExists(atPath: item.path) else {
+            state.statusMessage = "\(item.title) não existe mais e saiu da lista"
+            _ = try? await client?.callIgnoringResult("home.forget_recent", params: ["path": .string(item.path)])
+            await refreshHome()
+            return
+        }
+        let url = URL(fileURLWithPath: item.path)
+        switch item.kind {
+        case "report":
+            state.selectedStepID = nil
+            state.workspaceTab = .report
+            await openReportSpec(at: url)
+        case "page_object":
+            state.selectedStepID = nil
+            state.workspaceTab = .pageObjects
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        default:
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    /// Liga um alvo desligado, ou passa a usar um que já está ligado.
+    func useTarget(_ alvo: EngineDTO.HomeTarget) async {
+        if !alvo.running {
+            if alvo.appPlatform == .ios {
+                await bootSimulator(udid: alvo.id)
+            } else {
+                await bootEmulator(name: alvo.id)
+            }
+            return
+        }
+        if state.platform != alvo.appPlatform {
+            state.platform = alvo.appPlatform
+        }
+        await select(deviceID: alvo.id)
+        await refreshDevices()
+        await refreshHome()
     }
 
     /// Liga um simulador e traz a janela do Simulator para a frente.
@@ -1031,7 +1105,6 @@ final class EngineSession {
         do {
             let inicio: EngineDTO.PassiveState = try await client.call("passive.start")
             state.passiveListening = true
-            state.interactionMode = .record
             state.statusMessage = "Gravando o que você fizer no aparelho (\(inicio.screen[0])×\(inicio.screen[1]))"
         } catch {
             state.passiveListening = false
@@ -1137,15 +1210,37 @@ final class EngineSession {
     ///
     /// O serviço existia no motor e era testado, mas só a interface Tk o usava:
     /// o front nativo não tinha como rodar automação. O andamento chega por
-    /// `flow.log`, linha a linha.
+    /// `flow.step` (passo atual) e `flow.log` (linha a linha).
     func runFlow() async {
         guard let client, !state.steps.isEmpty else { return }
         state.runLog.removeAll()
         state.currentRunStep = 0
+        state.runStepTotal = 0
+        state.runSource = .recordedSteps
+        state.runStartedAt = Date()
         state.runState = .running
         do {
             let inicio: EngineDTO.FlowRun = try await client.call("flow.run")
             state.statusMessage = "Executando \(inicio.steps) passo(s)…"
+        } catch {
+            state.runState = .failed
+            report(error)
+        }
+    }
+
+    /// Roda um flow do Maestro (`.yaml`) no aparelho, pelo runner do motor e
+    /// sem rede. O andamento chega pelos mesmos `flow.step`/`flow.log`/`flow.finished`.
+    func runMaestroFlow(at url: URL) async {
+        guard let client else { return }
+        state.runLog.removeAll()
+        state.currentRunStep = 0
+        state.runStepTotal = 0
+        state.runSource = .maestro
+        state.runStartedAt = Date()
+        state.runState = .running
+        do {
+            try await client.callIgnoringResult("flow.maestro_run", params: ["path": .string(url.path)])
+            state.statusMessage = "Rodando \(url.lastPathComponent)…"
         } catch {
             state.runState = .failed
             report(error)
@@ -1430,6 +1525,61 @@ final class EngineSession {
         await openReportSpec(at: URL(fileURLWithPath: importado.specPath))
     }
 
+    /// O card como está no JSON da spec, para o formulário do inspector.
+    func loadReportCard(_ index: Int) async -> ReportCardDraft? {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return nil }
+        state.reportError = nil
+        do {
+            let payload: EngineDTO.ReportCardPayload = try await client.call(
+                "report.card", params: ["spec_path": .string(spec.path), "card_index": .int(index)]
+            )
+            return payload.toModel()
+        } catch {
+            reportFailure(error)
+            return nil
+        }
+    }
+
+    /// Grava o card editado na spec e audita de novo, se já havia auditoria.
+    ///
+    /// A linha escolhida continua a mesma validação (card, fluxo e variação):
+    /// o `id` dos resultados é a posição, e mudar as variações desloca as linhas.
+    @discardableResult
+    func saveReportCard(_ draft: ReportCardDraft) async -> Bool {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return false }
+        let card: JSONValue
+        do {
+            card = try draft.rpcCard()
+        } catch {
+            state.reportError = error.localizedDescription
+            return false
+        }
+        let anterior = state.selectedReportResult
+        state.reportOperation = .savingCard
+        state.reportError = nil
+        do {
+            let payload: EngineDTO.ReportCardUpdatePayload = try await client.call(
+                "report.card_update",
+                params: ["spec_path": .string(spec.path), "card_index": .int(draft.cardIndex), "card": card]
+            )
+            state.reportSpec = payload.spec.toModel()
+        } catch {
+            endReportOperation()
+            reportFailure(error)
+            return false
+        }
+        endReportOperation()
+        if state.report != nil {
+            await runReport()
+            if let anterior, let resultados = state.report?.results {
+                let mesmoCard = resultados.filter { $0.cardIndex == anterior.cardIndex && $0.flow == anterior.flow }
+                state.selectedReportResultID = (mesmoCard.first { $0.variation == anterior.variation } ?? mesmoCard.first)?.id
+            }
+        }
+        state.statusMessage = "Card \(draft.cardIndex + 1) gravado em \(spec.fileName)"
+        return true
+    }
+
     private func endReportOperation() {
         state.reportOperation = nil
         state.reportProgressMessage = nil
@@ -1467,6 +1617,9 @@ final class EngineSession {
             // os quadros seguintes se empilhavam.
             if let fps = frame.fps { state.fps = Int(fps.rounded()) }
             if let captureMs = frame.captureMs { state.latencyMs = Int(captureMs.rounded()) }
+
+        case "home.changed":
+            await refreshHome()
 
         case "device.changed":
             struct Change: Decodable {
@@ -1526,23 +1679,31 @@ final class EngineSession {
         case "flow.log":
             struct Linha: Decodable { let line: String }
             guard let payload = decodeParams(notification, as: Linha.self) else { return }
-            state.runLog.append(
-                LogLine(timestamp: Date(), prefix: "RUN", message: payload.line)
-            )
-            // O script imprime "PASSO n" ao entrar em cada passo; é o que move o
-            // destaque na lista lateral.
-            if let numero = Self.numeroDoPasso(em: payload.line) {
-                state.currentRunStep = numero
-            }
+            appendRunLog(LogLine(timestamp: Date(), prefix: "RUN", message: payload.line))
+
+        case "flow.step":
+            // O passo atual vem do motor, nos dois runners. Antes saía de uma
+            // regex sobre o log, que só casava na linha de falha.
+            // Só durante a execução: um aviso atrasado, já depois do fim, não
+            // move o destaque da execução que terminou.
+            guard state.runState == .running,
+                  let passo = decodeParams(notification, as: EngineDTO.FlowStep.self) else { return }
+            state.currentRunStep = passo.index
+            state.runStepTotal = passo.total
 
         case "flow.finished":
-            struct Fim: Decodable { let success: Bool; let message: String }
-            guard let payload = decodeParams(notification, as: Fim.self) else { return }
-            state.runState = payload.success ? .passed : .failed
+            guard let payload = decodeParams(notification, as: EngineDTO.FlowFinished.self) else { return }
             state.statusMessage = payload.message
-            state.runLog.append(
-                LogLine(timestamp: Date(), prefix: payload.success ? "PASS" : "FAIL", message: payload.message)
-            )
+            let prefixo: String
+            if payload.cancelled {
+                // Parar não é falhar (D-A): volta ao ocioso, com a parada no log.
+                state.runState = .idle
+                prefixo = "STOP"
+            } else {
+                state.runState = payload.success ? .passed : .failed
+                prefixo = payload.success ? "PASS" : "FAIL"
+            }
+            appendRunLog(LogLine(timestamp: Date(), prefix: prefixo, message: payload.message))
 
         case "$/progress":
             guard let progresso = decodeParams(notification, as: EngineDTO.Progress.self),
@@ -1569,6 +1730,7 @@ final class EngineSession {
         case "analytics.event":
             guard let event = decodeParams(notification, as: EngineDTO.AnalyticsEventPayload.self) else { return }
             state.analyticsEvents.append(event.toModel())
+            trimTraffic()
 
         default:
             break
@@ -1587,13 +1749,17 @@ final class EngineSession {
         }
     }
 
-    // MARK: - Diagnostico
-
-    /// Extrai o número do passo de uma linha de log do executor.
-    private static func numeroDoPasso(em linha: String) -> Int? {
-        guard let faixa = linha.range(of: #"(?i)passo\s+(\d+)"#, options: .regularExpression) else { return nil }
-        return Int(linha[faixa].filter(\.isNumber))
+    /// O log da execução também tem teto: um fluxo longo (ou em laço) não
+    /// pode crescer a lista sem fim. Saem as linhas mais antigas.
+    private func appendRunLog(_ linha: LogLine) {
+        let limit = 5000
+        state.runLog.append(linha)
+        if state.runLog.count > limit {
+            state.runLog.removeFirst(state.runLog.count - limit)
+        }
     }
+
+    // MARK: - Diagnostico
 
     private func applyDaemonStatus(from info: EngineDTO.EngineInfo) {
         state.daemonStatus.adb = info.adbAvailable ? .ok : .error

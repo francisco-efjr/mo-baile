@@ -28,26 +28,36 @@ struct ContentView: View {
                     max: DesignMetrics.Widths.sidebarMax
                 )
         } detail: {
-            DetailColumn()
-                .modifier(HiddenBehindCommandPalette())
-                .modifier(SectionSearch())
-                .modifier(ToolbarTitle(title: windowTitle, subtitle: windowSubtitle))
-                .toolbar { MainToolbar(title: windowTitle, subtitle: windowSubtitle) }
-                .inspector(isPresented: Binding(
-                    get: { appState.inspectorShown },
-                    set: { if !appState.inspectorSuppressed { appState.inspectorVisible = $0 } }
-                )) {
+            // Inspector próprio, e não `.inspector`: a NavigationSplitView com
+            // um inspector aninhado mede o mínimo das colunas pelo tamanho ideal
+            // do conteúdo e conta a barra lateral em dobro. Com o Relatório
+            // aberto a janela pedia 1.743 pt de largura, mais que a tela de um
+            // MacBook Air; com o painel no HStack, a soma dos mínimos declarados.
+            HStack(spacing: 0) {
+                DetailColumn()
+                    .modifier(HiddenBehindCommandPalette())
+                if appState.inspectorShown {
+                    let limites = DesignMetrics.Widths.inspectorMin...DesignMetrics.Widths.inspectorMax
+                    let largura = CGFloat(larguraInspector).clamped(to: limites)
+                    PaneDivider(largura: largura, limites: limites, sentido: -1) { larguraInspector = $0 }
                     InspectorContent()
                         .modifier(HiddenBehindCommandPalette())
-                        .inspectorColumnWidth(
-                            min: DesignMetrics.Widths.inspectorMin,
-                            ideal: DesignMetrics.Widths.inspectorIdeal,
-                            max: DesignMetrics.Widths.inspectorMax
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .automatic) { InspectorToggleButton() }
-                        }
+                        // Como o espelho: na largura arrastada quando há folga,
+                        // cede até o mínimo antes de a janela crescer. A
+                        // prioridade faz o HStack medir o painel depois de
+                        // reservar o mínimo da área; sem ela o inspector ficava
+                        // na largura ideal e a área transbordava a coluna.
+                        .frame(minWidth: limites.lowerBound, idealWidth: largura, maxWidth: largura)
+                        .layoutPriority(1)
+                        .frame(maxHeight: .infinity)
+                        .background(theme.bgContent)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Inspector")
                 }
+            }
+            .modifier(SectionSearch())
+            .modifier(ToolbarTitle(title: windowTitle, subtitle: windowSubtitle))
+            .toolbar { MainToolbar(title: windowTitle, subtitle: windowSubtitle) }
         }
         .tint(theme.accent)
         // Paleta de comandos (⇧⌘P), por cima de tudo na janela.
@@ -81,10 +91,23 @@ struct ContentView: View {
             // permanentemente no estado vazio.
             await session.connect()
         }
+        // Onde a janela abre: no Início na primeira vez, com o motor parado ou
+        // sem aparelho; em Page Objects com aparelho (`LaunchDestination`).
+        .onChange(of: session.launchPhase) { _, fase in
+            let destino = LaunchDestination.pick(
+                firstRun: !UserDefaults.standard.bool(forKey: LaunchDestination.seenKey),
+                phase: fase,
+                deviceConnected: appState.isDeviceConnected,
+                current: appState.workspaceTab
+            )
+            if let destino, appState.selectedStepID == nil { appState.workspaceTab = destino }
+        }
         .onDisappear {
             Task { await session.disconnect() }
         }
     }
+
+    @SceneStorage("larguraInspector") private var larguraInspector = Double(DesignMetrics.Widths.inspectorIdeal)
 
     // MARK: - Título
 
@@ -95,6 +118,10 @@ struct ContentView: View {
     }
 
     private var windowSubtitle: String {
+        if appState.workspaceTab == .home { return HomeCopy.homeSubtitle(session.home, engineRunning: session.isConnected) }
+        if appState.workspaceTab == .environment {
+            return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected)
+        }
         if appState.workspaceTab == .report { return reportSubtitle }
         guard appState.isDeviceConnected else { return "Nenhum dispositivo" }
         switch appState.workspaceTab {
@@ -113,6 +140,10 @@ struct ContentView: View {
             return n == 1 ? "1 evento" : "\(n) eventos"
         case .report:
             return reportSubtitle
+        case .home:
+            return HomeCopy.homeSubtitle(session.home, engineRunning: session.isConnected)
+        case .environment:
+            return HomeCopy.subtitle(setup: session.setup, engineRunning: session.isConnected)
         }
     }
 
@@ -181,7 +212,11 @@ struct DetailColumn: View {
             EngineStatusBanner()
 
             Group {
-                if !appState.workspaceTab.needsDevice {
+                if appState.workspaceTab == .home {
+                    HomeView()
+                } else if appState.workspaceTab == .environment {
+                    EnvironmentView()
+                } else if !appState.workspaceTab.needsDevice {
                     // Relatório ocupa a coluna inteira: o espelho não ajuda a
                     // ler uma auditoria, e a aba funciona sem aparelho.
                     ReportView()
@@ -222,6 +257,9 @@ struct DetailColumn: View {
                         idealWidth: largura,
                         maxWidth: mostraWorkspace ? largura : .infinity
                     )
+                    // Mede depois de reservar o mínimo do workspace (ver o
+                    // inspector em ContentView).
+                    .layoutPriority(1)
                 if mostraWorkspace {
                     PaneDivider(largura: largura, limites: limites) { nova in
                         if compacto { larguraEspelhoCompacto = nova } else { larguraEspelho = nova }
@@ -239,12 +277,16 @@ struct DetailColumn: View {
     @SceneStorage("larguraEspelhoCompacto") private var larguraEspelhoCompacto = Double(DesignMetrics.Widths.mirrorCompactIdeal)
 }
 
-/// Divisória vertical arrastável entre o espelho e o workspace: linha de 1 pt
-/// com área de toque de 7 pt e o cursor de redimensionar, como a do NSSplitView.
+/// Divisória vertical arrastável entre o espelho e o workspace, e entre a área
+/// e o inspector: linha de 1 pt com área de toque de 7 pt e o cursor de
+/// redimensionar, como a do NSSplitView.
 private struct PaneDivider: View {
     @Environment(ThemeManager.self) private var themeManager
     let largura: CGFloat
     let limites: ClosedRange<CGFloat>
+    /// 1 quando o painel medido fica à esquerda (espelho); -1 quando fica à
+    /// direita (inspector), que cresce ao arrastar para a esquerda.
+    var sentido: CGFloat = 1
     let mudou: (Double) -> Void
 
     @State private var inicio: CGFloat?
@@ -270,7 +312,7 @@ private struct PaneDivider: View {
                     .onChanged { arraste in
                         let base = inicio ?? largura
                         if inicio == nil { inicio = largura }
-                        mudou(Double((base + arraste.translation.width).clamped(to: limites)))
+                        mudou(Double((base + sentido * arraste.translation.width).clamped(to: limites)))
                     }
                     .onEnded { _ in inicio = nil }
             )
@@ -306,7 +348,7 @@ final class PaneDividerCursor {
     }
 }
 
-private extension Comparable {
+extension Comparable {
     func clamped(to limites: ClosedRange<Self>) -> Self {
         min(max(self, limites.lowerBound), limites.upperBound)
     }

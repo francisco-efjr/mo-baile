@@ -75,7 +75,9 @@ escrita e a execução, é uma janela de troca de conteúdo.
 
 **Correção.** O arquivo vai para um diretório da sessão criado com `0700`, com
 permissão `0600`, aberto com `O_NOFOLLOW`. A execução usa
-`sys.executable <script>`, que dispensa bit de execução.
+`sys.executable <script>`, que dispensa bit de execução. O script embute o
+texto digitado e é apagado ao fim da execução; o que sobra de um motor morto
+por SIGKILL sai na geração do próximo script, se tiver mais de 10 minutos.
 
 ## 5. Credenciais do cliente guardadas em claro
 
@@ -88,7 +90,22 @@ Uma captura de tela durante uma demonstração vazaria credencial de produção.
 **Correção.** `mobaile.security.redaction` mascara `Authorization`, `Cookie`,
 `X-Api-Key` e afins nos cabeçalhos, e `password`, `token`, `cpf`, `cvv` e
 similares em corpo JSON. Fica ligado por padrão. `MOBAILE_REDACT=0` desliga,
-como decisão consciente do operador.
+como decisão consciente do operador, mas só na tela: o log bruto do CFNetwork
+em disco (`cfnetwork-diagnostics.log`, na pasta dos logs do motor, `0600`)
+continua mascarado, inclusive os cabeçalhos na forma de dicionário
+(`"Set-Cookie" = ( … );`). Texto digitado também não vai para o log do motor
+nem para a mensagem final de um flow do Maestro.
+
+Versões até a 3.11 gravavam esse log bruto em
+`~/Library/Logs/MoBaile/cfnetwork-diagnostics.log` (e `.log.1`), possivelmente
+com `Set-Cookie` em forma de dicionário sem máscara. O dono pode apagar os dois
+arquivos; o motor não os apaga sozinho.
+
+**Log do motor.** `engine.log` em `~/Library/Logs/Mo baile` (ou em
+`MOBAILE_LOG_DIR`): arquivo `0600` em pasta `0700`, rotação de 1 MB × 3, toda
+URL passada por `redact_url` mesmo com `MOBAILE_REDACT=0` e nenhum texto
+digitado. O despejo de queda do faulthandler fica ao lado, em
+`engine-faults.log`, com a mesma permissão.
 
 ## 6. Consumo de memória sem limite no proxy
 

@@ -76,16 +76,18 @@ class TestTabelaDeMetodos(Base):
         filas = {
             contract.LANE_ENVIRONMENT: {"wda.start", "simulators.boot", "simulators.shutdown", "emulators.boot"},
             contract.LANE_QUERY: {"devices.list", "wda.status", "simulators.list", "emulators.list",
-                                  "diagnostics.check", "analytics.ios_devices"},
+                                  "diagnostics.check", "setup.check", "home.summary", "analytics.ios_devices"},
             contract.LANE_SERVICES: {"proxy.start", "proxy.stop", "proxy.events", "proxy.clear", "proxy.diagnose",
                                      "netlog.start", "netlog.stop",
                                      "analytics.start", "analytics.stop", "analytics.events", "analytics.clear",
-                                     "flow.run", "flow.stop", "flow.status", "recording.start", "recording.stop"},
+                                     "flow.run", "flow.stop", "flow.status", "flow.maestro_run",
+                                     "recording.start", "recording.stop"},
             contract.LANE_CAPTURE: {"hierarchy.dump", "screen.capture", "screen.size", "passive.start",
                                     "passive.stop"},
             contract.LANE_INLINE: {"engine.hello", "engine.shutdown"},
             # Relatorio nao toca aparelho: nem espera o espelho nem o segura.
-            contract.LANE_REPORT: {"report.spec", "report.audit", "report.export", "report.import"},
+            contract.LANE_REPORT: {"report.spec", "report.audit", "report.export", "report.import",
+                                   "report.card", "report.card_update"},
         }
         for fila, metodos in filas.items():
             for nome in metodos:

@@ -5,6 +5,241 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.12.0] - 2026-10-26
+
+### Adicionado
+
+- **Andamento do fluxo de verdade.** A barra e o destaque do passo avançam a
+  cada passo, no runner dos passos gravados e no flow do Maestro (que mostra
+  `i/total` dos comandos do YAML). Antes, só a linha de falha mexia na barra.
+  Notificação nova `flow.step` `{index, total}`, aditiva (`PROTOCOL_VERSION`
+  continua 2).
+- **Log do motor em arquivo.** `~/Library/Logs/Mo baile/engine.log` (0600, pasta
+  0700, 1 MB × 3), com URLs redigidas e sem texto digitado; o despejo de queda
+  nativa vai para `engine-faults.log`. Aberto pelo Finder, o app não perde mais
+  o que o motor disse. `engine.hello` e `engine.info` trazem `log_path`, e a
+  mensagem de queda do motor cita o arquivo. O ciclo de vida do motor (subiu,
+  caiu, parado) aparece no Console.app em `com.qa.mobaile`, categoria `engine`.
+
+### Mudado
+
+- **Parar o fluxo não é mais falha.** `flow.finished` ganha `cancelled`; a
+  execução parada volta a "Pronto" com a linha `STOP` no log, em vez de "FAIL".
+- O log bruto do CFNetwork (iPhone em Debug) e o do Appium foram para a mesma
+  pasta de logs, só para o dono.
+- A primeira abertura depois de atualizar demora um pouco mais: o Python
+  recompila o cache, agora fora do app.
+
+### Corrigido
+
+- **O Appium que o Mo baile sobe escutava em toda a rede.** O padrão do Appium
+  é `0.0.0.0`, sem autenticação: qualquer máquina da mesma rede podia comandar o
+  aparelho conectado. Agora sobe com `--address 127.0.0.1` e a porta da
+  `APPIUM_URL`; com `APPIUM_URL` fora do loopback (ou porta 0), o motor não
+  sobe um Appium próprio e não espera mais 45 s à toa.
+- **A assinatura do app quebrava no primeiro uso.** O Python gravava
+  `__pycache__` dentro do bundle (inclusive no handshake do `verify-native`) e o
+  `codesign --verify` acusava selo inválido. O bytecode vai para
+  `~/Library/Caches/Mo baile/pycache`, e o `verify-native` confere o selo antes
+  e depois do handshake.
+- **Texto sensível em disco e em log.** `Set-Cookie` e `Authorization` na forma
+  de dicionário do CFNetwork passam a ser mascarados no log bruto (mesmo com
+  `MOBAILE_REDACT=0`); script de fluxo órfão (que embute o texto digitado) é
+  apagado depois de 10 minutos; timeout do `adb input text` não leva mais o
+  texto ao log; falha de flow do Maestro não repete o valor de `${VAR}`.
+- **A escuta de Analytics não morre mais em silêncio.** Uma linha JSON que não
+  é objeto, ou um byte fora de UTF-8, matava a thread de leitura e a escuta
+  ficava muda com a flag ligada. A tabela de eventos e o log da execução ganham
+  teto (1000 eventos, 5000 linhas).
+
+## [3.11.0] - 2026-10-24
+
+### Adicionado
+
+- **Tela Início nova.** Virou boas-vindas do dia a dia: saudação, cápsula
+  com o estado do ambiente, o aparelho (lista de simuladores, emuladores e
+  aparelhos com Iniciar ou Usar Este; com aparelho conectado, a miniatura,
+  as ações e o que está ligado agora), as quatro áreas com o atalho,
+  "Continuar de onde parou" e as novidades da versão. Pendência de ambiente
+  só aparece onde atrapalha, na linha do alvo que ela limita ("Só espelho:
+  falta o Appium…"), com "Resolver…" levando ao cartão certo.
+- **Primeira vez em três passos.** Numa máquina sem plataforma pronta, a
+  Início mostra motor, escolha da plataforma (com o que já foi achado e a
+  sugerida em destaque, e "Preparar Android…"/"Preparar iOS…") e conectar um
+  aparelho. Troca sozinha para o dia a dia quando a primeira plataforma fica
+  pronta.
+- **Tela Ambiente (⌘5).** Todo o diagnóstico que estava na Início: resumo por
+  grupo, cada pendência com o comando, "Instalar no Terminal…" e "Copiar
+  Comando", a tabela do que funciona em cada área por plataforma e os
+  componentes por grupo. Fica fixa no rodapé da barra lateral, com a contagem
+  do que falta; a Início perdeu a contagem.
+- **Recentes locais.** Page Object salvo, flow do Maestro exportado ou rodado
+  e auditoria do Relatório entram em "Continuar de onde parou" (até 20, dos
+  últimos 30 dias, em `~/Library/Application Support/Mo baile/recentes.json`).
+  Clicar reabre na área certa; item cujo arquivo sumiu sai da lista.
+- **"Rodar Flow…"** no cartão do aparelho roda um `.yaml` do Maestro pelo
+  runner do motor, sem rede.
+- Métodos `home.summary` e `home.forget_recent` e a notificação
+  `home.changed` (aditivos; `PROTOCOL_VERSION` continua 2). O CHANGELOG passa
+  a ir dentro do app, para as novidades.
+- Especificação e maquetes em `docs/design/home/`.
+
+## [3.10.0] - 2026-10-23
+
+### Adicionado
+
+- **Tela Início.** Primeiro item da barra lateral, acima do Workspace: mostra
+  o que está pronto e o que falta instalar nesta máquina, por área do app
+  (espelho, hierarquia, Page Objects, Rede, Analytics, Relatório), com o
+  próximo passo e "Instalar no Terminal…" quando um script resolve. A
+  checagem é barata e se repete quando o app volta ao primeiro plano. Método
+  novo `setup.check` (aditivo; `PROTOCOL_VERSION` continua 2).
+- **Instalação numa máquina zerada.** `docs/INSTALACAO.md` lista o que o Mac
+  e o Windows precisam por recurso. Scripts `tools/setup/instalar-mac.sh` e
+  `tools/setup/instalar-windows.ps1`, e o mesmo diagnóstico no terminal com
+  `python3 -m mobaile.services.setup`. No Windows, o caminho é a interface
+  Tkinter, só com Android.
+- **Flows no formato do Maestro, rodando local.** O motor lê, confere,
+  exporta e roda flows YAML do Maestro pelo próprio runner, sem rede
+  (`flow.maestro_check`, `flow.maestro_export`, `flow.maestro_run`). Também
+  entram um lançador offline do Maestro (`tools/maestro_offline/`, sem
+  telemetria nem login) e o agente `maestro-automacao`. O estudo está em
+  `docs/research/maestro-modelo-de-automacao.md`. PyYAML é opcional (extra
+  `maestro`): sem ele, só esses métodos recusam.
+- `tools/create_local_signing_identity.sh` cria a identidade "Mo baile Local"
+  no Keychain. Com ela, o empacotamento assina sempre com a mesma identidade,
+  e as permissões dadas ao app (como a pasta Documentos) valem entre builds.
+
+### Mudado
+
+- **Toolbar só com a escolha do aparelho.** O seletor "Repassar toque |
+  Gravar passo" saiu: todo clique no espelho toca no aparelho e grava o
+  passo. Saíram também os itens equivalentes do menu Dispositivo e da paleta
+  de comandos.
+
+### Corrigido
+
+- **O app não pede mais acesso à pasta Documentos ao abrir.** Um `.pth` de
+  instalação editável no Python do sistema apontava para uma pasta em
+  `~/Documents`, e o macOS pedia acesso toda vez que o motor subia. O motor e
+  a sonda do Python agora sobem com `python3 -S`, e só o site-packages entra
+  no caminho, sem seguir `.pth` (`mobaile/_site.py`).
+- **Auditoria de log grande não expira mais.** Um log de Analytics perto do
+  limite de 64 MB levava 78 s e estourava o timeout de 60 s do
+  `report.audit`. Agora leva cerca de 2 s; um log de 17 MB caiu de 10 s para
+  0,6 s, e o export ficou 15% mais rápido. O resultado é o mesmo, conferido
+  contra a versão anterior. Medição em `docs/DESEMPENHO_RELATORIO.md`
+  (`tools/bench_report.py`).
+- **Parâmetro numérico inválido no RPC vira `invalid_input`.** `limit`
+  negativo devolvia o histórico errado. Texto, `NaN` e `Infinity` em `limit`,
+  `poll_interval`, `fps`, `max_width`, `quality`, `max_size`, `step_num`,
+  `before_s`, `after_s` e nas coordenadas viravam erro interno ou passavam
+  adiante. As faixas estão em `docs/PROTOCOLO_RPC.md`.
+
+## [3.9.0] - 2026-10-23
+
+### Adicionado
+
+- **Período do log no cabeçalho do relatório.** Ao lado da plataforma, em
+  destaque, o HTML exportado mostra a data e a hora do primeiro ao último
+  evento do log auditado, com a duração: "Log 08/10 10:00:00 até 10:06:00 ·
+  6 min". A data aparece quando o log a tem (o logcat traz dia e mês; o log
+  do iOS, o ano também) e só se repete no fim se o dia mudou. O Markdown
+  ganhou a linha "Período do log".
+
+## [3.8.0] - 2026-10-23
+
+### Adicionado
+
+- **Relatório HTML interativo com a identidade do Mo baile.** O
+  `relatorio.html` do Exportar agora é a aba Relatório fora do app: toolbar
+  de vidro com o ícone, barra lateral com as seções da spec, anel de
+  conformidade, filtro igual ao do app (Todas, Pedem Ação, Divergentes, Não
+  Disparadas, OK, Fora da Spec), busca, cards com o print ampliável e a
+  tabela Parâmetro · Obtido · Esperado por fluxo, o "Bloco" com Copiar,
+  visão em tabela ordenável e "Fora da spec" em tabelas. Segue o claro e o
+  escuro do sistema (com seletor), Aumentar contraste, Reduzir movimento e
+  Reduzir transparência. Rodapé em letras miúdas: "Gerado pelo Mo baile".
+- O design system inteiro vai embutido no HTML (tokens, vidro, molas e
+  componentes `.mb-*`), copiado de `docs/design/design-system` por
+  `tools/sync_report_assets.py`; um teste falha se a cópia ficar para trás.
+- Animações com Motion 13.5.1 (MIT, embutido, sem internet) nas molas do
+  design system. Toda animação termina em até 1,5 s, e sem JavaScript ou na
+  impressão o conteúdo aparece inteiro.
+
+### Segurança
+
+- O HTML exportado tem política de conteúdo: nenhuma requisição de rede e só
+  os três scripts embutidos rodam, autorizados pelo hash. Texto da spec e do
+  log continua sempre escapado.
+
+## [3.7.0] - 2026-10-22
+
+### Adicionado
+
+- **Copiar Bug no Relatório.** Numa validação divergente ou não disparada, o
+  botão "Copiar Bug" do painel Validação (ou o menu de contexto da linha)
+  copia o bug no modelo do time: Resultado Obtido com obtido × esperado de
+  cada parâmetro que diverge (ou o esperado, no não disparado), passos para
+  reproduzir com fluxo, tela e ação, anexos e a tag `automacao`. Usuário,
+  base e versão ficam em branco para preencher. Vão junto duas imagens: o
+  painel Validação desenhado em claro e o print do card do Figma. O clipboard
+  leva RTFD, HTML com as imagens embutidas e texto puro, e cada destino usa o
+  que entende. "Copiar Imagens do Bug" põe só as duas imagens lado a lado.
+- **Editar o card da spec no app.** O botão "Editar" do inspector abre um
+  formulário com seção, título, evento, parâmetros, variações e observação.
+  Salvar (⌘S) grava no `.json` da spec e audita de novo, mantendo a linha
+  escolhida. Só esses campos mudam: o print, `por_fluxo`,
+  `params_por_fluxo`, observação por fluxo e chaves desconhecidas ficam como
+  estavam. A spec inteira é validada antes, e o arquivo é trocado de uma vez.
+- Métodos `report.card` e `report.card_update`, e o campo `expected` em cada
+  resultado de `report.audit` (o que a variação espera, com o fluxo
+  aplicado). Tudo aditivo: `PROTOCOL_VERSION` continua 2.
+
+## [3.6.2] - 2026-10-22
+
+### Corrigido
+
+- **A janela principal não aparece mais atrás do splash.** A cena `Window`
+  abria a janela junto com o app, e o splash de abertura ficava por cima com a
+  tela inteira já desenhada no fundo. A janela continua sendo criada na
+  abertura (é ela que sobe o motor), mas nasce transparente e aparece com o
+  mesmo esmaecer da saída do splash. Janela › Mostrar Splash não esconde nada.
+  Coberto em `SplashTimingTests`.
+
+## [3.6.1] - 2026-10-22
+
+Layout em monitores pequenos. A janela declarava 980 × 600 pt de mínimo, mas
+pedia de verdade 1.743 pt de largura no Relatório com uma auditoria aberta
+(mais que a tela de um MacBook Air), 1.337 a 1.357 pt nas outras áreas e 838 pt
+de altura com uma spec aberta. Num monitor menor, o conteúdo era cortado nas
+bordas.
+
+### Corrigido
+
+- **Inspector próprio.** O `.inspector` aninhado na `NavigationSplitView`
+  media as colunas pela largura ideal e contava a barra lateral em dobro. O
+  inspector virou um painel da área, com divisória arrastável e a largura
+  guardada por janela; o botão de mostrar e ocultar foi para o fim da toolbar.
+- **Tabela e detalhe sem `VSplitView`** em Rede, Analytics e Relatório: o
+  NSSplitView aninhado somava largura à janela e não repassava o mínimo do
+  conteúdo. Agora é uma divisória própria (`VerticalSplit`), também arrastável.
+- **Request | Response e Validação | Bloco viram abas** quando a coluna fica
+  estreita (`AdaptivePair`). Lado a lado, Rede pedia 564 pt para um workspace
+  que declarava 360, e o excesso empurrava o espelho para baixo da barra
+  lateral e o inspector para fora da janela.
+- **Espelho e inspector cedem até o mínimo** antes de a área transbordar
+  (`layoutPriority`); com folga, voltam à largura arrastada.
+- **Resumo do Relatório quebra linha** no estreito: a origem sobe para a linha
+  da conformidade e as contagens descem para a seguinte.
+
+Mínimos medidos com barra lateral e inspector abertos: Page Objects 1.090 ×
+565, Rede e Analytics 1.070 × 552, Relatório 949 × 548 (com auditoria) e 909 ×
+361 (vazio). `ToolbarLayoutTests` passa a medir as áreas com conteúdo, com teto
+de 1.100 × 600, e confere que o conteúdo do workspace e do inspector cabe no
+mínimo declarado. `WindowSnapshotTests.testTelasPequenas` fotografa todas as
+áreas em 980 × 600 e 1.280 × 720.
+
 ## [3.6.0] - 2026-10-15
 
 Rodada 2 do orquestrador: cinco funcionalidades escolhidas na mesa de

@@ -7,7 +7,9 @@ reorganizacao. Se algum voltar a passar como "aceito", a falha voltou.
 import json
 import os
 import stat
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from mobaile.domain.errors import InvalidInputError
@@ -21,7 +23,9 @@ from mobaile.security import (
     secure_runtime_dir,
     validate_coordinate,
     validate_device_id,
+    validate_integer,
     validate_keycode,
+    validate_number,
     validate_port,
     write_executable_script,
 )
@@ -85,9 +89,18 @@ class TestValidacaoNumerica(unittest.TestCase):
     def test_coordenadas(self):
         self.assertEqual(validate_coordinate(10), 10)
         self.assertEqual(validate_coordinate(10.7), 10)
-        for invalida in (-1, 999999, "10", None, True):
+        for invalida in (-1, 999999, "10", None, True, float("nan"), float("inf")):
             with self.subTest(valor=invalida), self.assertRaises(InvalidInputError):
                 validate_coordinate(invalida)
+
+    def test_numero_e_inteiro_dos_parametros_do_rpc(self):
+        self.assertEqual(validate_number(0.5, "fps", minimum=0.1, maximum=60), 0.5)
+        self.assertEqual(validate_integer(200, "limit", minimum=1, maximum=1000), 200)
+        self.assertEqual(validate_integer(3.0, "limit", minimum=1, maximum=1000), 3)
+        for invalido in ("5", None, True, float("nan"), float("inf"), -1, 10**400, 3.5):
+            with self.subTest(valor=invalido), self.assertRaises(InvalidInputError) as ctx:
+                validate_integer(invalido, "limit", minimum=1, maximum=1000)
+            self.assertIn("limit", ctx.exception.message)
 
     def test_keycode_e_porta(self):
         self.assertEqual(validate_keycode(224), 224)
@@ -199,6 +212,66 @@ class TestArtefatoExecutavel(unittest.TestCase):
             self.assertNotIn(os.getcwd(), str(caminho), "artefato nao vai para a raiz do projeto")
         finally:
             os.unlink(caminho)
+
+
+
+class TestPastaDeLogs(unittest.TestCase):
+    """`logs_dir()`: log de diagnostico pode conter URL, nome de tela e caminho
+    do usuario. A pasta nasce so para o dono e nao segue symlink plantado."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="mobaile-logs-")
+        self.addCleanup(self._tmp.cleanup)
+        self.raiz = self._tmp.name
+
+    @staticmethod
+    def _logs_dir():
+        # Importado aqui: a funcao e nova e o resto do modulo nao depende dela.
+        from mobaile.security import logs_dir
+
+        return logs_dir()
+
+    def test_respeita_a_variavel_e_cria_com_0700(self):
+        alvo = os.path.join(self.raiz, "a", "logs")
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": alvo}):
+            pasta = self._logs_dir()
+        self.assertEqual(str(pasta), alvo)
+        self.assertTrue(os.path.isdir(alvo))
+        self.assertEqual(stat.S_IMODE(os.stat(alvo).st_mode), 0o700)
+
+    def test_pasta_que_ja_existia_frouxa_e_fechada(self):
+        alvo = os.path.join(self.raiz, "logs")
+        os.mkdir(alvo, 0o755)
+        os.chmod(alvo, 0o755)
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": alvo}):
+            self._logs_dir()
+        self.assertEqual(stat.S_IMODE(os.stat(alvo).st_mode), 0o700)
+
+    def test_recusa_symlink(self):
+        destino = os.path.join(self.raiz, "de-outro")
+        os.mkdir(destino, 0o755)
+        os.chmod(destino, 0o755)
+        atalho = os.path.join(self.raiz, "logs")
+        os.symlink(destino, atalho)
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": atalho}), self.assertRaises(OSError):
+            self._logs_dir()
+        self.assertEqual(stat.S_IMODE(os.stat(destino).st_mode), 0o755, "destino nao e tocado")
+
+    def test_recusa_arquivo_no_lugar_da_pasta(self):
+        alvo = os.path.join(self.raiz, "logs")
+        with open(alvo, "w", encoding="utf-8"):
+            pass
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": alvo}), self.assertRaises(OSError):
+            self._logs_dir()
+
+    def test_padrao_no_macos_e_fora_dele(self):
+        sem_variavel = {k: v for k, v in os.environ.items() if k != "MOBAILE_LOG_DIR"}
+        with patch.dict(os.environ, sem_variavel, clear=True), \
+             patch("pathlib.Path.home", return_value=Path(self.raiz)):
+            with patch("sys.platform", "darwin"):
+                self.assertEqual(self._logs_dir(), Path(self.raiz) / "Library" / "Logs" / "Mo baile")
+            with patch("sys.platform", "linux"):
+                self.assertEqual(self._logs_dir(), Path(self.raiz) / ".mobaile" / "logs")
 
 
 if __name__ == "__main__":

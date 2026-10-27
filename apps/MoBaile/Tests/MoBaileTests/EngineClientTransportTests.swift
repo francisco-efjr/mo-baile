@@ -92,6 +92,8 @@ final class EngineClientTransportTests: XCTestCase {
 
     private var raiz: URL!
     private var python: URL!
+    /// Cache de bytecode do teste, fora da raiz e fora do cache do usuário.
+    private var cacheDeBytecode: URL!
 
     override func setUpWithError() throws {
         let candidatos = ["/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"]
@@ -102,6 +104,8 @@ final class EngineClientTransportTests: XCTestCase {
 
         raiz = FileManager.default.temporaryDirectory
             .appendingPathComponent("mobaile-motor-falso-\(UUID().uuidString)")
+        cacheDeBytecode = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mobaile-pycache-\(UUID().uuidString)")
         let pacote = raiz.appendingPathComponent("mobaile/rpc")
         try FileManager.default.createDirectory(at: pacote, withIntermediateDirectories: true)
         try Data().write(to: raiz.appendingPathComponent("mobaile/__init__.py"))
@@ -111,13 +115,20 @@ final class EngineClientTransportTests: XCTestCase {
 
     override func tearDownWithError() throws {
         if let raiz { try? FileManager.default.removeItem(at: raiz) }
+        if let cacheDeBytecode { try? FileManager.default.removeItem(at: cacheDeBytecode) }
     }
 
-    private func subirMotorFalso(prazoDeSaida: Double = 3, registro: URL? = nil) async throws -> EngineClient {
+    private func subirMotorFalso(
+        prazoDeSaida: Double = 3,
+        registro: URL? = nil,
+        ambiente: [String: String] = [:]
+    ) async throws -> EngineClient {
         var configuracao = EngineConfiguration(pythonURL: python, sourcePath: raiz.path)
+        configuracao.pycachePrefix = cacheDeBytecode.path
         if let registro {
             configuracao.extraEnvironment["MOBAILE_FAKE_LOG"] = registro.path
         }
+        configuracao.extraEnvironment.merge(ambiente) { _, novo in novo }
         let client = EngineClient(configuration: configuracao, shutdownGrace: prazoDeSaida)
         try await client.start()
         return client
@@ -367,5 +378,64 @@ final class EngineClientTransportTests: XCTestCase {
         XCTAssertEqual(status, 3, "a queda não foi avisada à supervisão")
         let rodando = await client.isRunning
         XCTAssertFalse(rodando)
+    }
+
+    // MARK: - Bytecode fora do bundle
+
+    /// Pastas `__pycache__` abaixo de `pasta`, com o caminho relativo a ela.
+    private func pastasDeBytecode(em pasta: URL) -> [String] {
+        let base = pasta.resolvingSymlinksInPath().path
+        let itens = FileManager.default.enumerator(at: pasta, includingPropertiesForKeys: nil)
+        return (itens?.allObjects as? [URL] ?? [])
+            .filter { $0.lastPathComponent == "__pycache__" }
+            .map { String($0.resolvingSymlinksInPath().path.dropFirst(base.count)) }
+            .sorted()
+    }
+
+    /// Um Python que, deixado por conta própria, grava `__pycache__` ao lado do
+    /// fonte.
+    ///
+    /// O `/usr/bin/python3` da Apple já manda o bytecode para
+    /// `~/Library/Caches/com.apple.python` e esconderia o defeito; o do
+    /// python.org e o do Homebrew, que o app costuma usar, gravam ao lado.
+    private func pythonQueGravaAoLadoDoFonte() throws -> URL {
+        let candidatos = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
+        for caminho in candidatos where FileManager.default.isExecutableFile(atPath: caminho) {
+            let sonda = Process()
+            sonda.executableURL = URL(fileURLWithPath: caminho)
+            sonda.arguments = ["-S", "-c", "import sys; print(sys.pycache_prefix is None)"]
+            var ambiente = ProcessInfo.processInfo.environment
+            ambiente["PYTHONPYCACHEPREFIX"] = nil
+            sonda.environment = ambiente
+            let saida = Pipe()
+            sonda.standardOutput = saida
+            sonda.standardError = FileHandle.nullDevice
+            try sonda.run()
+            sonda.waitUntilExit()
+            let texto = String(decoding: saida.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            if texto.trimmingCharacters(in: .whitespacesAndNewlines) == "True" {
+                return URL(fileURLWithPath: caminho)
+            }
+        }
+        throw XCTSkip("nenhum python3 que grave bytecode ao lado do fonte (só o da Apple)")
+    }
+
+    /// No app, a raiz do motor é `Contents/Resources/engine/src`, dentro do
+    /// bundle assinado. Um `.pyc` gravado ali quebra o selo e o `codesign
+    /// --verify --deep --strict` passa a falhar depois do primeiro uso (MEL-2).
+    func testMotorNaoGravaBytecodeNaRaizDoCodigo() async throws {
+        python = try pythonQueGravaAoLadoDoFonte()
+        // O app aberto pelo Finder não herda o PYTHONDONTWRITEBYTECODE de um
+        // shell de desenvolvimento. Vazio, o Python o trata como ausente.
+        let client = try await subirMotorFalso(ambiente: ["PYTHONDONTWRITEBYTECODE": ""])
+        _ = try await client.call("eco", as: Eco.self)
+        await client.stop()
+
+        XCTAssertEqual(pastasDeBytecode(em: raiz), [], "o motor gravou bytecode na raiz do código")
+        // O cache continua existindo, só que fora: a partida segue rápida. Com
+        // o prefixo, o Python espelha o caminho do fonte sem `__pycache__`.
+        let gravados = (FileManager.default.enumerator(at: cacheDeBytecode, includingPropertiesForKeys: nil)?
+            .allObjects as? [URL] ?? []).filter { $0.pathExtension == "pyc" }
+        XCTAssertFalse(gravados.isEmpty, "o bytecode não foi para o cache configurado")
     }
 }

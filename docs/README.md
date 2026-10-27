@@ -16,6 +16,7 @@ Para começar: [README do repositório](../README.md) e
 | [PROTOCOLO_RPC.md](PROTOCOLO_RPC.md) | Contrato JSON-RPC entre motor e front. Mudou? `make fixtures` |
 | [adr/](adr/) | Decisões de arquitetura, uma por arquivo (lista abaixo) |
 | [SEGURANCA.md](SEGURANCA.md) | Auditoria de segurança, correções e pendências. Política de reporte: [SECURITY.md](../SECURITY.md) |
+| [INSTALACAO.md](INSTALACAO.md) | O que instalar numa máquina zerada (Mac e Windows), por recurso, e a tela Início |
 | [VERSIONAMENTO.md](VERSIONAMENTO.md) | SemVer obrigatório a cada push, hook e CI |
 | [RELEASE.md](RELEASE.md) | Empacotamento, workflow de release, assinatura e notarização |
 | [QA.md](QA.md) | Estado da suíte e roteiro de verificação manual |

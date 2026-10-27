@@ -34,11 +34,13 @@ Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 | `proxy.event` | Uma requisição HTTP foi observada |
 | `analytics.event` | Um evento de tagueamento foi capturado |
 | `device.changed` | Um alvo foi conectado ou desconectado. `device_id` nulo significa que sumiu. Não é emitida pela escolha manual (`session.select_device`) nem ao ligar o vigia com um alvo já escolhido: só a chegada e a saída de um alvo geram a notificação (3.5.2) |
+| `home.changed` | O que a tela Início mostra mudou: aparelho chegou ou saiu (`reason: "device"`), ou um recente entrou ou saiu (`"recent"`). A interface relê `home.summary`; não há polling (3.11.0) |
 | `passive.step` | A escuta passiva transformou um toque no aparelho em passo gravado. Mesmo formato de `codegen.record` |
 | `passive.skipped` | Um toque no aparelho não virou passo, com `x`, `y` e o motivo |
 | `passive.text` | O texto digitado num campo foi lido e guardado no último passo de entrada |
 | `flow.log` | Uma linha de saída da execução do fluxo |
-| `flow.finished` | A execução do fluxo terminou, com `success` e `message` |
+| `flow.step` | Começou um passo de nível superior do fluxo: `{index, total}`, com `index` a partir de 1. Vale para `flow.run` (cada passo gravado) e `flow.maestro_run` (cada comando de topo do YAML; `onFlowStart`, `onFlowComplete` e os subpassos de `runFlow`/`retry` não contam). Sem `run_id`: a trava de execução já impede duas ao mesmo tempo (3.12.0) |
+| `flow.finished` | A execução do fluxo terminou, com `success`, `message` e `cancelled`. `cancelled` é `true` quando a execução parou por `flow.stop` (ou encerramento do motor); nesse caso `success` é sempre `false`, então quem não lê `cancelled` continua sem contar a parada como aprovada. `cancelled` existe desde a 3.12.0: front que fala com motor anterior trata a ausência como `false` |
 | `$/progress` | Andamento de um método longo. Ver "Progresso" |
 
 ## Erros
@@ -78,7 +80,8 @@ O front chama `engine.hello` antes de qualquer outra coisa:
   "engine_version":"0.1.0",
   "capabilities":["cancel","progress","lanes"],
   "methods":{"hierarchy.dump":{"lane":"capture","timeout_s":60,"progress":true}, "...":{}},
-  "notifications":["stream.frame","stream.settled","$/progress","..."]}}
+  "notifications":["stream.frame","stream.settled","$/progress","..."],
+  "log_path":"/Users/qa/Library/Logs/Mo baile/engine.log"}}
 ```
 
 - Se `protocol_version` do cliente for diferente da do motor, o motor responde
@@ -89,6 +92,11 @@ O front chama `engine.hello` antes de qualquer outra coisa:
   esperar antes de desistir da chamada, **contado do envio e incluindo o tempo
   que o pedido passa na fila** atrás de outros do mesmo domínio. O front usa esse
   valor, e não uma tabela própria: há uma fonte de verdade só.
+- `log_path` é o arquivo de log deste motor (`engine.log` na pasta de
+  `logs_dir()`, 0600, rotação de 1 MB × 3, URLs redigidas), ou `null` quando a
+  pasta de logs não pôde ser usada e o motor subiu só com o stderr. O front o
+  cita na mensagem de queda. Campo aditivo, sem mudar a versão do protocolo; o
+  `engine.info` traz o mesmo campo.
 - `engine.hello` não é obrigatório para o motor atender. Clientes antigos, o
   harness de QA e a interface Tk continuam funcionando sem ele.
 
@@ -103,7 +111,7 @@ serial por domínio**. Uma chamada lenta numa fila não atrasa as outras filas.
 | `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
 | `capture` | leitura de tela e árvore, que pode levar segundos, e a escuta passiva | `hierarchy.dump`, `screen.capture`, `screen.size`, `passive.start`, `passive.stop` |
 | `services` | serviços de fundo que o motor liga e desliga | `proxy.*`, `analytics.*` (menos `analytics.ios_devices`), `flow.*`, `recording.start`, `recording.stop` |
-| `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `analytics.ios_devices` |
+| `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `setup.check`, `home.summary`, `analytics.ios_devices` |
 | `environment` | preparo de ambiente, que pode levar minutos | `wda.start`, `simulators.boot`, `simulators.shutdown`, `emulators.boot` |
 | `report` | aba Relatório: ler spec e log, auditar, gravar arquivos e OCR dos prints. Não toca aparelho | `report.spec`, `report.audit`, `report.export`, `report.import` |
 
@@ -173,8 +181,8 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações |
-| `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos |
+| `engine.hello` | `protocol_version`, `client` | versão do contrato, versão do motor, capacidades, tabela de métodos e notificações, `log_path` |
+| `engine.info` | — | versão, plataforma, caminhos, disponibilidade de adb e scrcpy, estado do proxy, lista de métodos, `log_path` |
 | `engine.shutdown` | — | `{stopped}` na hora; o desmonte roda depois que a resposta sai. Fim do stdin e SIGTERM encerram pelo mesmo caminho, sem interromper o desmonte |
 | `session.select_device` | `platform`, `device_id` | plataforma e alvo em uso. Se o proxy estava configurado em outro aparelho Android, desfaz a configuração nele. O alvo escolhido fica fixo no vigia: a varredura seguinte não o troca pelo primeiro da lista, e não há `device.changed` redundante (3.5.2) |
 | `session.correlate` | `step_num`, `before_s` (padrão 1), `after_s` (padrão 4) | requisições (`requests`, ids de `proxy.event`) e eventos de analytics (`events`, ids de `analytics.event`) cuja hora cai na janela do passo: de `recorded_at - before_s` até `recorded_at + after_s` ou até o `recorded_at` do passo seguinte, o que vier antes. `window` é `[início, fim]` em epoch; `probable` é sempre `true` (atribuição por tempo, não causal). Todos os carimbos são do relógio do Mac na recepção. Passo inexistente ou sem hora: `invalid_input` (3.6) |
@@ -187,6 +195,9 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | Método | Parâmetros | Devolve |
 |---|---|---|
 | `diagnostics.check` | — | estado medido do ambiente nas duas plataformas, com detalhe e ação sugerida por checagem |
+| `setup.check` | — | o que está instalado (tela Ambiente; até a 3.10.0, tela Início): `system`, `python` (`version`, `path`), `groups` (`motor`, `android`, `ios`, `extras`, cada um com `components`: `id`, `label`, `state`, `detail`, `required`, `install` = alvo de `tools/setup/instalar-mac.sh`, `link`, `needed_for`), `features` (`page_objects`, `network`, `analytics`, `report`, com o estado por plataforma), `pending` (obrigatórios que faltam) e `next_step`. Só procura arquivos: responde em décimos de segundo. Desde a 3.10.0 |
+| `home.summary` | — | o que a tela Início mostra (3.11.0). `state`: `first_run` (nenhuma plataforma utilizável) ou `daily`. `python` como no `setup.check`. `environment`: `ready` e `total` (só obrigatórios, das plataformas que contam) e `pending` (`id`, `title`, `install`, `link`, `blocks`: `area` — `*` é a plataforma inteira —, `platform`, `effect`). `platforms`: cartões da Primeira vez (`platform`, `ready`, `found`, `missing`, `install`, `link`). `suggested_platform`. `targets`: até 6 alvos (`id`, `name`, `platform`, `kind` = `simulator`, `emulator` ou `physical`, `running`, `connected`, `capabilities` com `mirror`, `tap`, `record`, e `blocked_by` com ids de `pending`). `recent`: até 20 itens dos últimos 30 dias (`kind` = `flow`, `maestro`, `report` ou `page_object`, `title`, `subtitle`, `path`, `at` em epoch), guardados em `~/Library/Application Support/Mo baile/recentes.json` (`MOBAILE_DATA_DIR` troca a pasta). O motor não confere se o arquivo ainda existe. `whats_new`: `{version, items}` da seção da versão no CHANGELOG embutido, ou nulo |
+| `home.forget_recent` | `path` | `{removed}`. Tira o item dos recentes; a interface chama quando reabrir falha porque o arquivo sumiu (3.11.0) |
 | `simulators.list` | — | todos os simuladores instalados, ligados ou não, com os ligados primeiro |
 | `simulators.boot` | `udid`, `open_app` | liga o simulador e traz a janela do Simulator para a frente. Sem `udid`, escolhe o primeiro (preferindo um já ligado) |
 | `simulators.shutdown` | `udid` | desliga |
@@ -239,7 +250,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `proxy.events` | `limit` | histórico recente |
 | `proxy.clear` | — | limpa o histórico |
 | `proxy.diagnose` | — | "por que não vejo tráfego?": `proxy_running`, `device_configured` (Android com proxy ligado; `null` quando não se aplica), `netlog_running`, `platform`, `requests_total`, `tunnels_total`, `tunnels_failed` (túneis que o proxy não conseguiu conectar), `tunnels_active` (abertos agora, ainda sem evento), `last_event_age_s` e `causes` (lista de `{code, title, detail, fix}`, da causa mais à menos provável; vazia quando nada aponta problema). Códigos: `proxy_stopped`, `ios_no_proxy_support`, `proxy_not_on_device`, `no_connections`, `tunnels_failing`, `only_tunnels`, `netlog_running_no_events`. Pinning não é diagnosticado: o proxy repassa o TLS sem abrir (ADR 0004), então o app vê o certificado real. Lê o aparelho pelo adb: fila `services` (3.6) |
-| `netlog.start` | iOS: `udid` (opcional; sem ele, o primeiro iPhone confiado). Android: `device_id` (opcional; sem ele, o aparelho da sessão) | tráfego HTTPS do app em debug, sem proxy nem certificado, emitido como `proxy.event`. Escolhe pela plataforma da sessão. **iOS:** lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` (o app roda com `CFNETWORK_DIAGNOSTICS=3` no scheme; corpo normalmente indisponível). **Android:** lê do `adb logcat` o log do `HttpLoggingInterceptor` do OkHttp (o build de debug precisa do interceptor; BASIC traz a linha, HEADERS os headers, BODY os corpos), funciona com o debugger do Android Studio conectado; sem aparelho na sessão, `device_not_found`. Devolve `running`, `device_id`, `raw_log` (iOS: blocos brutos, headers sensíveis mascarados; Android: `null`) e `source` (`cfnetwork` ou `okhttp_logcat`) |
+| `netlog.start` | iOS: `udid` (opcional; sem ele, o primeiro iPhone confiado). Android: `device_id` (opcional; sem ele, o aparelho da sessão) | tráfego HTTPS do app em debug, sem proxy nem certificado, emitido como `proxy.event`. Escolhe pela plataforma da sessão. **iOS:** lê pelo cabo o log `CFNETWORK_DIAGNOSTICS` (o app roda com `CFNETWORK_DIAGNOSTICS=3` no scheme; corpo normalmente indisponível). **Android:** lê do `adb logcat` o log do `HttpLoggingInterceptor` do OkHttp (o build de debug precisa do interceptor; BASIC traz a linha, HEADERS os headers, BODY os corpos), funciona com o debugger do Android Studio conectado; sem aparelho na sessão, `device_not_found`. Devolve `running`, `device_id`, `raw_log` (iOS: caminho do arquivo de blocos brutos na pasta dos logs do motor, headers sensíveis sempre mascarados, `null` se a pasta for recusada; Android: `null`) e `source` (`cfnetwork` ou `okhttp_logcat`) |
 | `netlog.stop` | — | para a leitura nas duas plataformas; devolve `running` |
 | `analytics.start` | `package` (opcional), `ios_source` (iOS: `auto`, `simulator` ou UDID do iPhone) | começa a escutar o tagueamento; no iOS sem simulador, `auto` usa o iPhone conectado por cabo. Devolve `running`, `source`, `device_id` |
 | `analytics.stop` | — | para de escutar |
@@ -260,9 +271,17 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `flow.run` | — | roda os passos gravados no alvo ativo. O andamento chega por `flow.log` e `flow.finished` |
+| `flow.run` | — | roda os passos gravados no alvo ativo. O andamento chega por `flow.step`, `flow.log` e `flow.finished` |
 | `flow.stop` | — | pede a interrupção após o passo atual. Idempotente |
 | `flow.status` | — | `{running, cancelled}` |
+| `flow.maestro_check` | `yaml` ou `path`, `env?` | valida um flow no formato do Maestro sem tocar o aparelho: `{valid, app_id, name, tags, steps}`. Comando fora do subconjunto suportado, JavaScript e comandos de IA/nuvem dão `invalid_input` com o motivo |
+| `flow.maestro_export` | `app_id?`, `name?`, `save?` | os passos gravados como flow do Maestro: `{yaml, variables, steps, path?}`. Texto digitado não vai para o YAML: vira `${VARIAVEL}`, listada em `variables`. Com `save`, grava em `~/Documents/Mo baile/flows/` sem sobrescrever |
+| `flow.maestro_run` | `yaml` ou `path`, `env?` | roda o flow no alvo ativo com as esperas do Maestro (elemento até 17 s, 7 s se `optional`; hierarquia assentada após cada ação). Divide trava, `flow.stop`, `flow.step`, `flow.log` e `flow.finished` com `flow.run`. Devolve `{running, app_id, name, tags, steps}` |
+
+O formato e o que fica de fora estão em
+[research/maestro-modelo-de-automacao.md](research/maestro-modelo-de-automacao.md).
+Ler YAML pede o PyYAML no Python do motor; sem ele, os três métodos devolvem
+`invalid_input` explicando o que instalar, e o resto do motor segue igual.
 
 ### Escuta passiva
 
@@ -282,9 +301,11 @@ com `~`; o motor normaliza, confere tipo e tamanho (spec até 5 MB, log até
 | Método | Parâmetros | Devolve |
 |---|---|---|
 | `report.spec` | `path` (spec-modelo `.json`) | resumo da spec: `path`, `projeto`, `versao_especificacao`, `plataforma`, `prints_dir`, `prints_dir_exists`, `fluxos` (lista ordenada de `{key, label}`), `cards`, `variants`, `sections` |
-| `report.audit` | `spec_path`, `source` (`session`: eventos que a escuta de Analytics capturou; `file`: um log), `log_path` (com `file`), `platform` (opcional; sem ele, a da spec) | `spec` (resumo), `platform`, `source`, `log_path`, `log_stats` (`total_lidos`, `da_plataforma`, `duplicados`, `uteis`), `summary` (`total`, `ok`, `divergent`, `missing`, `compliance_rate`, `extras`, `alerts`), `results` (uma por variação: `id`, `card_index`, `section`, `card_title`, `print_path`, `flow`, `flow_label`, `event`, `variation`, `status` = `ok`, `error` ou `missing`, `checks` com `field`, `expected`, `obtained` e `ok`, `matched` com `id`, `time`, `event_name` e `params`, `occurrences`, `older_divergent`, `older_divergences`, `ga_screen`, `note`, `divergences`, `block`), `extras` e `alerts` (`event`, `screen`, `flow_name`, `component`, `detail`, `count`), `observations`, `markdown` e `tsv`. Guarda o relatório para `report.export` |
+| `report.audit` | `spec_path`, `source` (`session`: eventos que a escuta de Analytics capturou; `file`: um log), `log_path` (com `file`), `platform` (opcional; sem ele, a da spec) | `spec` (resumo), `platform`, `source`, `log_path`, `log_stats` (`total_lidos`, `da_plataforma`, `duplicados`, `uteis`), `summary` (`total`, `ok`, `divergent`, `missing`, `compliance_rate`, `extras`, `alerts`), `results` (uma por variação: `id`, `card_index`, `section`, `card_title`, `print_path`, `flow`, `flow_label`, `event`, `variation`, `status` = `ok`, `error` ou `missing`, `checks` com `field`, `expected`, `obtained` e `ok`, `expected` (o que a variação espera, já com o fluxo aplicado: lista ordenada de `{key, value}` em texto; na não disparada é a única fonte dos valores), `matched` com `id`, `time`, `event_name` e `params`, `occurrences`, `older_divergent`, `older_divergences`, `ga_screen`, `note`, `divergences`, `block`), `extras` e `alerts` (`event`, `screen`, `flow_name`, `component`, `detail`, `count`), `observations`, `markdown` e `tsv`. Guarda o relatório para `report.export` |
 | `report.export` | `directory` (opcional; sem ele, `~/Documents/Mo baile/Relatórios/<projeto>-<plataforma>-<data>`) | grava `board_auditoria.excalidraw`, `relatorio_auditoria.html`, `relatorio_auditoria.md` e `relatorio_auditoria.tsv` do último `report.audit`. Devolve `directory` e `files` (`kind`, `name`, `path`, `bytes`) |
 | `report.import` | `prints_dir`, `projeto` (opcional), `platform`, `spec_path` (opcional; sem ele, `~/Documents/Mo baile/Specs/<projeto>.json`) | OCR local (Vision) dos prints dos cards e rascunho da spec, sem sobrescrever arquivo existente. Devolve `spec_path`, `review_path` (`.revisao.md`), `spec` (resumo, ou `null` se o rascunho ainda não valida), `spec_error`, `review` (`print`, `event`, `doubts`) e `doubts_total` |
+| `report.card` | `spec_path`, `card_index` (o `card_index` dos resultados, a partir de 0) | o card como está no JSON, para editar: `card_index`, `cards` (total), `secao`, `titulo`, `evento`, `print`, `params` (lista ordenada de `{key, value}`; `value` é o valor do JSON, texto ou não), `variacoes` (lista de listas de `{key, value}`), `obs` (texto, ou `null`), `obs_por_fluxo` (a `obs` é um objeto por fluxo e não vai para o formulário) e `params_por_fluxo` (chaves dos fluxos com parâmetros próprios) |
+| `report.card_update` | `spec_path`, `card_index`, `card` com os campos do formulário (`secao`, `titulo`, `evento`, `params`, `variacoes`, `obs`, no formato de `report.card`; campo ausente fica como estava) | grava o card na spec e devolve `spec` (resumo relido) e `card` (como `report.card`). Muda só o que o formulário mostra: o print, `por_fluxo`, `params_por_fluxo`, uma `obs` por fluxo e chaves desconhecidas ficam. Texto vazio tira a chave do JSON; evento vazio, parâmetro sem nome ou repetido e expressão regular inválida respondem `invalid_input` sem gravar. A spec inteira é validada antes, e o arquivo é trocado de uma vez |
 
 `report.audit` com `source: "session"` e nenhum evento capturado responde
 `invalid_input`: um relatório com tudo "não disparado" pareceria verdadeiro.
@@ -304,6 +325,23 @@ proporção descartada.
 
 **Credencial já chega redigida.** A interface nunca recebe o token. Ver
 `docs/SEGURANCA.md`.
+
+**Parâmetro numérico fora da faixa é `invalid_input`** (desde a 3.10.0). Texto,
+`true`, `NaN`, `Infinity` e valor fora da faixa são recusados com o nome do
+parâmetro na mensagem, em vez de virar erro interno ou passar adiante. Ausente
+ou `0` continua valendo o padrão.
+
+| Parâmetro | Métodos | Faixa |
+|---|---|---|
+| `limit` | `proxy.events`, `analytics.events` | inteiro, 1 a 1.000.000 (padrão 200) |
+| `poll_interval` | `devices.watch_start` | 0,01 a 3.600 s |
+| `max_width` | `screen.capture`, `stream.start` | inteiro, 16 a 16.384 |
+| `fps` | `stream.start` | 0,1 a 120; em `scrcpy.start`, inteiro de 1 a 240 |
+| `quality` | `stream.start` | inteiro, 10 a 95 |
+| `max_size` | `scrcpy.start` | inteiro, 16 a 16.384 |
+| `step_num` | `session.correlate` | inteiro, 0 a 1.000.000 |
+| `before_s`, `after_s` | `session.correlate` | 0 a 60 s |
+| `x`, `y` | `input.tap`, `hierarchy.element_at`, `codegen.record` | 0 a 20.000; `NaN` e `Infinity` recusados |
 
 ## Mudou o contrato?
 

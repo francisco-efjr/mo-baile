@@ -201,13 +201,13 @@ final class AccessibilityTests: XCTestCase {
     /// Defeito: o espelho era anunciado como elemento "desconhecido".
     func testEspelhoTemPapelEDizOModoDoClique() throws {
         let ax = try arvore(MirrorColumn(), largura: 400, altura: 780) {
-            $0.interactionMode = .record
             $0.currentFrame = NSImage(size: NSSize(width: 10, height: 20))
         }
         let espelho = ax.node(label: "Espelho do dispositivo")
 
         XCTAssertNotNil(espelho, ax.dump)
         XCTAssertNotEqual(espelho?.role, "AXUnknown", ax.dump)
-        XCTAssertTrue(espelho?.value.contains("Gravar passo") == true, "o modo do clique não é dito: \(espelho?.value ?? "-")")
+        XCTAssertTrue(espelho?.value.contains("toca no aparelho e grava o passo") == true,
+                      "o que o clique faz não é dito: \(espelho?.value ?? "-")")
     }
 }

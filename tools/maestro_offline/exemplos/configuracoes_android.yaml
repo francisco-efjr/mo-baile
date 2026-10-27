@@ -1,0 +1,28 @@
+# Flow de exemplo, no formato do Maestro, para o app Configurações do Android
+# (emulador em inglês). Roda igual no runner do Mo baile e no Maestro offline:
+#   tools/maestro_offline/rodar_flow.py tools/maestro_offline/exemplos/configuracoes_android.yaml
+#   tools/maestro_offline/maestro-offline.sh test tools/maestro_offline/exemplos/configuracoes_android.yaml
+appId: com.android.settings
+name: Configuracoes ate System
+tags: [exemplo, offline]
+---
+- launchApp
+- assertVisible:
+    id: homepage_title
+- tapOn: "Network & internet"
+- assertVisible: "Airplane mode"
+- back
+- tapOn:
+    text: "Battery"
+    below:
+      text: "Notifications"
+- assertVisible: "Battery.*"
+- back
+# Rola ate o resumo abaixo de "System", para a linha inteira ficar na tela.
+- scrollUntilVisible:
+    element: "Languages, gestures.*"
+- tapOn: "System"
+# "Date & time" so existe dentro de System; o resumo da tela principal nao casa.
+- assertVisible: "Date & time"
+- back
+- assertNotVisible: "Date & time"

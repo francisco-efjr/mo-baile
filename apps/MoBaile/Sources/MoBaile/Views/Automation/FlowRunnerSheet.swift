@@ -32,8 +32,8 @@ struct FlowRunnerSheet: View {
             .padding(.bottom, 10)
 
             HStack(spacing: 10) {
-                ProgressBar(value: progresso, tint: corDoProgresso)
-                Text("passo \(passoAtual) de \(appState.steps.count)")
+                ProgressBar(value: andamento.fraction, tint: corDoProgresso)
+                Text("passo \(andamento.currentDisplay) de \(andamento.total)")
                     .font(DSFont.subheadline.monospacedDigit())
                     .foregroundStyle(theme.labelSecondary)
             }
@@ -85,7 +85,7 @@ struct FlowRunnerSheet: View {
         return ScrollView {
             VStack(spacing: 0) {
                 ForEach(Array(appState.steps.enumerated()), id: \.element.id) { indice, passo in
-                    let estado = estadoDoPasso(indice + 1)
+                    let estado = andamento.estado(doPassoGravado: indice + 1)
                     HStack(spacing: 8) {
                         icone(estado)
                             .frame(width: 14)
@@ -149,7 +149,8 @@ struct FlowRunnerSheet: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                 }
-                .onChange(of: appState.runLog.count) {
+                // Pela última linha, não pela contagem: no teto do log a contagem para.
+                .onChange(of: appState.runLog.last?.id) {
                     if let lastId = appState.runLog.last?.id {
                         proxy.scrollTo(lastId, anchor: .bottom)
                     }
@@ -176,19 +177,7 @@ struct FlowRunnerSheet: View {
         }
     }
 
-    private func estadoDoPasso(_ numero: Int) -> EstadoDoPasso {
-        switch appState.runState {
-        case .passed: return .ok
-        case .running:
-            if numero < appState.currentRunStep { return .ok }
-            return numero == appState.currentRunStep ? .rodando : .pendente
-        case .failed:
-            if numero < appState.currentRunStep { return .ok }
-            return numero == appState.currentRunStep ? .falhou : .pendente
-        case .idle:
-            return .pendente
-        }
-    }
+    private var andamento: FlowRunProgress { FlowRunProgress(appState) }
 
     @ViewBuilder
     private func icone(_ estado: EstadoDoPasso) -> some View {
@@ -203,23 +192,6 @@ struct FlowRunnerSheet: View {
         case .pendente:
             Image(systemName: "circle.dotted").foregroundStyle(theme.labelTertiary)
         }
-    }
-
-    private var aprovados: Int {
-        switch appState.runState {
-        case .passed: return appState.steps.count
-        case .running, .failed: return max(0, appState.currentRunStep - 1)
-        case .idle: return 0
-        }
-    }
-
-    private var passoAtual: Int {
-        min(max(appState.currentRunStep, appState.runState == .passed ? appState.steps.count : 0), appState.steps.count)
-    }
-
-    private var progresso: Double {
-        guard !appState.steps.isEmpty else { return 0 }
-        return Double(aprovados) / Double(appState.steps.count)
     }
 
     private var corDoProgresso: Color? {
@@ -240,11 +212,12 @@ struct FlowRunnerSheet: View {
         }
     }
 
-    /// Tempo do primeiro ao último registro do runner; enquanto roda, até agora.
+    /// Tempo do início da execução ao último registro do runner; enquanto roda, até agora.
     private func resumo(agora: Date) -> String {
+        let aprovados = andamento.approved
         let falhas = appState.runState == .failed ? 1 : 0
         var segundos = 0.0
-        if let inicio = appState.runLog.first?.timestamp {
+        if let inicio = appState.runStartedAt ?? appState.runLog.first?.timestamp {
             let fim = appState.runState == .running ? agora : (appState.runLog.last?.timestamp ?? inicio)
             segundos = max(0, fim.timeIntervalSince(inicio))
         }
@@ -260,5 +233,70 @@ struct FlowRunnerSheet: View {
     private var proxyLabel: String {
         guard let proxy = session.engineInfo?.proxy else { return "Proxy" }
         return "Proxy \(proxy.port)"
+    }
+}
+
+/// As contas do sheet, fora da view para o teste alcançar.
+///
+/// O total vem de `flow.step`; antes do primeiro, numa execução de passos
+/// gravados, é o número de passos gravados. No flow do Maestro a lista de
+/// passos gravados não corresponde ao que roda: fica sem destaque, e o
+/// andamento aparece só como `i/total`.
+struct FlowRunProgress {
+    let runState: RunState
+    let currentStep: Int
+    let reportedTotal: Int
+    let source: RunSource
+    let recordedCount: Int
+
+    init(runState: RunState, currentStep: Int, reportedTotal: Int, source: RunSource, recordedCount: Int) {
+        self.runState = runState
+        self.currentStep = currentStep
+        self.reportedTotal = reportedTotal
+        self.source = source
+        self.recordedCount = recordedCount
+    }
+
+    init(_ state: AppState) {
+        self.init(runState: state.runState, currentStep: state.currentRunStep, reportedTotal: state.runStepTotal,
+                  source: state.runSource, recordedCount: state.steps.count)
+    }
+
+    var total: Int {
+        if reportedTotal > 0 { return reportedTotal }
+        return source == .recordedSteps ? recordedCount : 0
+    }
+
+    /// Passos concluídos. Numa parada (`.idle`), os anteriores ao atual: o
+    /// atual pode ter sido interrompido no meio.
+    var approved: Int {
+        switch runState {
+        case .passed: return total
+        case .running, .failed, .idle: return min(max(0, currentStep - 1), total)
+        }
+    }
+
+    var currentDisplay: Int {
+        min(max(currentStep, runState == .passed ? total : 0), total)
+    }
+
+    var fraction: Double {
+        guard total > 0 else { return 0 }
+        return Double(approved) / Double(total)
+    }
+
+    func estado(doPassoGravado numero: Int) -> FlowRunnerSheet.EstadoDoPasso {
+        guard source == .recordedSteps else { return .pendente }
+        switch runState {
+        case .passed: return .ok
+        case .running:
+            if numero < currentStep { return .ok }
+            return numero == currentStep ? .rodando : .pendente
+        case .failed:
+            if numero < currentStep { return .ok }
+            return numero == currentStep ? .falhou : .pendente
+        case .idle:
+            return numero < currentStep ? .ok : .pendente
+        }
     }
 }

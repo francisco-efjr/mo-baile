@@ -45,7 +45,7 @@ final class CommandPaletteTests: XCTestCase {
         let esperados: [CommandID: String] = [
             .save: "⌘S", .openSpec: "⌘O", .exportHAR: "⇧⌘E", .search: "⌘F",
             .inspector: "⌥⌘I", .mirror: "⌥1", .workspace: "⌥2", .allPanels: "⌥⌘F", .zen: "⌃⌘Z",
-            .area(.pageObjects): "⌘1", .area(.network): "⌘2", .area(.analytics): "⌘3", .area(.report): "⌘4",
+            .area(.home): "⌘0", .area(.pageObjects): "⌘1", .area(.network): "⌘2", .area(.analytics): "⌘3", .area(.report): "⌘4",
             .refreshDevices: "⇧⌘R", .captureNow: "⌘K", .stream: "⌘E", .run: "⌘R",
             .palette: "⇧⌘P", .settings: "⌘,",
         ]
@@ -195,8 +195,6 @@ final class CommandPaletteTests: XCTestCase {
         XCTAssertFalse(estado.mirrorVisible)
         executor.perform(.inspector)
         XCTAssertFalse(estado.inspectorVisible)
-        executor.perform(.interaction(.record))
-        XCTAssertEqual(estado.interactionMode, .record)
         executor.perform(.clearTraffic)
         XCTAssertEqual(estado.pendingClear, .network, "limpar passa pela confirmação, como o botão")
         executor.perform(.structure)

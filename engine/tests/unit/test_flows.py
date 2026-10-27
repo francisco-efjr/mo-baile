@@ -213,6 +213,63 @@ class TestFlowRunner(unittest.TestCase):
         self.assertFalse(results[0][0])
         self.assertIn("cancelada", results[0][1].lower())
 
+    def test_marcador_de_passo_vira_on_step_e_nunca_saida(self):
+        # MEL-3: o marcador e para o motor. Sem `on_step` (interface Tk) ele
+        # tambem nao pode aparecer cru no log.
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "marcador.py")
+            with open(path, "w", encoding="utf-8") as source:
+                source.write(
+                    "print('\\x1emobaile.step ' + '{\"index\":1,\"total\":2}', flush=True)\n"
+                    "print('linha humana', flush=True)\n"
+                    "print('\\x1emobaile.step torto', flush=True)\n"
+                )
+            for on_step in (MagicMock(), None):
+                logs = []
+                execution = run_flow_in_background(path, logs.append, MagicMock(), on_step=on_step)
+                execution.join(5)
+                self.assertEqual(logs, ["linha humana"])
+                if on_step is not None:
+                    on_step.assert_called_once_with(1, 2)
+
+    def test_script_exportado_fora_do_motor_nao_imprime_o_marcador(self):
+        # Revisao da MEL-3: o marcador e para o motor. Quem roda o script
+        # exportado na mao nao pode ver a linha `\x1emobaile.step` crua.
+        import sys
+
+        self.generator.generate_entry(
+            self.sample_elem_android, strategy=LocatorStrategy.POSITION, click_coord=(120, 210),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = generate_hidden_runner_script(
+                steps=self.generator.get_steps(), platform="android", device_id="emulator-5554",
+                adb_path="adb", output_path=os.path.join(directory, "exportado.py"),
+            )
+            with open(path, encoding="utf-8") as source:
+                content = source.read()
+            content = content.replace('if __name__ == "__main__":',
+                'def verify_preconditions():\n    return True\n\n'
+                'def wait_between_steps(_seconds):\n    pass\n\n'
+                'def execute_android_step(step):\n    return True\n\n'
+                'if __name__ == "__main__":')
+            with open(path, "w", encoding="utf-8") as source:
+                source.write(content)
+
+            ambiente = {k: v for k, v in os.environ.items() if k != "MOBAILE_STEP_MARKER"}
+            saida = subprocess.run(
+                [sys.executable, path], capture_output=True, text=True, env=ambiente, timeout=30,
+            )
+            self.assertEqual(saida.returncode, 0, saida.stdout + saida.stderr)
+            self.assertIn("[1/1]", saida.stdout)
+            self.assertNotIn("\x1e", saida.stdout)
+
+            # Pelo motor o marcador continua chegando como `flow.step`.
+            on_step, logs = MagicMock(), []
+            execution = run_flow_in_background(path, logs.append, MagicMock(), on_step=on_step)
+            execution.join(10)
+            on_step.assert_called_once_with(1, 1)
+            self.assertFalse(any("\x1e" in linha for linha in logs))
+
     def test_cancelamento_antes_do_start_notifica_sem_criar_processo(self):
         finished = MagicMock()
         execution = FlowExecution("/tmp/unused-flow.py", MagicMock(), finished)
@@ -251,6 +308,39 @@ class TestFlowRunner(unittest.TestCase):
             execution.join(3)
             self.assertFalse(execution.is_alive())
             self.assertTrue(os.path.exists(exported), "arquivo exportado pertence ao usuario")
+
+    def test_script_orfao_antigo_some_e_o_recente_fica(self):
+        # MEL-4 (b): o script embute o texto digitado e sobra depois de um
+        # SIGKILL no motor. O próximo script gerado varre os órfãos antigos;
+        # um recente pode ser de uma execução em andamento e fica.
+        with tempfile.TemporaryDirectory() as raiz, patch("tempfile.tempdir", raiz):
+            from mobaile.security import secure_runtime_dir
+
+            pasta = secure_runtime_dir()
+            antigo = pasta / "flow_runner_antigo.py"
+            recente = pasta / "flow_runner_recente.py"
+            outro = pasta / "nao_e_runner.py"
+            for arquivo in (antigo, recente, outro):
+                arquivo.write_text("TEXTO = 'SEGREDO'\n", encoding="utf-8")
+            vinte_minutos_atras = os.path.getmtime(antigo) - 20 * 60
+            os.utime(antigo, (vinte_minutos_atras, vinte_minutos_atras))
+            os.utime(outro, (vinte_minutos_atras, vinte_minutos_atras))
+
+            novo = generate_hidden_runner_script(steps=[], platform="android", device_id="emulator-5554")
+
+            self.assertFalse(antigo.exists(), "órfão antigo some")
+            self.assertTrue(recente.exists(), "script recente pode estar rodando")
+            self.assertTrue(outro.exists(), "só os scripts do runner são varridos")
+            self.assertTrue(os.path.exists(novo), "o script da execução corrente fica")
+
+            # O modo exportado não varre nada e continua onde o usuário pediu.
+            os.utime(recente, (vinte_minutos_atras, vinte_minutos_atras))
+            exportado = generate_hidden_runner_script(
+                steps=[], platform="android", device_id="emulator-5554",
+                output_path=os.path.join(raiz, "exportado.py"),
+            )
+            self.assertTrue(os.path.exists(exportado))
+            self.assertTrue(recente.exists())
 
 
 if __name__ == "__main__":

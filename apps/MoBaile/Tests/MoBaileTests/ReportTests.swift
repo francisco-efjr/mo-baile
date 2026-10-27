@@ -183,7 +183,9 @@ final class ReportStateTests: XCTestCase {
     func testRelatorioNaoPrecisaDeAparelhoEUsaABuscaDaToolbar() {
         let estado = AppState()
         XCTAssertFalse(WorkspaceTab.report.needsDevice)
-        XCTAssertTrue(WorkspaceTab.allCases.filter { $0 != .report }.allSatisfy(\.needsDevice))
+        XCTAssertTrue(WorkspaceTab.workspaceAreas.filter { $0 != .report }.allSatisfy(\.needsDevice))
+        XCTAssertFalse(WorkspaceTab.home.needsDevice)
+        XCTAssertFalse(WorkspaceTab.environment.needsDevice)
         estado.workspaceTab = .report
         XCTAssertNil(estado.selectedDevice)
         XCTAssertTrue(estado.usesToolbarSearch, "sem aparelho, ⌘F no Relatório filtra a tabela")

@@ -162,7 +162,7 @@ enum TerminalPalette {
         switch prefix {
         case "INFO", "RUN": return info
         case "PASS": return pass
-        case "HTTP", "FA": return warn
+        case "HTTP", "FA", "STOP": return warn
         case "FAIL": return fail
         default: return text
         }

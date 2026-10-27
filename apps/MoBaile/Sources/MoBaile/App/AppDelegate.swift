@@ -6,6 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Preenchido pela cena ao aparecer. Serve so para o encerramento ordenado.
     var session: EngineSession?
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Antes de a cena abrir a janela principal: ela nasce escondida e só
+        // aparece quando o splash sai.
+        SplashController.shared.prepareLaunch()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set app name in menu bar and dock
         NSApp.setActivationPolicy(.regular)

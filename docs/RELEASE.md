@@ -52,7 +52,27 @@ Variáveis aceitas:
 |---|---|---|
 | `DEST_DIR` | `/Applications` | Onde o `.app` final fica |
 | `APP_NAME` | `Mo baile (nativo)` | Nome do bundle. `Mo baile` exige confirmação digitada |
-| `SIGN_IDENTITY` | `-` (ad-hoc) | Identidade do `codesign`. Diferente de `-` liga hardened runtime e timestamp |
+| `SIGN_IDENTITY` | `Mo baile Local`, se existir; senão `-` (ad-hoc) | Identidade do `codesign`. Outra que não essas duas liga hardened runtime e timestamp |
+
+### Identidade local (máquina de desenvolvimento)
+
+Com assinatura ad-hoc, a identidade do app muda a cada build e o macOS
+esquece as permissões dadas a ele: a pasta Documentos voltava a ser pedida
+depois de todo `make update-native`. Rode uma vez:
+
+```bash
+bash tools/create_local_signing_identity.sh
+```
+
+Ele cria o certificado autoassinado "Mo baile Local" no Keychain de login, só
+para assinatura de código (o macOS pede a sua senha para confiar nele). Daí em
+diante o empacotamento assina com ele sozinho, e o "Permitir" vale entre
+builds. Não serve para distribuir: para isso, Developer ID (abaixo).
+
+Desde a 3.10.0 o motor também sobe com `python3 -S` e não segue os `.pth` do
+site-packages (`engine/src/mobaile/_site.py`): um `.pth` de instalação
+editável com a pasta em `~/Documents` fazia o macOS pedir acesso a cada
+abertura do app.
 
 ## Assinatura e notarização (ainda desligadas)
 

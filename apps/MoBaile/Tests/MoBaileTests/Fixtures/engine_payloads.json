@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.6.0",
+      "version": "3.12.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -35,11 +35,16 @@
         "engine.hello",
         "engine.info",
         "engine.shutdown",
+        "flow.maestro_check",
+        "flow.maestro_export",
+        "flow.maestro_run",
         "flow.run",
         "flow.status",
         "flow.stop",
         "hierarchy.dump",
         "hierarchy.element_at",
+        "home.forget_recent",
+        "home.summary",
         "input.tap",
         "input.text",
         "netlog.start",
@@ -56,6 +61,8 @@
         "recording.status",
         "recording.stop",
         "report.audit",
+        "report.card",
+        "report.card_update",
         "report.export",
         "report.import",
         "report.spec",
@@ -66,6 +73,7 @@
         "screen.size",
         "session.correlate",
         "session.select_device",
+        "setup.check",
         "simulators.boot",
         "simulators.list",
         "simulators.shutdown",
@@ -74,7 +82,8 @@
         "stream.stop",
         "wda.start",
         "wda.status"
-      ]
+      ],
+      "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
     }
   },
   "engine.hello": {
@@ -82,7 +91,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.6.0",
+      "engine_version": "3.12.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -133,6 +142,21 @@
           "lane": "query",
           "timeout_s": 30,
           "progress": true
+        },
+        "setup.check": {
+          "lane": "query",
+          "timeout_s": 10,
+          "progress": false
+        },
+        "home.summary": {
+          "lane": "query",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "home.forget_recent": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
         },
         "simulators.list": {
           "lane": "query",
@@ -339,6 +363,21 @@
           "timeout_s": 15,
           "progress": false
         },
+        "flow.maestro_check": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.maestro_export": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.maestro_run": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
         "passive.start": {
           "lane": "capture",
           "timeout_s": 60,
@@ -373,6 +412,16 @@
           "lane": "report",
           "timeout_s": 600,
           "progress": true
+        },
+        "report.card": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.card_update": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
         }
       },
       "notifications": [
@@ -381,13 +430,16 @@
         "proxy.event",
         "analytics.event",
         "device.changed",
+        "home.changed",
         "passive.step",
         "passive.skipped",
         "passive.text",
         "flow.log",
+        "flow.step",
         "flow.finished",
         "$/progress"
-      ]
+      ],
+      "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
     }
   },
   "erro_incompatible_protocol": {
@@ -682,6 +734,342 @@
       }
     }
   },
+  "setup.check": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "system": "macos",
+      "python": {
+        "version": "3.12.7",
+        "path": "/opt/homebrew/bin/python3"
+      },
+      "groups": [
+        {
+          "id": "motor",
+          "title": "Motor",
+          "components": [
+            {
+              "id": "python",
+              "label": "Python 3.12.7",
+              "state": "ok",
+              "detail": "/opt/homebrew/bin/python3 · Pillow 11.3.0 · requests 2.32.3",
+              "required": true,
+              "install": "python",
+              "link": null,
+              "needed_for": ""
+            }
+          ]
+        },
+        {
+          "id": "android",
+          "title": "Android",
+          "components": [
+            {
+              "id": "adb",
+              "label": "Android Platform Tools (adb)",
+              "state": "ok",
+              "detail": "adb",
+              "required": true,
+              "install": "android",
+              "link": null,
+              "needed_for": ""
+            },
+            {
+              "id": "emulator",
+              "label": "Emulador Android",
+              "state": "ok",
+              "detail": "/Users/qa/Library/Android/sdk/emulator/emulator",
+              "required": false,
+              "install": null,
+              "link": "https://developer.android.com/studio",
+              "needed_for": ""
+            },
+            {
+              "id": "scrcpy",
+              "label": "scrcpy",
+              "state": "off",
+              "detail": "Espelho em janela própria, a 60 quadros por segundo. Sem ele, o espelho do app funciona igual.",
+              "required": false,
+              "install": "scrcpy",
+              "link": null,
+              "needed_for": "espelho a 60 quadros"
+            },
+            {
+              "id": "uiautomator2",
+              "label": "Driver UiAutomator2 do Appium",
+              "state": "off",
+              "detail": "Reserva para aparelhos em que o adb devolve a hierarquia vazia.",
+              "required": false,
+              "install": "appium-android",
+              "link": null,
+              "needed_for": "hierarquia em alguns aparelhos"
+            }
+          ]
+        },
+        {
+          "id": "ios",
+          "title": "iOS",
+          "components": [
+            {
+              "id": "xcode",
+              "label": "Xcode",
+              "state": "ok",
+              "detail": "simctl em /var/db/xcode_select_link",
+              "required": true,
+              "install": null,
+              "link": "macappstore://apps.apple.com/app/id497799835",
+              "needed_for": ""
+            },
+            {
+              "id": "appium",
+              "label": "Appium com o driver XCUITest",
+              "state": "error",
+              "detail": "Appium 2.11.0 sem o driver XCUITest. Toque, hierarquia e Page Objects no iOS dependem dele.",
+              "required": true,
+              "install": "appium",
+              "link": null,
+              "needed_for": "toque e hierarquia no iOS"
+            }
+          ]
+        },
+        {
+          "id": "extras",
+          "title": "Extras opcionais",
+          "components": [
+            {
+              "id": "pymobiledevice3",
+              "label": "pymobiledevice3",
+              "state": "off",
+              "detail": "Só para Analytics e Rede de iPhone físico por cabo. O simulador não precisa.",
+              "required": false,
+              "install": "ios-device",
+              "link": null,
+              "needed_for": "iPhone físico por cabo"
+            },
+            {
+              "id": "quartz",
+              "label": "Escuta passiva de toques",
+              "state": "ok",
+              "detail": "pyobjc-framework-Quartz instalado.",
+              "required": false,
+              "install": "escuta",
+              "link": null,
+              "needed_for": ""
+            },
+            {
+              "id": "swift",
+              "label": "Leitura de prints no Relatório",
+              "state": "ok",
+              "detail": "Swift das Command Line Tools: o texto dos cards sai do print, sem rede.",
+              "required": false,
+              "install": null,
+              "link": "macappstore://apps.apple.com/app/id497799835",
+              "needed_for": ""
+            }
+          ]
+        }
+      ],
+      "features": [
+        {
+          "id": "page_objects",
+          "platforms": [
+            {
+              "platform": "ios",
+              "state": "warn",
+              "detail": "só o espelho; falta o Appium"
+            },
+            {
+              "platform": "android",
+              "state": "ok",
+              "detail": "pronto"
+            }
+          ]
+        },
+        {
+          "id": "network",
+          "platforms": [
+            {
+              "platform": "ios",
+              "state": "warn",
+              "detail": "só iPhone físico; falta o pymobiledevice3"
+            },
+            {
+              "platform": "android",
+              "state": "ok",
+              "detail": "pronto"
+            }
+          ]
+        },
+        {
+          "id": "analytics",
+          "platforms": [
+            {
+              "platform": "ios",
+              "state": "ok",
+              "detail": "simulador"
+            },
+            {
+              "platform": "android",
+              "state": "ok",
+              "detail": "pronto"
+            }
+          ]
+        },
+        {
+          "id": "report",
+          "platforms": [
+            {
+              "platform": "any",
+              "state": "ok",
+              "detail": "funciona sem aparelho"
+            }
+          ]
+        }
+      ],
+      "pending": 1,
+      "next_step": {
+        "component": "appium",
+        "label": "Appium com o driver XCUITest",
+        "detail": "Appium 2.11.0 sem o driver XCUITest. Toque, hierarquia e Page Objects no iOS dependem dele.",
+        "install": "appium",
+        "link": null
+      }
+    }
+  },
+  "home.summary": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "state": "daily",
+      "python": {
+        "version": "3.12.7",
+        "path": "/opt/homebrew/bin/python3"
+      },
+      "environment": {
+        "ready": 3,
+        "total": 4,
+        "pending": [
+          {
+            "id": "appium",
+            "title": "Appium com o driver XCUITest",
+            "install": "appium",
+            "link": null,
+            "blocks": [
+              {
+                "area": "page_objects",
+                "platform": "ios",
+                "effect": "toque e hierarquia no iOS"
+              }
+            ]
+          }
+        ]
+      },
+      "platforms": [
+        {
+          "platform": "android",
+          "ready": true,
+          "found": [
+            "adb encontrado",
+            "emulador encontrado"
+          ],
+          "missing": [],
+          "install": "android",
+          "link": null
+        },
+        {
+          "platform": "ios",
+          "ready": false,
+          "found": [
+            "Xcode encontrado"
+          ],
+          "missing": [
+            "Appium com o driver XCUITest"
+          ],
+          "install": "appium",
+          "link": null
+        }
+      ],
+      "suggested_platform": "android",
+      "targets": [
+        {
+          "id": "1A2B3C4D-0000-4000-8000-0000000000AA",
+          "name": "iPhone 16 Pro",
+          "platform": "ios",
+          "kind": "simulator",
+          "running": true,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": false,
+            "record": false
+          },
+          "blocked_by": [
+            "appium"
+          ]
+        },
+        {
+          "id": "Pixel_9",
+          "name": "Pixel 9",
+          "platform": "android",
+          "kind": "emulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": true,
+            "record": true
+          },
+          "blocked_by": []
+        },
+        {
+          "id": "Pixel_9_Pro",
+          "name": "Pixel 9 Pro",
+          "platform": "android",
+          "kind": "emulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": true,
+            "record": true
+          },
+          "blocked_by": []
+        },
+        {
+          "id": "1A2B3C4D-0000-4000-8000-0000000000BB",
+          "name": "iPad Air 11-inch (M3)",
+          "platform": "ios",
+          "kind": "simulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": false,
+            "record": false
+          },
+          "blocked_by": [
+            "appium"
+          ]
+        }
+      ],
+      "recent": [
+        {
+          "kind": "report",
+          "title": "Relatório · Demanda",
+          "subtitle": "2 divergências · 42,9% conforme",
+          "path": "/Users/qa/Documents/Mo baile/specs/demanda.json",
+          "at": 1757030000.0
+        }
+      ],
+      "whats_new": {
+        "version": "9.9.0",
+        "items": [
+          "Tela Início nova",
+          "Tela Ambiente"
+        ]
+      }
+    }
+  },
   "simulators.list": {
     "jsonrpc": "2.0",
     "id": 1,
@@ -805,6 +1193,23 @@
       "fps": 0,
       "capture_ms": 0,
       "skipped": 0
+    }
+  },
+  "notif_flow.step": {
+    "jsonrpc": "2.0",
+    "method": "flow.step",
+    "params": {
+      "index": 2,
+      "total": 3
+    }
+  },
+  "notif_flow.finished": {
+    "jsonrpc": "2.0",
+    "method": "flow.finished",
+    "params": {
+      "success": false,
+      "message": "Automação cancelada.",
+      "cancelled": true
     }
   },
   "notif_proxy.event": {
@@ -956,6 +1361,16 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:home"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:00:00.000",
@@ -1011,6 +1426,24 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:pessoal:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-pessoal"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:01:00.000",
@@ -1043,6 +1476,24 @@
           "variation": "click:[numero]-parcela-sem-seguro",
           "status": "missing",
           "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:pessoal:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-pessoal"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
           "matched": null,
           "occurrences": 0,
           "older_divergent": 0,
@@ -1089,6 +1540,24 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:02:00.000",
@@ -1120,6 +1589,24 @@
           "variation": "click:[numero]-parcela-sem-seguro",
           "status": "missing",
           "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
           "matched": null,
           "occurrences": 0,
           "older_divergent": 0,
@@ -1176,6 +1663,28 @@
               "expected": "pedido-pessoal",
               "obtained": "pedido-pessoal",
               "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:pessoal:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-pessoal"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"14063\", \"item_name\": \"pedido-pessoal\"}]"
             }
           ],
           "matched": {
@@ -1255,6 +1764,28 @@
               "ok": true
             }
           ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"[preenchido]\", \"item_name\": \"pedido-empresa\"}]"
+            }
+          ],
           "matched": {
             "id": 0,
             "time": "10:01:45.000",
@@ -1319,7 +1850,7 @@
         }
       ],
       "observations": "Eventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_pessoal · app:pedido:pessoal:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.",
-      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- 3 cards · 7 validações · OK: 3 · Erro: 4 (sendo 2 não disparadas) · Conformidade: 42.9%\n- Plataforma: ANDROID · 10 eventos únicos (1 duplicados removidos de 11 da plataforma; 12 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:pedido:home | OK |  | 10:00:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:parcelas | OK |  | 10:01:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:parcelas | ERRO | component: obtido toggle, esperado button | 10:02:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | PDP · pedido-pessoal | add_to_cart | app:pedido:pessoal:simulacao | OK | ⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado | 10:04:00.000 | 2 |\n| Simulação | add_to_cart | PDE · pedido-empresa | add_to_cart | app:pedido:empresa:simulacao | ERRO | screen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao | 10:01:45.000 | 1 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_pessoal · app:pedido:pessoal:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
+      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- Período do log: 08/10 10:00:00 até 10:06:00 (6 min)\n- 3 cards · 7 validações · OK: 3 · Erro: 4 (sendo 2 não disparadas) · Conformidade: 42.9%\n- Plataforma: ANDROID · 10 eventos únicos (1 duplicados removidos de 11 da plataforma; 12 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:pedido:home | OK |  | 10:00:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:parcelas | OK |  | 10:01:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDP · pedido-pessoal | interaction_pedido_pessoal | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:parcelas | ERRO | component: obtido toggle, esperado button | 10:02:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | PDP · pedido-pessoal | add_to_cart | app:pedido:pessoal:simulacao | OK | ⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado | 10:04:00.000 | 2 |\n| Simulação | add_to_cart | PDE · pedido-empresa | add_to_cart | app:pedido:empresa:simulacao | ERRO | screen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao | 10:01:45.000 | 1 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_pessoal · app:pedido:pessoal:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:pessoal:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:pessoal:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
       "tsv": "Seção\tCard\tFluxo\tEvento\tVariação\tStatus\tDivergências\tHorário\tDisparos\nHome\tscreen_view\t-\tscreen_view\tapp:pedido:home\tOK\t\t10:00:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDP · pedido-pessoal\tinteraction_pedido_pessoal\tclick:parcelas\tOK\t\t10:01:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDP · pedido-pessoal\tinteraction_pedido_pessoal\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:parcelas\tERRO\tcomponent: obtido toggle, esperado button\t10:02:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tadd_to_cart\tPDP · pedido-pessoal\tadd_to_cart\tapp:pedido:pessoal:simulacao\tOK\t⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado\t10:04:00.000\t2\nSimulação\tadd_to_cart\tPDE · pedido-empresa\tadd_to_cart\tapp:pedido:empresa:simulacao\tERRO\tscreen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao\t10:01:45.000\t1\n"
     }
   },
@@ -1339,13 +1870,13 @@
           "kind": "html",
           "name": "relatorio_auditoria.html",
           "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.html",
-          "bytes": 6444
+          "bytes": 354917
         },
         {
           "kind": "markdown",
           "name": "relatorio_auditoria.md",
           "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.md",
-          "bytes": 2166
+          "bytes": 2222
         },
         {
           "kind": "tsv",
@@ -1417,6 +1948,120 @@
       "data": {
         "code": "invalid_input",
         "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log."
+      }
+    }
+  },
+  "report.card": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "card_index": 2,
+      "cards": 3,
+      "secao": "Simulação",
+      "titulo": null,
+      "evento": "add_to_cart",
+      "print": null,
+      "params": [
+        {
+          "key": "screen_name",
+          "value": "app:pedido:{fluxo}:simulacao"
+        },
+        {
+          "key": "flow_name",
+          "value": "pedido-{fluxo}"
+        },
+        {
+          "key": "insurance",
+          "value": "[0|1]"
+        },
+        {
+          "key": "value",
+          "value": "[numero]"
+        },
+        {
+          "key": "items",
+          "value": [
+            {
+              "item_id": "[preenchido]",
+              "item_name": "pedido-{fluxo}"
+            }
+          ]
+        }
+      ],
+      "variacoes": [],
+      "obs": null,
+      "obs_por_fluxo": false,
+      "params_por_fluxo": [
+        "pessoal"
+      ]
+    }
+  },
+  "report.card_update": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "pessoal",
+            "label": "PDP · pedido-pessoal"
+          },
+          {
+            "key": "empresa",
+            "label": "PDE · pedido-empresa"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "card": {
+        "card_index": 1,
+        "cards": 3,
+        "secao": "Simulação",
+        "titulo": "Parcelas",
+        "evento": "interaction_pedido_{fluxo}",
+        "print": null,
+        "params": [
+          {
+            "key": "screen_name",
+            "value": "app:pedido:{fluxo}:simulacao"
+          },
+          {
+            "key": "flow_name",
+            "value": "pedido-{fluxo}"
+          },
+          {
+            "key": "component",
+            "value": "button"
+          }
+        ],
+        "variacoes": [
+          [
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          [
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ]
+        ],
+        "obs": "Conferido com produto",
+        "obs_por_fluxo": false,
+        "params_por_fluxo": []
       }
     }
   },

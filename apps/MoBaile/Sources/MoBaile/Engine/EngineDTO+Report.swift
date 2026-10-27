@@ -65,6 +65,11 @@ extension EngineDTO {
         }
     }
 
+    struct ReportPairTextPayload: Decodable {
+        let key: String
+        let value: String?
+    }
+
     struct ReportResultPayload: Decodable {
         let id: Int
         let cardIndex: Int
@@ -85,9 +90,12 @@ extension EngineDTO {
         let note: String?
         let divergences: String
         let block: String
+        /// Ausente em motor anterior ao 3.7.0.
+        let expected: [ReportPairTextPayload]?
 
         enum CodingKeys: String, CodingKey {
             case id, section, flow, event, variation, status, checks, matched, occurrences, note, divergences, block
+            case expected
             case cardIndex = "card_index"
             case cardTitle = "card_title"
             case printPath = "print_path"
@@ -121,7 +129,8 @@ extension EngineDTO {
                 gaScreen: gaScreen,
                 note: note,
                 divergences: divergences,
-                block: block
+                block: block,
+                expected: (expected ?? []).map { ReportParam(key: $0.key, value: $0.value ?? "") }
             )
         }
     }
@@ -280,5 +289,55 @@ extension EngineDTO {
                 doubtsTotal: doubtsTotal
             )
         }
+    }
+
+    // MARK: Edição do card
+
+    struct ReportPairPayload: Decodable {
+        let key: String
+        let value: JSONValue
+    }
+
+    /// `report.card`, e o `card` de `report.card_update`.
+    struct ReportCardPayload: Decodable {
+        let cardIndex: Int
+        let cards: Int
+        let secao: String?
+        let titulo: String?
+        let evento: String?
+        let print: String?
+        let params: [ReportPairPayload]
+        let variacoes: [[ReportPairPayload]]
+        let obs: String?
+        let obsPorFluxo: Bool
+        let paramsPorFluxo: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case cards, secao, titulo, evento, print, params, variacoes, obs
+            case cardIndex = "card_index"
+            case obsPorFluxo = "obs_por_fluxo"
+            case paramsPorFluxo = "params_por_fluxo"
+        }
+
+        func toModel() -> ReportCardDraft {
+            ReportCardDraft(
+                cardIndex: cardIndex,
+                totalCards: cards,
+                secao: secao ?? "",
+                titulo: titulo ?? "",
+                evento: evento ?? "",
+                printName: print,
+                params: params.map { ReportCardDraft.Field(key: $0.key, json: $0.value) },
+                variacoes: variacoes.map { ReportCardDraft.Variation(fields: $0.map { ReportCardDraft.Field(key: $0.key, json: $0.value) }) },
+                obs: obs ?? "",
+                obsPerFlow: obsPorFluxo,
+                paramsPerFlow: paramsPorFluxo
+            )
+        }
+    }
+
+    struct ReportCardUpdatePayload: Decodable {
+        let spec: ReportSpecPayload
+        let card: ReportCardPayload
     }
 }

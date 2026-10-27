@@ -17,6 +17,9 @@ class AppState {
     
     // --- Streaming & Interaction ---
     var streamActive: Bool = false
+    /// Pendência que o Ambiente deve mostrar ao abrir (o "Resolver…" da
+    /// Início leva até o cartão dela). Consumida pela tela.
+    var environmentFocus: String? = nil
     var tapForward: Bool = false
     var passiveMode: Bool = false
     
@@ -159,6 +162,12 @@ class AppState {
     var runState: RunState = .idle
     var runLog: [LogLine] = []
     var currentRunStep: Int = 0
+    /// `total` do último `flow.step`; 0 antes do primeiro.
+    var runStepTotal: Int = 0
+    var runSource: RunSource = .recordedSteps
+    /// Início da execução. O `runLog` tem teto: a primeira linha guardada não é
+    /// necessariamente a do começo.
+    var runStartedAt: Date?
     
     // --- Mirror Frame ---
     var currentFrame: NSImage? = nil
@@ -168,9 +177,6 @@ class AppState {
     /// caixa de selecao em qualquer aparelho fora dessa proporcao, que hoje e
     /// a maioria (1080x2400, 1170x2532...).
     var deviceSize: CGSize = CGSize(width: 1080, height: 2400)
-
-    /// Modo de interacao do espelho: inspecionar, repassar toque ou gravar passo.
-    var interactionMode: InteractionMode = .forward
 
     /// Gravação de vídeo da tela do aparelho, feita pelo motor.
     /// Escuta passiva: grava o que a pessoa faz direto no aparelho.
@@ -263,7 +269,10 @@ class AppState {
     /// Sem aparelho, numa área que precisa de um, o inspector só repetiria o
     /// "Conecte um aparelho" do estado vazio. Ele sai da janela e volta ao
     /// conectar, sem mexer na escolha da pessoa, como o Xcode faz (D3).
-    var inspectorSuppressed: Bool { !isDeviceConnected && workspaceTab.needsDevice }
+    /// No Início também: ele mostra o ambiente, e não há seleção a inspecionar.
+    var inspectorSuppressed: Bool {
+        workspaceTab == .home || workspaceTab == .environment || (!isDeviceConnected && workspaceTab.needsDevice)
+    }
     var inspectorShown: Bool { inspectorVisible && !inspectorSuppressed }
 
     func toggleInspector() {

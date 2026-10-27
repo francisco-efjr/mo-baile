@@ -39,7 +39,6 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
     static let refreshDevices: CommandID = "device.refreshList"
     static let captureNow: CommandID = "device.captureNow"
     static let stream: CommandID = "device.stream"
-    static func interaction(_ mode: InteractionMode) -> CommandID { CommandID(rawValue: "device.mode.\(mode.rawValue)") }
     static let bootSimulator: CommandID = "device.bootSimulator"
     static let bootEmulator: CommandID = "device.bootEmulator"
     static let scrcpy: CommandID = "device.scrcpy"
@@ -156,7 +155,6 @@ struct CommandContext: Equatable, Sendable {
     var hasLocatorsCode = false
     var running = false
     var streamActive = false
-    var interactionMode: InteractionMode = .forward
     var proxyRunning = false
     var debugNetActive = false
     var analyticsActive = false
@@ -211,7 +209,6 @@ extension CommandContext {
         c.hasCode = c.hasActionsCode || c.hasLocatorsCode
         c.running = appState.runState == .running
         c.streamActive = appState.streamActive
-        c.interactionMode = appState.interactionMode
         c.proxyRunning = appState.proxyRunning
         c.debugNetActive = appState.debugNetActive
         c.analyticsActive = appState.analyticsListenerActive
@@ -267,11 +264,11 @@ enum CommandRegistry {
         var lista: [AppCommand] = []
 
         // Áreas
-        for (indice, area) in WorkspaceTab.allCases.enumerated() {
+        for area in WorkspaceTab.allCases {
             lista.append(AppCommand(
                 id: .area(area), title: "Ir para \(area.displayName)", category: .areas, symbol: area.symbolName,
                 keywords: area.keywords + ["área", "aba", "seção"],
-                shortcut: .cmd(Character("\(indice + 1)")),
+                shortcut: .cmd(area.shortcutDigit),
                 disabledReason: c.workspaceTab == area ? "Você já está em \(area.displayName)" : nil
             ))
         }
@@ -283,7 +280,9 @@ enum CommandRegistry {
                 category: .view, symbol: "sidebar.right",
                 keywords: ["hierarquia", "atributos", "painel", "lateral", "alternar"],
                 shortcut: .cmdOption("i"),
-                disabledReason: c.inspectorSuppressed ? "O inspector volta ao conectar um aparelho" : nil
+                disabledReason: !c.inspectorSuppressed ? nil
+                    : c.workspaceTab == .home ? "O Início não tem inspector"
+                    : "O inspector volta ao conectar um aparelho"
             ),
             AppCommand(
                 id: .mirror, title: c.mirrorVisible ? "Ocultar Espelho" : "Mostrar Espelho",
@@ -355,13 +354,6 @@ enum CommandRegistry {
                 shortcut: .cmd("e"), disabledReason: aparelho
             ),
         ]
-        for modo in InteractionMode.allCases {
-            lista.append(AppCommand(
-                id: .interaction(modo), title: "Clique no Espelho: \(modo.menuTitle)", category: .device, symbol: modo.symbolName,
-                keywords: ["modo", "clique", "toque", "tap"],
-                disabledReason: aparelho ?? (c.interactionMode == modo ? "Já é o modo em uso" : nil)
-            ))
-        }
         lista += [
             AppCommand(
                 id: .bootSimulator, title: "Abrir Simulador", category: .device, symbol: "iphone.gen3",
@@ -535,10 +527,12 @@ extension WorkspaceTab {
     /// Outros nomes que as pessoas usam para a área.
     var keywords: [String] {
         switch self {
+        case .home: return ["início", "home", "boas-vindas", "aparelho", "recentes", "novidades"]
         case .pageObjects: return ["código", "passos", "fluxo", "locators", "automação"]
         case .network: return ["http", "proxy", "tráfego", "requisições"]
         case .analytics: return ["firebase", "eventos", "tagueamento"]
         case .report: return ["auditoria", "spec", "figma", "tagueamento"]
+        case .environment: return ["ambiente", "instalar", "dependências", "diagnóstico", "primeiro uso", "setup"]
         }
     }
 }

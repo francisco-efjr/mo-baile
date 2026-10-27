@@ -3,6 +3,7 @@
 from mobaile.ports.protocols import (
     AnalyticsSource,
     DeviceBridge,
+    FlowDevice,
     FrameSource,
     HierarchySource,
     InputSink,
@@ -13,6 +14,7 @@ from mobaile.ports.protocols import (
 __all__ = [
     "AnalyticsSource",
     "DeviceBridge",
+    "FlowDevice",
     "FrameSource",
     "HierarchySource",
     "InputSink",

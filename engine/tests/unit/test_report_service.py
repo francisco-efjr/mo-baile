@@ -242,3 +242,107 @@ class TestAuxiliaresDeArquivo(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEdicaoDoCard(Base):
+    """Corrigir no app o que o OCR leu, sem abrir o JSON."""
+
+    def ler_json(self):
+        return json.loads(self.spec_path.read_text(encoding="utf-8"))
+
+    def test_le_o_card_com_a_ordem_dos_parametros(self):
+        card = self.service.card(str(self.spec_path), 1)
+        self.assertEqual(card["card_index"], 1)
+        self.assertEqual(card["cards"], 3)
+        self.assertEqual(card["evento"], "interaction_pedido_{fluxo}")
+        self.assertEqual([p["key"] for p in card["params"]], ["screen_name", "flow_name", "component"])
+        self.assertEqual(card["variacoes"][0], [{"key": "detail", "value": "click:parcelas"}])
+        self.assertIsNone(card["obs"])
+        self.assertFalse(card["obs_por_fluxo"])
+
+    def test_parametro_que_nao_e_texto_vem_como_json(self):
+        card = self.service.card(str(self.spec_path), 2)
+        items = next(p for p in card["params"] if p["key"] == "items")
+        self.assertEqual(items["value"], [{"item_id": "[preenchido]", "item_name": "pedido-{fluxo}"}])
+        self.assertEqual(card["params_por_fluxo"], ["pessoal"])
+
+    def test_grava_o_card_e_audita_com_o_valor_novo(self):
+        antes = self.auditar()
+        divergente = next(r for r in antes["results"] if r["event"] == "interaction_pedido_empresa"
+                          and r["status"] == "error")
+        self.assertIn("component", divergente["divergences"])
+
+        card = self.service.card(str(self.spec_path), 1)
+        params = [p if p["key"] != "component" else {"key": "component", "value": "[button|toggle]"}
+                  for p in card["params"]]
+        resposta = self.service.update_card(str(self.spec_path), 1, {
+            "secao": "Simulação", "titulo": "Parcelas", "evento": card["evento"],
+            "params": params, "variacoes": card["variacoes"], "obs": "Conferido com o time de produto",
+        })
+        self.assertEqual(resposta["spec"]["cards"], 3)
+        self.assertEqual(resposta["card"]["titulo"], "Parcelas")
+
+        gravado = self.ler_json()["cards"][1]
+        self.assertEqual(gravado["params"]["component"], "[button|toggle]")
+        self.assertEqual(list(gravado["params"]), ["screen_name", "flow_name", "component"])
+        self.assertEqual(gravado["obs"], "Conferido com o time de produto")
+
+        depois = self.auditar()
+        self.assertGreater(depois["summary"]["ok"], antes["summary"]["ok"])
+
+    def test_so_o_card_editado_muda_e_o_resto_fica(self):
+        original = self.ler_json()
+        self.service.update_card(str(self.spec_path), 2, {"evento": "add_to_cart", "titulo": "Carrinho"})
+        gravado = self.ler_json()
+        self.assertEqual(gravado["cards"][0], original["cards"][0])
+        self.assertEqual(gravado["cards"][1], original["cards"][1])
+        self.assertEqual(gravado["cards"][2]["params_por_fluxo"], original["cards"][2]["params_por_fluxo"])
+        self.assertEqual(gravado["cards"][2]["params"], original["cards"][2]["params"])
+        self.assertEqual(gravado["fluxos"], original["fluxos"])
+
+    def test_campos_vazios_saem_do_json(self):
+        self.service.update_card(str(self.spec_path), 1, {"titulo": "", "variacoes": [[]], "obs": "  "})
+        gravado = self.ler_json()["cards"][1]
+        self.assertNotIn("titulo", gravado)
+        self.assertNotIn("variacoes", gravado)
+        self.assertNotIn("obs", gravado)
+
+    def test_obs_por_fluxo_nao_e_trocada_por_texto(self):
+        spec = json.loads(json.dumps(SPEC))
+        spec["cards"][0]["obs"] = {"pessoal": "só no pessoal"}
+        spec_path, _ = gravar(self.pasta, spec=spec)
+        card = self.service.card(str(spec_path), 0)
+        self.assertTrue(card["obs_por_fluxo"])
+        self.service.update_card(str(spec_path), 0, {"obs": "texto"})
+        self.assertEqual(json.loads(spec_path.read_text())["cards"][0]["obs"], {"pessoal": "só no pessoal"})
+
+    def test_edicao_invalida_nao_grava_nada(self):
+        original = self.spec_path.read_bytes()
+        casos = [
+            (1, {"evento": "  "}),
+            (1, {"params": [{"key": "", "value": "x"}]}),
+            (1, {"params": [{"key": "a", "value": "1"}, {"key": "a", "value": "2"}]}),
+            (1, {"params": [{"key": "screen_name", "value": "re:(aberto"}]}),
+            (1, {"params": {"screen_name": "x"}}),
+            (1, {"titulo": 5}),
+            (1, "card"),
+            (3, {"evento": "x"}),
+            (-1, {"evento": "x"}),
+            (True, {"evento": "x"}),
+        ]
+        for indice, card in casos:
+            with self.subTest(indice=indice, card=card), self.assertRaises(InvalidInputError):
+                self.service.update_card(str(self.spec_path), indice, card)
+        self.assertEqual(self.spec_path.read_bytes(), original)
+        self.assertEqual([p.name for p in self.pasta.iterdir() if "tmp" in p.name], [])
+
+
+class TestEsperadoDaVariacao(Base):
+    def test_nao_disparada_traz_o_esperado_com_o_fluxo_aplicado(self):
+        relatorio = self.auditar()
+        ausente = next(r for r in relatorio["results"] if r["status"] == "missing" and r["flow"] == "empresa")
+        self.assertEqual(ausente["checks"], [])
+        esperado = {p["key"]: p["value"] for p in ausente["expected"]}
+        self.assertEqual(esperado["screen_name"], "app:pedido:empresa:simulacao")
+        self.assertEqual(esperado["detail"], "click:[numero]-parcela-sem-seguro")
+        self.assertEqual([p["key"] for p in ausente["expected"]][:3], ["screen_name", "flow_name", "component"])

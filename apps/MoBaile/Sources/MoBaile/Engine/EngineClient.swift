@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Notificacao empurrada pelo motor (mensagem JSON-RPC sem `id`).
 struct EngineNotification: Sendable {
@@ -41,6 +42,13 @@ actor EngineClient {
     private var nextRequestID = 0
     private var buffer = Data()
     private var methodTable: [String: EngineDTO.MethodSpec] = [:]
+    /// Arquivo de log do motor atual, do `engine.hello`; vai na mensagem de queda.
+    private var logPath: String?
+
+    /// Ciclo de vida do motor no log unificado (Console.app): subiu, caiu com
+    /// código, onde fica o log. O conteúdo do log não passa por aqui; ele já
+    /// está no arquivo do motor.
+    private static let lifecycle = Logger(subsystem: "com.qa.mobaile", category: "engine")
 
     private let notificationContinuation: AsyncStream<EngineNotification>.Continuation
     private let frameContinuation: AsyncStream<EngineNotification>.Continuation
@@ -99,16 +107,28 @@ actor EngineClient {
         // Resto de linha de um processo anterior não pode colar na primeira
         // linha do novo.
         buffer = Data()
+        logPath = nil
 
         let process = Process()
         process.executableURL = configuration.pythonURL
-        process.arguments = ["-m", "mobaile.rpc"]
+        // -S: o Python não lê os `.pth` do site-packages. Um `.pth` de
+        // instalação editável com a pasta em ~/Documents fazia o macOS pedir
+        // acesso a Documentos a cada subida do motor. As bibliotecas entram
+        // pelo próprio motor (`mobaile._site`), sem seguir `.pth`.
+        process.arguments = ["-S", "-m", "mobaile.rpc"]
 
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONPATH"] = configuration.sourcePath
         // Sem buffer no lado Python: com buffer, a resposta so chegaria quando o
         // bloco enchesse, e cada chamada pareceria travada.
         environment["PYTHONUNBUFFERED"] = "1"
+        // Bytecode fora da raiz do motor. No app, a raiz fica dentro do bundle
+        // assinado (Contents/Resources/engine/src), e cada `__pycache__` que o
+        // Python criasse ali quebraria o selo: `codesign --verify --deep
+        // --strict` passaria a falhar depois do primeiro uso. A variável, e não
+        // `-B`, mantém o cache (partida rápida) e vale também para os filhos
+        // que o motor sobe com `sys.executable -m ...`, que herdam o ambiente.
+        environment["PYTHONPYCACHEPREFIX"] = configuration.pycachePrefix
         for (key, value) in configuration.extraEnvironment {
             environment[key] = value
         }
@@ -155,15 +175,23 @@ actor EngineClient {
             entregaPedaco.yield(chunk)
         }
 
-        // stderr do motor e log, nunca protocolo. Vai para o Console do sistema.
+        // stderr do motor é log, nunca protocolo. Ele é repassado, linha a
+        // linha, ao stderr do app: aparece quando o app roda pelo terminal ou
+        // pelo Xcode e some quando ele abre pelo Finder. O registro que fica é
+        // o arquivo do próprio motor (`log_path` do `engine.hello`).
+        let linhasDoStderr = OSAllocatedUnfairLock(initialState: EngineLogLines())
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else {
+            let linhas: [String]
+            if chunk.isEmpty {
                 handle.readabilityHandler = nil
-                return
+                linhas = linhasDoStderr.withLock { $0.finish() }.map { [$0] } ?? []
+            } else {
+                linhas = linhasDoStderr.withLock { $0.append(chunk) }
             }
-            guard let text = String(data: chunk, encoding: .utf8) else { return }
-            FileHandle.standardError.write(Data("[motor] \(text)".utf8))
+            guard !linhas.isEmpty else { return }
+            let texto = linhas.map { "[motor] \($0)\n" }.joined()
+            FileHandle.standardError.write(Data(texto.utf8))
         }
 
         // A identidade do processo acompanha o aviso de término: o aviso chega
@@ -184,6 +212,7 @@ actor EngineClient {
 
         self.process = process
         self.stdinHandle = stdinPipe.fileHandleForWriting
+        Self.lifecycle.notice("Motor subiu (pid \(process.processIdentifier, privacy: .public))")
     }
 
     func stop() async {
@@ -205,6 +234,7 @@ actor EngineClient {
         // Encerramento pedido não é falha: quem ainda esperava resposta recebe
         // `cancelled`, que a interface não transforma em mensagem de erro.
         failAllPending(with: .cancelled)
+        Self.lifecycle.notice("Motor parado a pedido (pid \(process.processIdentifier, privacy: .public))")
 
         // SIGTERM só para o motor que não saiu sozinho no prazo. O stdout
         // continua sendo lido durante a espera: um motor que escreve enquanto
@@ -239,6 +269,16 @@ actor EngineClient {
     /// Adota a tabela de métodos que o motor mandou no `engine.hello`.
     func useMethodTable(_ table: [String: EngineDTO.MethodSpec]) {
         methodTable = table
+    }
+
+    /// Guarda o arquivo de log que o motor informou no `engine.hello`.
+    func useLogPath(_ path: String?) {
+        logPath = path
+        if let path {
+            Self.lifecycle.notice("Log do motor em \(path, privacy: .public)")
+        } else {
+            Self.lifecycle.notice("Motor sem log em disco; só stderr")
+        }
     }
 
     /// Prazo de uma chamada: o da tabela do motor, ou o padrão.
@@ -436,7 +476,8 @@ actor EngineClient {
         guard let process, ObjectIdentifier(process) == processID else { return }
         // Deixar chamadas penduradas seria pior que falhar: a interface ficaria
         // com spinner eterno em vez de mostrar que o motor caiu.
-        failAllPending(with: .processTerminated(status))
+        Self.lifecycle.error("Motor caiu com codigo \(status, privacy: .public)")
+        failAllPending(with: .processTerminated(status, logPath: logPath))
         self.process = nil
         stdinHandle = nil
         terminationContinuation.yield(status)
@@ -448,4 +489,13 @@ struct EngineConfiguration: Sendable {
     let pythonURL: URL
     let sourcePath: String
     var extraEnvironment: [String: String] = [:]
+    /// Onde o Python grava o bytecode do motor (`PYTHONPYCACHEPREFIX`).
+    var pycachePrefix: String = EngineConfiguration.defaultPycachePrefix
+
+    /// `~/Library/Caches/Mo baile/pycache`, ao lado do cache do OCR
+    /// (`adapters/vision_ocr.py`).
+    static var defaultPycachePrefix: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/Mo baile/pycache").path
+    }
 }
