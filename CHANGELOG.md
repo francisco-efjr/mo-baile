@@ -5,6 +5,62 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.13.0] - 2026-10-26
+
+### Adicionado
+
+- 
+
+## [3.13.0] - 2026-10-26
+
+### Mudado
+
+- **Liquid Glass de verdade no macOS 26** ([ADR 0006](docs/adr/0006-liquid-glass-real.md)).
+  O vidro do app agora é o do sistema (`glassEffect`), com papéis fechados
+  em `Views/DesignSystem/Glass.swift`:
+  - a paleta de comandos (⇧⌘P) é um painel de vidro, que se forma ao abrir;
+  - a cápsula do Ambiente na Início é um controle de vidro interativo;
+  - o trilho do splash é vidro transparente sobre o céu.
+  No macOS 14 e 15 cada papel cai no material ou no preenchimento de antes.
+- **Rodar com estilo próprio.** Vidro tingido com o destaque da paleta e
+  rótulo na cor `onAccent`, fora da cápsula compartilhada da toolbar.
+  Desabilitado ou com a janela inativa, fica neutro.
+- **Toolbar e barra lateral.** O título da seção perdeu a cápsula de vidro,
+  porque é texto da janela e não controle. O rodapé da barra lateral (Ambiente
+  e aparelho) usa `safeAreaBar`, e a lista rola por baixo com o efeito de borda
+  do sistema.
+- **Reduzir transparência.** Todo vidro do app vira superfície opaca do tema,
+  com borda. **Aumentar contraste:** os controles de preenchimento ganham
+  borda.
+- O design system web ganhou os papéis do vidro (`.mb-glass--flutuante`,
+  `--capsula`, `--midia`), os tokens `--glass-clear-*` e
+  `--glass-capsule-tint`, e o cartão `guidelines/materials-roles.html`.
+
+### Corrigido
+
+- **Rodar ilegível na paleta Costes.** O `.borderedProminent` e o
+  `.glassProminent` desenham o rótulo branco: sobre o dourado dava 2,1:1.
+- **Rótulo sobre o destaque com Aumentar contraste no escuro.** Na Praia
+  escura, o branco sobre `#D9567F` dava 3,8:1. O `onAccent` passou para o
+  marinho `#141543`, que dá 4,6:1.
+
+### Interno
+
+- `WindowSnapshotTests` não cai mais no `cacheDisplay`, que desenhava a janela
+  sem o vidro e sem avisar.
+- O catálogo ganhou as cenas 11c (Costes), 11d (vidro nas 12 aparências), 11e
+  (recuo com `MOBAILE_SEM_VIDRO=1`), 12 (paleta de comandos) e 13 (Reduzir
+  transparência).
+- `MOBAILE_CENA=<prefixo>` refaz só algumas cenas, e o `catalogo.json` lista
+  as capturas feitas com o app inativo.
+- `GlassTests` (11 testes) cobre:
+  - papel → superfície, o recuo, Reduzir transparência e o contraste do
+    rótulo do Rodar nas 22 variantes de tema;
+  - o splash sem tema no ambiente;
+  - guardas de fonte: API do macOS 26 só no design system e na toolbar, e
+    nada de vidro dentro de barra lateral, popovers e sheets.
+- Pesquisa em [`docs/research/liquid-glass-macos26.md`](docs/research/liquid-glass-macos26.md).
+
 ## [3.12.0] - 2026-10-26
 
 ### Adicionado
