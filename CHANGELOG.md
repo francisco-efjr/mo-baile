@@ -5,6 +5,24 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.15.1] - 2026-10-27
+
+### Corrigido
+
+- **Automação e inspetor sem árvore num aparelho físico com o driver do
+  Maestro esquecido.** O UiAutomation do Android aceita um cliente por vez: com
+  o `dev.mobile.maestro.test` ainda rodando no aparelho, o `uiautomator dump`
+  morria com 137, o motor tomava o aparelho por "só lê pelo Appium" e o flow
+  recusava pedindo uma sessão que esbarraria no mesmo bloqueio. Agora o motor
+  identifica a instrumentação que ocupa o aparelho e diz o comando que o libera
+  (`adb -s <serial> shell am force-stop dev.mobile.maestro`), sem memorizar o
+  Appium nem esperar por ele. Visto num moto g55 com Android 14.
+- **Appium não subia de dentro do app.** Aberto pelo Finder, o app herda um
+  PATH sem o Homebrew, e o `appium` morria com "env: node: No such file or
+  directory". O servidor agora sobe com a pasta do `appium` (onde o `node`
+  mora) no PATH e com `ANDROID_HOME` apontando para o SDK padrão quando ele
+  não vem do ambiente.
+
 ## [3.15.0] - 2026-10-27
 
 ### Adicionado

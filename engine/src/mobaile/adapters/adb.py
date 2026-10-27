@@ -31,6 +31,14 @@ from mobaile.security import (
 
 logger = logging.getLogger(__name__)
 
+# Instrumentacao ativa no `dumpsys activity processes`, como
+# "ActiveInstrumentation{8de623b {dev.mobile.maestro.test/androidx.test.runner...}".
+_INSTRUMENTACAO_ATIVA = re.compile(r"ActiveInstrumentation\{\S+ \{([A-Za-z0-9_.]+)/")
+
+# O servidor UiAutomator2 do Appium tambem segura o UiAutomation, mas por ele o
+# motor le a tela: nao e bloqueio.
+_INSTRUMENTACAO_DO_APPIUM = "io.appium.uiautomator2.server"
+
 # Screenshot de aparelho em alta resolução passa de 8 MB; o teto evita que um
 # dispositivo com problema encha a memória do host.
 MAX_SCREENSHOT_BYTES = 64 * 1024 * 1024
@@ -51,6 +59,10 @@ class ADBBridge:
         # Serial -> o ultimo dump foi morto com SIGKILL (137). So isso prova que
         # o aparelho nao tem `uiautomator dump`; timeout e tela sem ocio, nao.
         self.dump_killed: dict[str, bool] = {}
+        # Serial -> pacote da instrumentacao de outra ferramenta (o driver do
+        # Maestro, por exemplo) que segurava o UiAutomation no ultimo dump que
+        # falhou. Com ela no ar, nem o dump nem o Appium conseguem ler a tela.
+        self.dump_blocked_by: dict[str, str] = {}
         # Valores que o aparelho tinha antes de o proxy ser ligado, por serial.
         # O desmonte os devolve em vez de apagar: um proxy corporativo ou o
         # `captive_portal_mode` do aparelho nao pertencem a este motor.
@@ -265,6 +277,7 @@ class ADBBridge:
     def _dump_hierarchy(self, device_id: str) -> str | None:
         remote = self._dump_remote_path
         self.dump_killed[device_id] = False
+        self.dump_blocked_by.pop(device_id, None)
         try:
             args = self._device_args(device_id)
             # Tenta executar dump + cat em uma única sessão para evitar overhead de subprocessos adicionais
@@ -278,8 +291,15 @@ class ADBBridge:
                     return xml_str
 
             if ret == 137:
-                # 137 é SIGKILL: no Android 14+ em aparelhos físicos, uiautomator dump
-                # é sumariamente morto pelo SO. Insistir no fallback apenas desperdiça 13 s.
+                # 137 é SIGKILL. A causa vista num Motorola com Android 14 foi o
+                # driver do Maestro esquecido no aparelho: o UiAutomation só
+                # aceita um cliente, e o dump morre com "already registered".
+                # Insistir no fallback apenas desperdiça 13 s.
+                bloqueio = self._uiautomation_holder(device_id)
+                if bloqueio:
+                    logger.info("uiautomator dump de %r bloqueado pela instrumentacao %s.", device_id, bloqueio)
+                    self.dump_blocked_by[device_id] = bloqueio
+                    return None
                 logger.debug("uiautomator dump morto com SIGKILL (137) em %r; abortando fallback.", device_id)
                 self.dump_killed[device_id] = True
                 return None
@@ -291,6 +311,10 @@ class ADBBridge:
                 xml_str = stdout.decode("utf-8", errors="ignore").strip()
                 if "<hierarchy" in xml_str:
                     return xml_str
+            bloqueio = self._uiautomation_holder(device_id)
+            if bloqueio:
+                logger.info("uiautomator dump de %r bloqueado pela instrumentacao %s.", device_id, bloqueio)
+                self.dump_blocked_by[device_id] = bloqueio
             return None
         except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
             logger.debug("Dump de hierarquia falhou para %r: %s", device_id, exc)
@@ -300,6 +324,28 @@ class ADBBridge:
                 self._run_cmd(self._device_args(device_id, "shell", "rm", "-f", remote), timeout=4)
             except Exception as exc:
                 logger.debug("Não foi possível remover o dump remoto %s: %s", remote, exc)
+
+    def _uiautomation_holder(self, device_id: str) -> str | None:
+        """Pacote de outra ferramenta cuja instrumentacao segura o UiAutomation.
+
+        So e chamado depois de um dump que falhou, e custa uma ida ao aparelho.
+        `None` quando nao ha instrumentacao, quando ela e a do Appium ou quando
+        a consulta falha.
+        """
+        try:
+            ret, stdout, _ = self._run_cmd(
+                self._device_args(device_id, "shell", "dumpsys activity processes | grep ActiveInstrumentation"),
+                timeout=5,
+            )
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.debug("Consulta de instrumentacao falhou para %r: %s", device_id, exc)
+            return None
+        if ret != 0:
+            return None
+        for pacote in _INSTRUMENTACAO_ATIVA.findall(stdout.decode("utf-8", errors="ignore")):
+            if not pacote.startswith(_INSTRUMENTACAO_DO_APPIUM):
+                return pacote
+        return None
 
     # ---------------------------------------------------------------- entrada
 

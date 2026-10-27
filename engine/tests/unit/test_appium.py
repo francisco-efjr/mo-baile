@@ -101,6 +101,21 @@ class TestSubidaDoServidor(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("encerrou", msg)
 
+    def test_node_ao_lado_do_appium_entra_no_path(self):
+        """Aberto pelo Finder, o app nao tem o Homebrew no PATH e o
+        `#!/usr/bin/env node` do Appium morria antes de subir."""
+        bridge = AppiumBridge()
+        processo = MagicMock()
+        processo.poll.return_value = 1
+        with patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}, clear=True), \
+             patch.object(bridge, "is_running", return_value=False), \
+             patch.object(AppiumBridge, "locate_appium", return_value="/opt/npm/bin/appium"), \
+             patch("subprocess.Popen", return_value=processo) as popen:
+            bridge.start_server()
+        caminho = popen.call_args.kwargs["env"]["PATH"].split(os.pathsep)
+        self.assertEqual(caminho[0], "/opt/npm/bin")
+        self.assertIn("/usr/bin", caminho)
+
 
 class TestEnderecoDoServidor(unittest.TestCase):
     """O Appium escuta em 0.0.0.0 por padrao e nao tem autenticacao: subido

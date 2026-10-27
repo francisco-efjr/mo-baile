@@ -898,6 +898,16 @@ class EngineServer:
             self._android_backend[device] = "adb"
             return xml
 
+        bloqueio = self.adb.dump_blocked_by.get(device)
+        if bloqueio:
+            # O Appium esbarraria na mesma instrumentacao depois de dezenas de
+            # segundos, e memoriza-lo deixaria o aparelho preso a ele depois
+            # que a outra ferramenta saisse.
+            self._android_backend.pop(device, None)
+            self._ultima_falha_de_hierarquia = self._mensagem_de_bloqueio(device, bloqueio)
+            logger.warning("Hierarquia de %s bloqueada pela instrumentacao %s.", device, bloqueio)
+            return None
+
         # So o SIGKILL prova que o aparelho nao tem dump. Um vazio por tela sem
         # ocio ou por corrida com outra leitura abre o Appium para esta leitura,
         # mas nao troca o backend do aparelho para sempre.
@@ -917,6 +927,18 @@ class EngineServer:
             return None
         self._progress("Lendo a hierarquia pelo Appium")
         return self.appium.get_page_source()
+
+    @staticmethod
+    def _mensagem_de_bloqueio(device: str, pacote: str) -> str:
+        """Diz quem segura o UiAutomation e o comando que o libera."""
+        app = pacote.removesuffix(".test")
+        dono = "O driver do Maestro" if app == "dev.mobile.maestro" else f"A instrumentacao {pacote}"
+        return (
+            f"{dono} esta rodando no aparelho e ocupa o UiAutomation, que so aceita um "
+            "cliente por vez: nem o 'uiautomator dump' nem o Appium conseguem ler a tela. "
+            "Encerre a ferramenta que o abriu ou, se ela ja foi fechada, libere o aparelho "
+            f"com: adb -s {device} shell am force-stop {app}"
+        )
 
     def _sessao_appium_aberta(self, device: str) -> bool:
         return bool(self.appium.session_id and self.appium.session_platform == "android"
@@ -956,6 +978,9 @@ class EngineServer:
                 xml, backend = self.appium.get_page_source(), "appium"
             if not xml and self._android_backend.get(device) != "appium":
                 xml, backend = self.adb.get_ui_hierarchy(device), "adb"
+                bloqueio = None if xml else self.adb.dump_blocked_by.get(device)
+                if bloqueio:
+                    raise EngineError(self._mensagem_de_bloqueio(device, bloqueio))
                 if not xml and self.adb.dump_killed.get(device):
                     # Dump morto (137) num aparelho que o motor ainda nao conhecia:
                     # sem isto o flow falharia em 17 s dizendo so que nao leu nada.
@@ -979,6 +1004,8 @@ class EngineServer:
                 "Use 'Iniciar WebDriverAgent' na tela inicial."
             )
         detalhe = getattr(self, "_ultima_falha_de_hierarquia", None)
+        if detalhe and "ocupa o UiAutomation" in detalhe:
+            return f"Hierarquia indisponivel no Android. {detalhe}"
         base = (
             "Hierarquia indisponivel no Android. O 'uiautomator dump' nao devolveu nada "
             "e a sessao do Appium tambem nao abriu."

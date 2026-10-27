@@ -209,7 +209,77 @@ class TestLeitorDoFlow(unittest.TestCase):
             ler()
 
 
+class TestUiAutomationOcupado(unittest.TestCase):
+    """O driver do Maestro esquecido no aparelho segura o UiAutomation: o dump
+    morre com 137 e o Appium esbarraria no mesmo lugar depois de dezenas de
+    segundos. Visto num moto g55 com Android 14."""
+
+    SERIAL = "ZY22L3CH3X"
+
+    def setUp(self):
+        self.server = EngineServer(out=io.StringIO())
+        self.server.platform = Platform.ANDROID
+        self.server.device_id = self.SERIAL
+
+    def tearDown(self):
+        self.server.shutdown()
+
+    def dump_bloqueado(self, serial):
+        self.server.adb.dump_blocked_by[serial] = "dev.mobile.maestro.test"
+        return None
+
+    def test_inspetor_diz_quem_ocupa_e_nao_abre_o_appium(self):
+        with patch.object(self.server.adb, "get_ui_hierarchy", side_effect=self.dump_bloqueado), \
+             patch.object(self.server.appium, "ensure_android_session") as sessao:
+            self.assertIsNone(self.server._android_hierarchy(self.SERIAL))
+        sessao.assert_not_called()
+        self.assertNotIn(self.SERIAL, self.server._android_backend)
+        motivo = self.server._motivo_de_hierarquia_indisponivel()
+        self.assertIn("driver do Maestro", motivo)
+        self.assertIn(f"adb -s {self.SERIAL} shell am force-stop dev.mobile.maestro", motivo)
+
+    def test_flow_recusa_com_o_comando_que_libera(self):
+        ler, _ = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.adb, "get_ui_hierarchy", side_effect=self.dump_bloqueado), \
+             self.assertRaisesRegex(Exception, "am force-stop dev.mobile.maestro"):
+            ler()
+
+
 class TestDumpDoAdb(unittest.TestCase):
+    INSTRUMENTACAO = (
+        b"    mInstr=ActiveInstrumentation{8de623b {dev.mobile.maestro.test/"
+        b"androidx.test.runner.AndroidJUnitRunner} 1 procs}\n"
+    )
+
+    def test_sigkill_com_maestro_no_aparelho_e_bloqueio(self):
+        ponte = ADBBridge(adb_path="adb")
+
+        def run_cmd(args, **_k):
+            if "dumpsys activity processes" in " ".join(args):
+                return 0, self.INSTRUMENTACAO, b""
+            return 137, b"", b""
+
+        ponte._run_cmd = run_cmd
+        self.assertIsNone(ponte.get_ui_hierarchy("ZY22L3CH3X"))
+        self.assertEqual(ponte.dump_blocked_by["ZY22L3CH3X"], "dev.mobile.maestro.test")
+        self.assertFalse(ponte.dump_killed["ZY22L3CH3X"])
+
+    def test_instrumentacao_do_appium_nao_e_bloqueio(self):
+        """Pela sessao UiAutomator2 o motor le a tela: segue como dump morto."""
+        ponte = ADBBridge(adb_path="adb")
+        appium = self.INSTRUMENTACAO.replace(b"dev.mobile.maestro.test", b"io.appium.uiautomator2.server.test")
+
+        def run_cmd(args, **_k):
+            if "dumpsys activity processes" in " ".join(args):
+                return 0, appium, b""
+            return 137, b"", b""
+
+        ponte._run_cmd = run_cmd
+        self.assertIsNone(ponte.get_ui_hierarchy("ZY22L3CH3X"))
+        self.assertNotIn("ZY22L3CH3X", ponte.dump_blocked_by)
+        self.assertTrue(ponte.dump_killed["ZY22L3CH3X"])
+
+
     def test_sigkill_e_registrado_e_outra_falha_nao(self):
         ponte = ADBBridge(adb_path="adb")
         ponte._run_cmd = lambda *a, **k: (137, b"", b"")
