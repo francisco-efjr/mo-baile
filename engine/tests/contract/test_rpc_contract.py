@@ -122,8 +122,40 @@ class TestFlowLifecycle(ContractBase):
         flow = thread.call_args.args[0]
         self.assertEqual(len(flow.steps), 1, "um item de topo por passo gravado, para o flow.step")
         thread.return_value.start.assert_called_once()
+        # O leitor e o backend chegam ao aparelho: sem o `backend`, a espera de
+        # uma leitura do AUT-1 morreria em silencio, so mais lenta.
+        aparelho = thread.call_args.args[1]
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value="<hierarchy/>"):
+            aparelho.hierarchy()
+        self.assertTrue(aparelho.reads_wait_for_idle)
         self.assertTrue(self.ok("flow.stop")["stopped"])
         thread.return_value.cancel.assert_called_once()
+
+    def test_parar_entre_a_trava_e_o_start_nao_inicia_o_runner(self):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        leitor = self.server._leitor_do_flow
+
+        def leitor_com_parar(serial):
+            self.server.flow_stop({})
+            return leitor(serial)
+
+        with patch.object(self.server.codegen, "get_steps", return_value=[self.passo_gravado()]), \
+             patch("mobaile.rpc.server.flows.verify_preconditions", return_value=(True, "ok")), \
+             patch.object(self.server, "_leitor_do_flow", side_effect=leitor_com_parar), \
+             patch("mobaile.rpc.server.maestro_flow.FlowThread") as thread:
+            self.assertIn("error", self.call("flow.run"))
+        thread.return_value.start.assert_not_called()
+        self.assertFalse(self.ok("flow.status")["running"])
+
+    def test_aparelho_sem_sessao_do_appium_recusa_antes_de_ocupar_o_aparelho(self):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        self.server._android_backend["emulator-5554"] = "appium"
+        with patch.object(self.server.codegen, "get_steps", return_value=[self.passo_gravado()]), \
+             patch.object(self.server.appium, "ensure_android_session", return_value=(False, "sem appium")), \
+             patch("mobaile.rpc.server.maestro_flow.FlowThread") as thread:
+            self.assertIn("pelo Appium", self.erro("flow.run")["message"])
+        thread.assert_not_called()
+        self.assertFalse(self.ok("flow.status")["running"])
 
     def test_ios_segue_no_script_de_coordenadas(self):
         self.ok("session.select_device", {"platform": "ios", "device_id": "00008110-001234560E12345A"})

@@ -156,19 +156,57 @@ class TestLeitorDoFlow(unittest.TestCase):
         self.assertIsNone(backend())
         self.assertNotIn(self.SERIAL, self.server._android_backend)
 
-    def test_aparelho_que_depende_do_appium_abre_a_sessao_antes_do_flow(self):
-        self.server._android_backend[self.SERIAL] = "appium"
-        with patch.object(self.server.appium, "ensure_android_session", return_value=(True, "ok")) as sessao:
-            self.server._preparar_leitura_do_flow(self.SERIAL)
-        sessao.assert_called_once_with(self.SERIAL)
-        with patch.object(self.server.appium, "ensure_android_session", return_value=(False, "sem appium")), \
-             self.assertRaisesRegex(Exception, "so devolve a hierarquia pelo Appium"):
-            self.server._preparar_leitura_do_flow(self.SERIAL)
+    def test_arvore_lida_depois_de_trocar_o_alvo_nao_vira_a_atual(self):
+        ler, _ = self.server._leitor_do_flow(self.SERIAL)
+        with self.server._state_lock:
+            self.server._session_epoch += 1
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=XML):
+            self.assertEqual(ler(), XML, "a leitura segue valendo para o flow")
+        self.assertIsNone(self.server.current_xml, "mas nao vira a arvore do alvo novo")
 
-    def test_aparelho_com_dump_nao_abre_sessao_antes_do_flow(self):
-        with patch.object(self.server.appium, "ensure_android_session") as sessao:
-            self.server._preparar_leitura_do_flow(self.SERIAL)
+    def test_inspetor_aproveita_a_leitura_do_flow_em_vez_de_disputar_o_dump(self):
+        ler, _ = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=XML) as dump:
+            ler()
+            self.server.hierarchy_dump({})
+        self.assertEqual(dump.call_count, 1)
+
+    def test_backend_appium_sem_sessao_nao_le_nem_abre_nada(self):
+        # A sessao caiu no meio do flow: o leitor devolve nada e o runner diz
+        # que o aparelho nao devolveu a arvore, sem abrir sessao sem progresso.
+        self.server._android_backend[self.SERIAL] = "appium"
+        ler, backend = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.adb, "get_ui_hierarchy") as dump, \
+             patch.object(self.server.appium, "ensure_android_session") as sessao:
+            self.assertIsNone(ler())
+        dump.assert_not_called()
         sessao.assert_not_called()
+        self.assertIsNone(backend())
+
+    def test_aparelho_que_depende_do_appium_sem_sessao_e_recusado_sem_abrir_nada(self):
+        # Abrir a sessao aqui levaria ate minutos dentro de um pedido de 30 s.
+        self.server._android_backend[self.SERIAL] = "appium"
+        with patch.object(self.server.appium, "ensure_android_session") as sessao, \
+             self.assertRaisesRegex(Exception, "Atualize a hierarquia no inspetor"):
+            self.server._conferir_leitura_do_flow(self.SERIAL)
+        sessao.assert_not_called()
+        self.abrir_sessao()
+        self.server._conferir_leitura_do_flow(self.SERIAL)
+
+    def test_aparelho_com_dump_nao_precisa_de_sessao(self):
+        with patch.object(self.server.appium, "ensure_android_session") as sessao:
+            self.server._conferir_leitura_do_flow(self.SERIAL)
+        sessao.assert_not_called()
+
+    def test_dump_morto_num_aparelho_novo_diz_o_que_fazer(self):
+        def dump_morto(serial):
+            self.server.adb.dump_killed[serial] = True
+            return None
+
+        ler, _ = self.server._leitor_do_flow(self.SERIAL)
+        with patch.object(self.server.adb, "get_ui_hierarchy", side_effect=dump_morto), \
+             self.assertRaisesRegex(Exception, "so devolve a tela pelo Appium"):
+            ler()
 
 
 class TestDumpDoAdb(unittest.TestCase):

@@ -922,19 +922,20 @@ class EngineServer:
         return bool(self.appium.session_id and self.appium.session_platform == "android"
                     and self.appium.session_udid == device)
 
-    def _preparar_leitura_do_flow(self, device: str) -> None:
-        """Abre a sessao do Appium antes do flow, quando o aparelho depende dela.
+    _SEM_SESSAO_APPIUM = (
+        "Este aparelho so devolve a tela pelo Appium, e a sessao nao esta aberta. Atualize a "
+        "hierarquia no inspetor, que abre a sessao, e rode de novo."
+    )
 
-        Roda na thread do RPC, com `$/progress` e cancelamento. Dentro do flow
-        nao ha nenhum dos dois, e abrir a sessao la travaria o Parar por
-        dezenas de segundos.
+    def _conferir_leitura_do_flow(self, device: str) -> None:
+        """Recusa o flow antes de ocupar o aparelho quando ele nao tera como ler a tela.
+
+        O aparelho que so le pelo Appium precisa da sessao aberta. Abri-la aqui
+        levaria ate minutos dentro de um pedido de 30 s, sem progresso; o
+        inspetor faz isso com progresso e cancelamento.
         """
-        if self._android_backend.get(device) != "appium" or self._sessao_appium_aberta(device):
-            return
-        self._progress("Abrindo a sessao do Appium para ler a tela durante o fluxo")
-        ok, mensagem = self.appium.ensure_android_session(device)
-        if not ok:
-            raise EngineError(f"Este aparelho so devolve a hierarquia pelo Appium: {mensagem}")
+        if self._android_backend.get(device) == "appium" and not self._sessao_appium_aberta(device):
+            raise EngineError(self._SEM_SESSAO_APPIUM)
 
     def _leitor_do_flow(self, device: str) -> tuple[Callable[[], str | None], Callable[[], str | None]]:
         """Leitor da arvore para a thread do flow e o backend da ultima leitura.
@@ -955,6 +956,10 @@ class EngineServer:
                 xml, backend = self.appium.get_page_source(), "appium"
             if not xml and self._android_backend.get(device) != "appium":
                 xml, backend = self.adb.get_ui_hierarchy(device), "adb"
+                if not xml and self.adb.dump_killed.get(device):
+                    # Dump morto (137) num aparelho que o motor ainda nao conhecia:
+                    # sem isto o flow falharia em 17 s dizendo so que nao leu nada.
+                    raise EngineError(self._SEM_SESSAO_APPIUM)
             estado["backend"] = backend if xml else None
             if xml:
                 self._store_hierarchy(xml, epoch)
@@ -1903,7 +1908,7 @@ class EngineServer:
             runner = "coordinates"
         flow = maestro_flow.flow_from_steps(passos) if runner == "locator" else None
         if flow is not None:
-            self._preparar_leitura_do_flow(device or "")
+            self._conferir_leitura_do_flow(device or "")
         with self._state_lock:
             if self._shutdown_done:
                 raise InvalidInputError("O motor esta encerrando.")
@@ -2074,7 +2079,7 @@ class EngineServer:
         if sessao.platform is Platform.IOS:
             aparelho = IOSFlowDevice(self.ios, device_id)
         else:
-            self._preparar_leitura_do_flow(device_id)
+            self._conferir_leitura_do_flow(device_id)
             ler, backend = self._leitor_do_flow(device_id)
             aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=ler, backend=backend)
         with self._state_lock:

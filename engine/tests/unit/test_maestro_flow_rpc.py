@@ -38,6 +38,12 @@ class TestFlowMaestroRpc(FluxoBase):
             self.assertEqual(Path(primeiro["path"]), pasta / "login.yaml")
             self.assertEqual(Path(segundo["path"]), pasta / "login_2.yaml")
             self.assertEqual(Path(primeiro["path"]).read_text(encoding="utf-8"), primeiro["yaml"])
+            # Corrida: outra exportacao criou o nome entre conferir e gravar.
+            # Conferir com `exists()` e gravar por cima perderia o primeiro.
+            with patch("pathlib.Path.exists", return_value=False):
+                terceiro = self.ok("flow.maestro_export", {"save": True, "name": "login"})
+            self.assertEqual(Path(terceiro["path"]), pasta / "login_3.yaml")
+            self.assertEqual(Path(primeiro["path"]).read_text(encoding="utf-8"), primeiro["yaml"])
 
     def test_rodar_o_flow_exportado_no_aparelho(self):
         exportado = self.exportar()

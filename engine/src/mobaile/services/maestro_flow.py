@@ -735,6 +735,7 @@ class FlowRunner:
         # ultima acao, para saber se a tela mudou.
         self._assentada: tuple[str, float] | None = None
         self._antes: str | None = None
+        self._casaram = 0
 
     def _antes_da_acao(self) -> None:
         self._assentada = None
@@ -852,9 +853,13 @@ class FlowRunner:
             elementos = self._elementos(xml) if xml else []
             achados = [i for i in select_elements(sel, elementos) if elementos[i].area > 0]
             if achados:
+                self._casaram = len(achados)
                 return elementos[achados[0]], xml
             if cache:
+                # A tela guardada nao casou: le a de agora antes de decidir,
+                # inclusive com prazo 0 (scrollUntilVisible, checagem pontual).
                 cache = self._assentada = None
+                continue
             if self._clock() >= limite:
                 if not leu:
                     raise FlowFailed(f"o aparelho nao devolveu a hierarquia em {prazo_s:.0f} s")
@@ -896,6 +901,8 @@ class FlowRunner:
         elemento, xml = self._procurar(sel, prazo)
         if elemento is None:
             raise FlowFailed(f"elemento nao encontrado em {prazo:.0f} s: {sel.describe()}")
+        if self._casaram > 1:
+            self.log(f"  aviso: {self._casaram} elementos casam com {sel.describe()}; tocando o primeiro")
         if sel.point is not None:
             # point junto com seletor e relativo ao elemento, como relativePoint.
             x1, y1, x2, y2 = elemento.bounds
@@ -943,7 +950,14 @@ class FlowRunner:
         limite = self._clock() + prazo
         while True:
             self._checar()
-            elemento, _ = self._procurar(passo.selector, 0, usar_cache=False)
+            try:
+                elemento, _ = self._procurar(passo.selector, 0, usar_cache=False)
+            except FlowFailed:
+                # Sem arvore nesta leitura (tela sem ocio, por exemplo): tenta ate o prazo.
+                if self._clock() >= limite:
+                    raise FlowFailed(f"o aparelho nao devolveu a hierarquia em {prazo:.0f} s") from None
+                self._sleep(POLL_INTERVAL_S)
+                continue
             if elemento is None:
                 return
             if self._clock() >= limite:
@@ -1161,7 +1175,8 @@ def export_steps(
     for passo in passos:
         rotulo = mascarar(passo.element_name or passo.var_name)
         linhas.append(f"# passo {passo.step_num}: {rotulo}".replace("\n", " "))
-        seletor = {k: mascarar(v) for k, v in selector_from_step(passo).items()}
+        # A coordenada nunca carrega texto digitado, e mascara-la a quebraria.
+        seletor = {k: v if k == "point" else mascarar(v) for k, v in selector_from_step(passo).items()}
         linhas.append(f"- tapOn: {_seletor_yaml(seletor)}")
         if passo.action_type == "input":
             var = re.sub(r"\W", "_", passo.var_name or f"TEXTO_{passo.step_num}").upper()

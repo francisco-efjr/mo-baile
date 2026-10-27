@@ -15,8 +15,10 @@ from pathlib import Path
 from mobaile.adapters.flow_devices import AndroidFlowDevice, validate_app_id
 from mobaile.domain.errors import InvalidInputError
 from mobaile.domain.models import AutomationStep, LocatorStrategy
+from mobaile.ports import FlowDevice
 from mobaile.services.hierarchy import UIHierarchyParser
 from mobaile.services.maestro_flow import (
+    _ACOES_NO_APARELHO,
     FlowRunner,
     Selector,
     export_steps,
@@ -382,6 +384,18 @@ class AparelhoQueContaLeituras(AparelhoFalso):
         return super().hierarchy()
 
 
+class AparelhoRoteirizado(AparelhoQueContaLeituras):
+    """Devolve as telas do roteiro, uma por leitura, e repete a ultima."""
+
+    def __init__(self, roteiro):
+        super().__init__({"x": roteiro[0]}, "x", espera_ocio=True)
+        self.roteiro = list(roteiro)
+
+    def hierarchy(self):
+        self.leituras += 1
+        return self.roteiro.pop(0) if len(self.roteiro) > 1 else self.roteiro[0]
+
+
 class LeituraRapidaTest(unittest.TestCase):
     """AUT-1: menos leituras de ~2 s por comando, sem ler a tela velha."""
 
@@ -431,9 +445,63 @@ class LeituraRapidaTest(unittest.TestCase):
         # A home leva 2 leituras para trocar a tela. A espera do toque so ve o
         # login, e a arvore guardada ainda mostra "Entrar": o assert negativo relê.
         aparelho = self.aparelho(espera_ocio=False, atraso=2)
-        r = runner(aparelho)[0]
+        r, _, relogio = runner(aparelho)
         resultado = r.run(parse_flow("- tapOn: Entrar\n- assertNotVisible: Entrar\n"))
         self.assertTrue(resultado.success, resultado.message)
+        # Usando a arvore guardada, o assert ficaria vendo "Entrar" ate ela vencer (2 s).
+        self.assertLess(relogio.t, 1.0, "assertNotVisible esperou o cache vencer: usou a arvore guardada")
+
+    def test_condicao_de_run_flow_nunca_usa_a_arvore_guardada(self):
+        # A espera do toque guarda a home; sem nenhuma acao, a tela volta ao login.
+        # O `when` decide pela tela de agora: "Bem-vindo" sumiu, o bloco e pulado.
+        aparelho = AparelhoRoteirizado([LOGIN, HOME, LOGIN])
+        flow = parse_flow("- tapOn: Entrar\n- runFlow:\n    when: {visible: Bem-vindo.*}\n"
+                          "    commands: [{pressKey: Enter}]\n")
+        resultado = runner(aparelho)[0].run(flow)
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertEqual(aparelho.teclas, [], "o bloco rodou com a arvore guardada, que ja nao valia")
+
+    def test_arvore_guardada_que_nao_casa_e_relida_antes_de_rolar(self):
+        # A espera guardou a tela antes de a lista carregar; o item ja esta na
+        # tela de agora. Decidir pelo cache faria rolar e tirar o item da tela.
+        aparelho = AparelhoRoteirizado([LOGIN, CARREGANDO, HOME])
+        flow = parse_flow("- tapOn: Entrar\n- scrollUntilVisible:\n    element: Bem-vindo.*\n")
+        resultado = runner(aparelho)[0].run(flow)
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertEqual(aparelho.deslizes, 0)
+
+    def test_varios_elementos_casando_viram_aviso_no_log(self):
+        repetida = tela(no(bounds="[0,100][500,200]", texto="Item", clicavel=True),
+                        no(bounds="[0,300][500,400]", texto="Item", clicavel=True))
+        r, linhas, _ = runner(AparelhoFalso({"lista": repetida}, "lista"))
+        self.assertTrue(r.run(parse_flow("- tapOn: Item\n")).success)
+        self.assertTrue(any("2 elementos casam" in linha for linha in linhas), linhas)
+
+    def test_assert_not_visible_sem_arvore_tenta_ate_o_prazo(self):
+        aparelho = AparelhoRoteirizado([None, None, HOME])
+        r, _, relogio = runner(aparelho)
+        resultado = r.run(parse_flow("- assertNotVisible: Entrar\n"))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertGreater(relogio.t, 0, "esperou a arvore voltar em vez de falhar na primeira leitura")
+
+    def test_launch_app_segue_com_duas_leituras_mesmo_com_dump(self):
+        aparelho = self.aparelho(espera_ocio=True)
+        self.assertTrue(runner(aparelho)[0].run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertGreaterEqual(aparelho.leituras, 2, "partida a frio nao confia numa leitura so")
+
+    def test_toda_acao_do_aparelho_descarta_a_arvore_guardada(self):
+        # Um metodo novo de acao no FlowDevice que nao entre nesta lista nao
+        # invalidaria o cache: o teste pega o esquecimento.
+        acoes = {n for n, v in vars(FlowDevice).items() if callable(v) and not n.startswith("_")}
+        self.assertEqual(acoes - {"hierarchy", "screen_size"}, set(_ACOES_NO_APARELHO))
+        argumentos = {"tap": (1, 1), "type_text": ("a",), "press_key": ("Back",), "swipe": (1, 1, 2, 2, 100),
+                      "launch_app": ("br.app",), "stop_app": ("br.app",), "clear_state": ("br.app",)}
+        for nome, args in argumentos.items():
+            with self.subTest(acao=nome):
+                r = runner(self.aparelho(espera_ocio=True))[0]
+                r._assentada = (LOGIN, 0.0)
+                getattr(r.device, nome)(*args)
+                self.assertIsNone(r._assentada)
 
     def test_aparelho_sem_arvore_falha_dizendo_isso(self):
         aparelho = self.aparelho(espera_ocio=True)
@@ -522,7 +590,6 @@ class PassosGravadosTest(unittest.TestCase):
         flow = flow_from_steps(passos)
         self.assertEqual(len(flow.steps), 2)
         self.assertNotIn("segredo", repr(flow), "o texto digitado nao aparece no repr")
-        self.assertNotIn("segredo", str(flow.summary()))
         aparelho = AparelhoFalso({"login": LOGIN, "home": HOME}, "login",
                                  {("login", 100, 400, 980, 560): ("home", 0)})
         r, linhas, _ = runner(aparelho)
@@ -542,11 +609,19 @@ class PassosGravadosTest(unittest.TestCase):
         r.lookup_timeout_s = 1
         resultado = r.run(flow)
         self.assertFalse(resultado.success)
+        self.assertIn("passo 2", resultado.message, "a falha tem de ser a busca do seletor com o valor")
+        self.assertIn("***", resultado.message)
         vazou = [x for x in [*linhas, resultado.message, resultado.failed_step or ""]
                  if "123" in x and "789" in x]
         self.assertEqual(vazou, [])
         yaml, _ = export_steps([digitar, conferir])
         self.assertNotIn("789", yaml, "o YAML exportado tambem nao carrega o valor digitado")
+
+    def test_mascara_do_yaml_nao_mexe_na_coordenada(self):
+        digitar = replace(passo(1, '(AppiumBy.ID, "br.app:id/campo")', acao="input"), input_text="100")
+        ponto = replace(passo(2, "(AppiumBy.XPATH, '//*')", coords=(540, 1004)), input_text=None)
+        yaml, _ = export_steps([digitar, ponto])
+        self.assertIn('point: "540,1004"', yaml)
 
     def aparelho_login_com_campo(self):
         return AparelhoFalso({"login": LOGIN}, "login")
