@@ -5,6 +5,18 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.14.2] - 2026-10-27
+
+### Corrigido
+
+- **Empacotamento da release 3.14.1 abortado por teste instável.** O
+  `testCancelarATarefaMandaCancelRequest` cancelava a chamada 200 ms depois
+  de começá-la. No runner lento da release, o pedido ainda não tinha saído
+  quando veio o cancelamento, e aí o cliente não manda `$/cancelRequest` (não
+  há o que cancelar), como deve. O motor falso agora registra que recebeu o
+  pedido, e o teste só cancela depois disso. A 3.14.1 não ganhou binário; a
+  3.14.2 tem o mesmo app.
+
 ## [3.14.1] - 2026-10-27
 
 ### Corrigido
