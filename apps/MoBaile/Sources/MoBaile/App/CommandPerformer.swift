@@ -41,7 +41,7 @@ struct CommandPerformer {
         case .inspector:
             appState.toggleInspector()
         case .mirror:
-            withAnimation(Motion.smooth()) { appState.mirrorVisible.toggle() }
+            appState.toggleMirror()
         case .workspace:
             withAnimation(Motion.smooth()) { appState.workspaceVisible.toggle() }
         case .allPanels:

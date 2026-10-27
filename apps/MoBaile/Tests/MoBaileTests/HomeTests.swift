@@ -107,22 +107,33 @@ final class HomeTests: XCTestCase {
 
     // MARK: - Onde o app abre
 
-    func testPrimeiraVezAbreNoInicio() {
-        XCTAssertEqual(LaunchDestination.pick(firstRun: true, phase: .ready, deviceConnected: true, current: .pageObjects), .home)
+    /// O app sempre abre no Início, com aparelho ou sem, e com a hierarquia
+    /// fechada: ela só aparece quando a pessoa pede.
+    @MainActor
+    func testAbreSempreNoInicioComAHierarquiaFechada() {
+        let estado = AppState.atLaunch()
+        XCTAssertEqual(estado.workspaceTab, .home)
+        XCTAssertFalse(estado.inspectorVisible)
+        estado.selectedDevice = "7303D258"
+        estado.workspaceTab = .pageObjects
+        XCTAssertFalse(estado.inspectorShown, "conectar e ir para Page Objects não abre a hierarquia")
+        estado.toggleInspector()
+        XCTAssertTrue(estado.inspectorShown)
     }
 
-    func testDepoisAbreNoTrabalhoQuandoHaAparelho() {
-        XCTAssertNil(LaunchDestination.pick(firstRun: false, phase: .ready, deviceConnected: true, current: .pageObjects))
-        XCTAssertEqual(LaunchDestination.pick(firstRun: false, phase: .ready, deviceConnected: false, current: .pageObjects), .home)
-    }
-
-    func testMotorQueNaoSobeLevaAoInicio() {
-        XCTAssertEqual(LaunchDestination.pick(firstRun: false, phase: .failed, deviceConnected: false, current: .pageObjects), .home)
-    }
-
-    func testNaoTiraQuemJaTrocouDeArea() {
-        XCTAssertNil(LaunchDestination.pick(firstRun: true, phase: .ready, deviceConnected: false, current: .report))
-        XCTAssertNil(LaunchDestination.pick(firstRun: true, phase: .scanning, deviceConnected: false, current: .pageObjects))
+    /// Ninguém mais leva a janela para outra área ao terminar a abertura.
+    func testAberturaNaoTrocaDeArea() throws {
+        var raiz = URL(fileURLWithPath: #filePath)
+        while raiz.lastPathComponent != "MoBaile"
+            || !FileManager.default.fileExists(atPath: raiz.appendingPathComponent("Package.swift").path) {
+            guard raiz.path != "/" else { throw XCTSkip("Package.swift do app não encontrado") }
+            raiz.deleteLastPathComponent()
+        }
+        let fonte = try String(contentsOf: raiz.appendingPathComponent("Sources/MoBaile/Views/MainWindow/ContentView.swift"),
+                               encoding: .utf8)
+        XCTAssertFalse(fonte.contains("onChange(of: session.launchPhase)"))
+        let app = try String(contentsOf: raiz.appendingPathComponent("Sources/MoBaile/App/MoBaileApp.swift"), encoding: .utf8)
+        XCTAssertTrue(app.contains("AppState.atLaunch()"))
     }
 
     // MARK: - Área Início

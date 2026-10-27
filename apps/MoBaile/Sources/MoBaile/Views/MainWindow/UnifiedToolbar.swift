@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// Ordem do design system: título e subtítulo da seção · aparelho (pop-up
 /// agrupado por iOS e Android) · [Gravar do aparelho, Gravar a tela, 60 FPS
-/// no Android] · Rodar (a única cápsula tingida) · Buscar · Inspector.
+/// no Android] · Rodar (a única cápsula tingida) · Buscar · Espelho · Inspector.
 ///
 /// O seletor Repassar toque | Gravar passo saiu na 3.10.0: um clique no
 /// espelho sempre faz as duas coisas (toca no aparelho e grava o passo), e
@@ -57,8 +57,12 @@ struct MainToolbar: ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             HierarchySearchButton()
         }
-        // O inspector é um painel da área, não mais o `.inspector` do SwiftUI,
-        // e o botão dele vem para o fim da barra principal.
+        // Os painéis que se escondem ficam no fim da barra principal: o
+        // espelho (o telefone) e o inspector, que não é mais o `.inspector` do
+        // SwiftUI e sim um painel da área.
+        ToolbarItem(placement: .primaryAction) {
+            MirrorToggleButton()
+        }
         ToolbarItem(placement: .primaryAction) {
             InspectorToggleButton()
         }
@@ -305,6 +309,26 @@ struct HierarchySearchButton: View {
                   ? "Buscar na hierarquia (⌘F)"
                   : "Conecte um aparelho para buscar na hierarquia")
         }
+    }
+}
+
+/// Esconde e mostra o espelho do aparelho. O ícone diz o estado: o telefone
+/// riscado é o espelho oculto.
+struct MirrorToggleButton: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Button {
+            appState.toggleMirror()
+        } label: {
+            Label(appState.mirrorVisible ? "Ocultar Espelho" : "Mostrar Espelho",
+                  systemImage: appState.mirrorVisible ? "iphone" : "iphone.slash")
+        }
+        .disabled(!appState.canToggleMirror)
+        .help(appState.canToggleMirror
+              ? (appState.mirrorVisible ? "Ocultar o espelho do aparelho (⌥1)" : "Mostrar o espelho do aparelho (⌥1)")
+              : "O espelho aparece com um aparelho conectado, em Page Objects, Rede e Analytics")
+        .accessibilityValue(appState.mirrorVisible ? "visível" : "oculto")
     }
 }
 

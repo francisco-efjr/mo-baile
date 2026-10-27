@@ -13,7 +13,7 @@ struct MoBaileApp: App {
     @State private var themeManager = ThemeManager()
 
     init() {
-        let state = AppState()
+        let state = AppState.atLaunch()
         _appState = State(initialValue: state)
         _session = State(initialValue: EngineSession(state: state))
     }

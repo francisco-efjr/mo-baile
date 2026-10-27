@@ -286,7 +286,10 @@ enum CommandRegistry {
             ),
             AppCommand(
                 id: .mirror, title: c.mirrorVisible ? "Ocultar Espelho" : "Mostrar Espelho",
-                category: .view, symbol: "iphone", keywords: ["tela", "painel", "alternar"], shortcut: .option("1")
+                category: .view, symbol: "iphone", keywords: ["tela", "telefone", "celular", "painel", "esconder", "alternar"],
+                shortcut: .option("1"),
+                disabledReason: !c.deviceConnected ? "O espelho aparece ao conectar um aparelho"
+                    : !c.workspaceTab.needsDevice ? "\(c.workspaceTab.displayName) não tem espelho" : nil
             ),
             AppCommand(
                 id: .workspace, title: c.workspaceVisible ? "Ocultar Workspace" : "Mostrar Workspace",

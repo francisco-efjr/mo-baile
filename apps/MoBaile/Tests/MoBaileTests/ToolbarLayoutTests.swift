@@ -62,10 +62,11 @@ final class ToolbarLayoutTests: XCTestCase {
         XCTAssertEqual(janela.title, "Page Objects")
     }
 
-    /// Sem aparelho, a janela abre no Início (`LaunchDestination`); numa área
-    /// que precisa de aparelho, o título diz que não há um.
+    /// A janela abre no Início (`AppState.atLaunch`); numa área que precisa
+    /// de aparelho, o título diz que não há um.
     func testTituloSemAparelho() throws {
         let (estado, sessao, tema) = ambiente(aparelho: nil)
+        estado.workspaceTab = AppState.atLaunch().workspaceTab
         let (janela, _) = try itensDaToolbar(estado, sessao, tema)
         defer { janela.close() }
         XCTAssertEqual(janela.title, "Início")

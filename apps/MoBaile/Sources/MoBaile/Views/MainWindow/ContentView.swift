@@ -91,17 +91,6 @@ struct ContentView: View {
             // permanentemente no estado vazio.
             await session.connect()
         }
-        // Onde a janela abre: no Início na primeira vez, com o motor parado ou
-        // sem aparelho; em Page Objects com aparelho (`LaunchDestination`).
-        .onChange(of: session.launchPhase) { _, fase in
-            let destino = LaunchDestination.pick(
-                firstRun: !UserDefaults.standard.bool(forKey: LaunchDestination.seenKey),
-                phase: fase,
-                deviceConnected: appState.isDeviceConnected,
-                current: appState.workspaceTab
-            )
-            if let destino, appState.selectedStepID == nil { appState.workspaceTab = destino }
-        }
         .onDisappear {
             Task { await session.disconnect() }
         }

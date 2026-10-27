@@ -210,8 +210,8 @@ só em Ubuntu e macOS.
     script resolve, ou "Abrir na App Store…" para o Xcode.
   - Confere de novo sozinha quando o app volta ao primeiro plano, que é
     quando a pessoa termina uma instalação no Terminal.
-  - O app abre no Início na primeira vez, com o motor parado ou sem
-    aparelho; com aparelho, abre em Page Objects. O atalho é ⌘0.
+  - O app sempre abre no Início, com a hierarquia fechada (desde a
+    3.14.0). O atalho é ⌘0.
 - **Motor parado por falta de Python:** o Início ainda funciona. Ele diz o
   que falta e oferece "Instalar no Terminal…" e "Reiniciar Motor".
 - **`tools/setup/instalar-mac.sh <alvo>`**, embutido no app em
