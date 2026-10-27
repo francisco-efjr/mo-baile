@@ -313,6 +313,37 @@ final class EngineSessionTests: XCTestCase {
         }
     }
 
+    /// AUT-3: exportar pede ao motor para gravar o flow e devolve o caminho;
+    /// o status diz as variáveis que o flow pede em `env`.
+    func testExportarFlowGravaPeloMotorEDizAsVariaveis() async throws {
+        let estado = AppState()
+        let motor = FakeEngine(respostas: try resultadosDasFixtures())
+        let sessao = EngineSession(state: estado, client: motor)
+        await sessao.record(at: CGPoint(x: 60, y: 45))
+        let resposta = #"{"yaml": "---\n", "variables": ["CAMPO_EMAIL"], "steps": 1, "path": "/tmp/flows/login.yaml"}"#
+        await motor.responder("flow.maestro_export", com: Data(resposta.utf8))
+
+        let caminho = await sessao.exportMaestroFlow()
+
+        XCTAssertEqual(caminho, "/tmp/flows/login.yaml")
+        XCTAssertEqual(estado.statusMessage, "Flow salvo em flows/login.yaml · pede CAMPO_EMAIL em env")
+        let params = await motor.parametros(de: "flow.maestro_export")
+        XCTAssertEqual(params?["save"], .bool(true))
+        XCTAssertNotNil(params?["name"])
+    }
+
+    func testExportarFlowSemPassosNaoChamaOMotor() async throws {
+        let estado = AppState()
+        let motor = FakeEngine(respostas: try resultadosDasFixtures())
+        let sessao = EngineSession(state: estado, client: motor)
+
+        let caminho = await sessao.exportMaestroFlow()
+
+        XCTAssertNil(caminho)
+        let chamadas = await motor.chamadas
+        XCTAssertFalse(chamadas.contains("flow.maestro_export"))
+    }
+
     /// Gravar dois passos acumula, e não substitui: o arquivo cresce.
     func testGravacoesSeAcumulamNosEditores() async throws {
         let estado = AppState()

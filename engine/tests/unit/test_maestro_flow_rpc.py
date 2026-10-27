@@ -6,8 +6,11 @@ falso (ver `aparelho_falso.py`).
 
 from __future__ import annotations
 
+import tempfile
 import time
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from test_flow_execucao import SENTINELA, FluxoBase
 
@@ -25,6 +28,16 @@ class TestFlowMaestroRpc(FluxoBase):
         self.assertEqual(len(exportado["variables"]), 1)
         self.assertIn(f"${{{exportado['variables'][0]}}}", exportado["yaml"])
         self.assertIn('appId: "br.app"', exportado["yaml"])
+
+    def test_salvar_nunca_sobrescreve_e_fica_em_flows(self):
+        self.gravar_android((540, 480, "id"))
+        with tempfile.TemporaryDirectory() as casa, patch("pathlib.Path.home", return_value=Path(casa)):
+            primeiro = self.ok("flow.maestro_export", {"save": True, "name": "login"})
+            segundo = self.ok("flow.maestro_export", {"save": True, "name": "login"})
+            pasta = Path(casa) / "Documents" / "Mo baile" / "flows"
+            self.assertEqual(Path(primeiro["path"]), pasta / "login.yaml")
+            self.assertEqual(Path(segundo["path"]), pasta / "login_2.yaml")
+            self.assertEqual(Path(primeiro["path"]).read_text(encoding="utf-8"), primeiro["yaml"])
 
     def test_rodar_o_flow_exportado_no_aparelho(self):
         exportado = self.exportar()

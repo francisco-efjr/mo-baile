@@ -375,6 +375,15 @@ enum EngineDTO {
         let screen: [Int]
     }
 
+    /// `flow.maestro_export`: o YAML, as variáveis que substituem o texto
+    /// digitado e, com `save`, onde o arquivo ficou.
+    struct MaestroExport: Decodable {
+        let yaml: String
+        let variables: [String]
+        let steps: Int
+        let path: String?
+    }
+
     struct FlowRun: Decodable {
         let running: Bool
         let steps: Int

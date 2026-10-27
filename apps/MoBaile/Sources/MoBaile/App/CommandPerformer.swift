@@ -92,6 +92,10 @@ struct CommandPerformer {
             Task { await session.stopFlow() }
         case .structure:
             appState.showingStructure = true
+        case .exportFlow:
+            Task {
+                if let caminho = await session.exportMaestroFlow() { Exporters.revealInFinder(caminho) }
+            }
         case .save:
             Task { await session.saveCode() }
         case .copyActions:

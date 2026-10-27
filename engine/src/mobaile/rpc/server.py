@@ -2042,15 +2042,20 @@ class EngineServer:
             raiz = pathlib.Path.home() / "Documents" / "Mo baile"
             pasta = raiz / "flows"
             base = re.sub(r"[^A-Za-z0-9_-]+", "_", str(nome or "flow")).strip("_")[:64] or "flow"
-            arquivo = pasta / f"{base}.yaml"
-            contador = 2
-            while arquivo.exists():
-                arquivo = pasta / f"{base}_{contador}.yaml"
-                contador += 1
-            if not _dentro_de(arquivo, raiz):
-                raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
             pasta.mkdir(parents=True, exist_ok=True)
-            arquivo.write_text(yaml_texto, encoding="utf-8")
+            contador = 1
+            while True:
+                arquivo = pasta / (f"{base}.yaml" if contador == 1 else f"{base}_{contador}.yaml")
+                if not _dentro_de(arquivo, raiz):
+                    raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
+                # "x" cria ou falha: entre conferir e gravar, outra exportacao
+                # nao consegue ocupar o mesmo nome e ter o arquivo sobrescrito.
+                try:
+                    with arquivo.open("x", encoding="utf-8") as saida:
+                        saida.write(yaml_texto)
+                    break
+                except FileExistsError:
+                    contador += 1
             resultado["path"] = str(arquivo)
             self._remember("maestro", arquivo.name, f"Flow do Maestro · {len(passos)} passos", str(arquivo))
         return resultado

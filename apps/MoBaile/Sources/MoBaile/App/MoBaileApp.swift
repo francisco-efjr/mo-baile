@@ -87,6 +87,7 @@ struct MoBaileCommands: Commands {
             Divider()
             item(.exportHAR, c)
             item(.exportAnalytics, c)
+            item(.exportFlow, c)
         }
 
         // MARK: Editar
@@ -144,6 +145,7 @@ struct MoBaileCommands: Commands {
         CommandMenu("Automação") {
             item(.structure, c)
             item(.run, c)
+            item(.exportFlow, c)
             Divider()
             item(.clearSteps, c)
         }
