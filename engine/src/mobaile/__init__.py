@@ -14,7 +14,7 @@ Nada aqui importa Tkinter, SwiftUI ou qualquer camada de apresentação.
 
 import sys as _sys
 
-__version__ = "3.14.2"
+__version__ = "3.15.0"
 
 # Subido com `python3 -S` pelo app nativo: as bibliotecas entram sem os `.pth`
 # (ver `_site`), antes de qualquer módulo do motor importar Pillow.

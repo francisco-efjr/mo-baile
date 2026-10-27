@@ -5,6 +5,47 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.15.0] - 2026-10-27
+
+### Adicionado
+
+- **Exportar Flow do Maestro…** na paleta, nos menus Automação e Arquivo e na
+  Estrutura do Fluxo. Os passos gravados viram um `.yaml` em Documentos › Mo
+  baile › flows, revelado no Finder. O texto digitado não vai para o arquivo:
+  vira `${VARIAVEL}`, e o status diz quais variáveis o flow pede em `env`.
+
+### Mudado
+
+- **Rodar Automação (⌘R) reproduz os passos pelo localizador no Android.**
+  Antes o toque ia para a coordenada gravada, com espera fixa: bastava a lista
+  rolar um pouco para o passo tocar outro item e terminar como "sucesso". Agora
+  cada passo é procurado pelo localizador gravado, com as esperas do Maestro.
+  Passo sem localizador estável (coordenada, toque em área vazia, elemento só
+  com a classe) toca o ponto gravado e diz isso no log. O texto digitado fica
+  só em memória. O iOS segue no runner de coordenadas por enquanto, e
+  `MOBAILE_FLOW_RUNNER=coordinates` volta ao comportamento antigo no Android.
+  O `flow.run` aceita `runner` e devolve `runner`, com `script` só no runner de
+  coordenadas (contrato aditivo).
+- **Flows no Android de 2 a 3 vezes mais rápidos.** O flow de exemplo
+  (13 comandos) caiu de 70 s para 29–34 s, e para 21–23 s com uma sessão do
+  Appium aberta. O runner reaproveita a tela que acabou de assentar até a
+  próxima ação. Com o `uiautomator dump`, que já espera a tela ficar ociosa, uma
+  leitura basta quando a tela mudou. E a sessão UiAutomator2 do Appium, quando
+  aberta, é usada para ler a tela.
+
+### Corrigido
+
+- **O inspetor do espelho e o flow não disputam mais o dump.** O arquivo remoto
+  era o mesmo, e um apagava o do outro. O aparelho passava a usar o Appium para
+  sempre, até no emulador. Agora o dump tem trava por aparelho, a árvore lida no
+  flow vira a do inspetor, e só o SIGKILL do `uiautomator dump` faz o aparelho
+  usar o Appium.
+- **Gravar um toque em área vazia no modo automático** gerava um localizador
+  de texto `pos_x_y` que nunca casava na reprodução. Agora grava a coordenada.
+- **Aparelho que só lê a tela pelo Appium e está sem sessão** é recusado antes
+  de o flow começar, com o que fazer. Antes, o flow falhava em 17 s dizendo só
+  que não leu a tela.
+
 ## [3.14.2] - 2026-10-27
 
 ### Corrigido
