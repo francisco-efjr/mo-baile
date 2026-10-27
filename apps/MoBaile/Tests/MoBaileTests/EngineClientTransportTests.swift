@@ -56,6 +56,7 @@ final class EngineClientTransportTests: XCTestCase {
             notificar("fake.cancel", {"id": alvo, "method": pendentes.get(alvo)})
         elif metodo == "lento":
             pendentes[pedido] = metodo
+            registrar("recebido lento")
         elif metodo == "atrasado":
             pendentes[pedido] = metodo
             threading.Timer(params.get("delay", 0.6), responder, (pedido, {"ok": True})).start()
@@ -143,6 +144,18 @@ final class EngineClientTransportTests: XCTestCase {
     private func linhasDoRegistro(_ registro: URL) -> [String] {
         ((try? String(contentsOf: registro, encoding: .utf8)) ?? "")
             .split(separator: "\n").map(String.init)
+    }
+
+    /// Espera a linha aparecer no registro do motor falso, com prazo.
+    private func esperarNoRegistro(_ registro: URL, _ linha: String, prazo: Double = 5) async throws {
+        let limite = Date().addingTimeInterval(prazo)
+        while !linhasDoRegistro(registro).contains(linha) {
+            guard Date() < limite else {
+                XCTFail("prazo de \(prazo)s estourado esperando \"\(linha)\" no registro")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
     }
 
     private struct Seq: Decodable {
@@ -261,12 +274,16 @@ final class EngineClientTransportTests: XCTestCase {
     }
 
     func testCancelarATarefaMandaCancelRequest() async throws {
-        let client = try await subirMotorFalso()
+        let registro = raiz.appendingPathComponent("registro.txt")
+        let client = try await subirMotorFalso(registro: registro)
         defer { Task { await client.stop() } }
         await client.useMethodTable(["lento": spec(30)])
 
+        // Cancelar antes de o pedido sair não manda `$/cancelRequest` (não há
+        // o que cancelar), então o teste espera o motor receber o `lento`. Um
+        // sono fixo aqui falhava no runner lento da release.
         let tarefa = Task { try await client.call("lento", as: Ok.self) }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await esperarNoRegistro(registro, "recebido lento")
         tarefa.cancel()
 
         switch await tarefa.result {

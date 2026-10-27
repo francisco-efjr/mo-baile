@@ -158,17 +158,31 @@ class TestTempoDeAuditoria(unittest.TestCase):
     """Guarda contra a volta da varredura O(eventos x variações).
 
     20 mil eventos e 1.800 variações levavam 2,5 s antes do índice e levam
-    0,07 s depois (Apple M4 Pro). O limite folgado só pega a regressão, não
-    oscilação de máquina.
+    0,07 s depois (Apple M4 Pro). No runner do CI, com cobertura, os mesmos
+    0,07 s viram mais de 1 s, então o limite não é em segundos: é medido em
+    passadas simples pelo log, cronometradas na mesma máquina. A auditoria
+    custa umas 60 passadas e a regressão custaria uma por variação (1.800).
+    O teto de 400 deixa folga de 6x para oscilação e pega a regressão com 4x.
     """
+
+    PASSADAS_MAXIMAS = 400
 
     def test_log_grande_audita_rapido(self):
         spec, events = cenario(20000, 200, 6, 7)
+        amostra = expand_spec(spec)[::60]
+        start = time.perf_counter()
+        for variant in amostra:
+            candidatos_simples(variant, events)
+        passada = (time.perf_counter() - start) / len(amostra)
+
         start = time.perf_counter()
         report = run_audit(spec, events, "android")
         elapsed = time.perf_counter() - start
         self.assertEqual(report.total, 1800)
-        self.assertLess(elapsed, 1.0, f"auditoria levou {elapsed:.2f} s")
+        self.assertLess(
+            elapsed / passada, self.PASSADAS_MAXIMAS,
+            f"auditoria levou {elapsed:.2f} s, {elapsed / passada:.0f} passadas de {passada * 1000:.1f} ms",
+        )
 
 
 if __name__ == "__main__":
