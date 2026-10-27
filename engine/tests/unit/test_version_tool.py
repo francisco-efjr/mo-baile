@@ -51,6 +51,12 @@ class TestVersaoEmRepoTemporario(unittest.TestCase):
         self._git("commit", "-qm", msg)
         return self._git("rev-parse", "HEAD")
 
+    def _bump(self, part):
+        """Sobe a versao e preenche a secao que o bump abre, como numa release."""
+        version_tool.cmd_bump(part)
+        changelog = self.root / "CHANGELOG.md"
+        changelog.write_text(changelog.read_text().replace("- \n", "- novidade\n", 1))
+
     def _push(self, local_sha, remote_sha, ref="refs/heads/main"):
         return version_tool.cmd_pre_push([f"{ref} {local_sha} {ref} {remote_sha}"])
 
@@ -62,9 +68,21 @@ class TestVersaoEmRepoTemporario(unittest.TestCase):
     def test_bump_propaga_e_abre_secao_no_changelog(self):
         version_tool.cmd_bump("minor")
         self.assertEqual(version_tool.read_version(version_tool.worktree_reader), "1.1.0")
-        self.assertEqual(version_tool.problems(version_tool.worktree_reader), [])
         changelog = (self.root / "CHANGELOG.md").read_text()
         self.assertLess(changelog.index("## [1.1.0]"), changelog.index("## [1.0.0]"))
+        # A secao nasce com um item vazio, que o check barra ate ser preenchido.
+        self.assertEqual(version_tool.problems(version_tool.worktree_reader), ["CHANGELOG.md:7 tem um item vazio"])
+        (self.root / "CHANGELOG.md").write_text(changelog.replace("- \n", "- novidade\n", 1))
+        self.assertEqual(version_tool.problems(version_tool.worktree_reader), [])
+
+    def test_secao_repetida_no_changelog_e_apontada(self):
+        version_tool.cmd_bump("patch")
+        changelog = (self.root / "CHANGELOG.md").read_text()
+        section = "## [1.0.1] - 2026-01-02\n\n- escrita a parte\n\n"
+        (self.root / "CHANGELOG.md").write_text(changelog.replace("## [1.0.0]", section + "## [1.0.0]", 1))
+        found = version_tool.problems(version_tool.worktree_reader)
+        self.assertIn("CHANGELOG.md tem a secao '## [1.0.1]' repetida", found)
+        self.assertIn("CHANGELOG.md:7 tem um item vazio", found)
 
     def test_push_sem_subir_versao_e_recusado(self):
         (self.root / "x.txt").write_text("mudanca")
@@ -73,7 +91,7 @@ class TestVersaoEmRepoTemporario(unittest.TestCase):
             self.assertEqual(self._push(sem_bump, self.v1), 1)
 
     def test_push_com_versao_nova_passa(self):
-        version_tool.cmd_bump("patch")
+        self._bump("patch")
         com_bump = self._commit("1.0.1")
         self.assertEqual(self._push(com_bump, self.v1), 0)
 
@@ -83,7 +101,7 @@ class TestVersaoEmRepoTemporario(unittest.TestCase):
         sem_bump = self._commit("outra branch, mesma versao")
         with patch("sys.stderr"):
             self.assertEqual(self._push(sem_bump, ZERO, "refs/heads/nova"), 1)
-        version_tool.cmd_bump("patch")
+        self._bump("patch")
         self.assertEqual(self._push(self._commit("1.0.1"), ZERO, "refs/heads/nova"), 0)
 
     def test_branch_nova_com_a_tag_no_proprio_commit_passa(self):

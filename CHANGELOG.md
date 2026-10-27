@@ -5,11 +5,22 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
-## [3.14.0] - 2026-10-27
+## [3.14.1] - 2026-10-27
 
-### Adicionado
+### Corrigido
 
-- 
+- **CI da main vermelho no teste de desempenho da auditoria.** O limite era
+  de 1 s absoluto: a auditoria leva 0,07 s num M4 Pro, mas passou de 1 s no
+  runner do CI com cobertura. Agora o limite é medido em passadas simples pelo
+  log, cronometradas na mesma máquina (teto de 400; a auditoria custa umas 60,
+  e a regressão para a varredura por variação, umas 1.200).
+- **Seções repetidas no CHANGELOG.** A 3.5.0, a 3.13.0 e a 3.14.0 tinham, além
+  da seção escrita, a seção vazia que o `bump` cria. As vazias saíram.
+
+### Interno
+
+- `tools/version.py check` (e com ele o `make check` e o `pre-push`) recusa
+  seção de versão repetida e item vazio no CHANGELOG.
 
 ## [3.14.0] - 2026-10-27
 
@@ -29,12 +40,6 @@ A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/V
   quando o espelho está oculto. Sem aparelho, ou nas áreas sem espelho
   (Início, Ambiente, Relatório), o botão e o comando ficam desabilitados e
   dizem por quê.
-
-## [3.13.0] - 2026-10-26
-
-### Adicionado
-
-- 
 
 ## [3.13.0] - 2026-10-26
 
@@ -435,12 +440,6 @@ apareciam no GitHub e travaram o Release da 3.5.0.
   desatualizada sem ela estar.
 - O teste de `scrcpy.start` sem aparelho não depende mais de o `scrcpy` estar
   instalado na máquina.
-
-## [3.5.0] - 2026-10-11
-
-### Adicionado
-
-- 
 
 ## [3.5.0] - 2026-10-11
 

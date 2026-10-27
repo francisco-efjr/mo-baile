@@ -94,6 +94,14 @@ def problems(read: Reader) -> list[str]:
     changelog = read(CHANGELOG) or ""
     if not re.search(rf"^## \[{re.escape(version)}\]", changelog, re.MULTILINE):
         found.append(f"{CHANGELOG} sem a secao '## [{version}]'")
+    # O bump cria a secao com um item vazio. Escrever outra secao em vez de
+    # preencher essa deixa a versao repetida e um "- " sozinho no CHANGELOG.
+    sections = re.findall(r"^## \[([^\]]+)\]", changelog, re.MULTILINE)
+    for repeated in sorted({s for s in sections if sections.count(s) > 1}):
+        found.append(f"{CHANGELOG} tem a secao '## [{repeated}]' repetida")
+    for number, line in enumerate(changelog.splitlines(), start=1):
+        if line.strip() == "-":
+            found.append(f"{CHANGELOG}:{number} tem um item vazio")
     return found
 
 
