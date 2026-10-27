@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from mobaile.adapters.flow_devices import AndroidFlowDevice, validate_app_id
@@ -19,6 +20,7 @@ from mobaile.services.maestro_flow import (
     FlowRunner,
     Selector,
     export_steps,
+    flow_from_steps,
     parse_flow,
     resolve_point,
     select_elements,
@@ -490,6 +492,72 @@ class ExportacaoTest(unittest.TestCase):
         self.assertTrue(resultado.success, resultado.message)
         self.assertEqual(aparelho.digitado, ["ana@exemplo.com"])
         self.assertEqual(aparelho.atual, "home")
+
+
+class PassosGravadosTest(unittest.TestCase):
+    """AUT-2: `flow.run` reproduz os passos gravados pelo localizador."""
+
+    CPF = "123.456.789-00"
+
+    def test_passo_sem_localizador_estavel_toca_o_ponto_gravado_e_diz_isso(self):
+        posicao = replace(passo(1, "(AppiumBy.XPATH, '//android.widget.EditText[@resource-id=\"x\"]')",
+                                coords=(30, 40)), strategy=LocatorStrategy.POSITION)
+        so_classe = passo(2, "(AppiumBy.XPATH, '//android.webkit.WebView')", coords=(50, 60))
+        area_vazia = passo(3, "(AppiumBy.XPATH, '//android.view.View[@text=\"pos_900_1600\"]')",
+                           coords=(900, 1600))
+        for p_, ponto in ((posicao, "30,40"), (so_classe, "50,60"), (area_vazia, "900,1600")):
+            with self.subTest(passo=p_.step_num):
+                self.assertEqual(selector_from_step(p_), {"point": ponto})
+        flow = flow_from_steps([posicao, so_classe, area_vazia])
+        self.assertTrue(all("coordenada gravada" in s.describe() for s in flow.steps))
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        self.assertTrue(runner(aparelho)[0].run(flow).success)
+        self.assertEqual(aparelho.toques, [(30, 40), (50, 60), (900, 1600)])
+
+    def test_um_item_de_topo_por_passo_e_o_texto_so_em_memoria(self):
+        passos = [
+            passo(1, '(AppiumBy.ID, "br.app:id/campo_email")', acao="input"),
+            passo(2, "(AppiumBy.XPATH, '//android.widget.TextView[@text=\"Entrar\"]')", nome="BOTAO_ENTRAR"),
+        ]
+        flow = flow_from_steps(passos)
+        self.assertEqual(len(flow.steps), 2)
+        self.assertNotIn("segredo", repr(flow), "o texto digitado nao aparece no repr")
+        self.assertNotIn("segredo", str(flow.summary()))
+        aparelho = AparelhoFalso({"login": LOGIN, "home": HOME}, "login",
+                                 {("login", 100, 400, 980, 560): ("home", 0)})
+        r, linhas, _ = runner(aparelho)
+        resultado = r.run(flow)
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertEqual(aparelho.digitado, ["segredo"])
+        self.assertFalse([linha for linha in linhas if "segredo" in linha])
+
+    def test_texto_digitado_escapado_num_seletor_seguinte_tambem_e_mascarado(self):
+        # A gravacao le o campo depois da digitacao: o passo seguinte pode ter o
+        # valor como localizador de texto, que vira regex escapada no seletor.
+        digitar = replace(passo(1, '(AppiumBy.ID, "br.app:id/campo_email")', acao="input"), input_text=self.CPF)
+        conferir = passo(2, f"(AppiumBy.XPATH, '//android.widget.TextView[@text=\"{self.CPF}\"]')",
+                         nome="CONFIRMACAO")
+        flow = flow_from_steps([digitar, conferir])
+        r, linhas, _ = runner(self.aparelho_login_com_campo())
+        r.lookup_timeout_s = 1
+        resultado = r.run(flow)
+        self.assertFalse(resultado.success)
+        vazou = [x for x in [*linhas, resultado.message, resultado.failed_step or ""]
+                 if "123" in x and "789" in x]
+        self.assertEqual(vazou, [])
+        yaml, _ = export_steps([digitar, conferir])
+        self.assertNotIn("789", yaml, "o YAML exportado tambem nao carrega o valor digitado")
+
+    def aparelho_login_com_campo(self):
+        return AparelhoFalso({"login": LOGIN}, "login")
+
+    def test_passo_de_digitacao_sem_texto_falha_no_passo(self):
+        sem_texto = replace(passo(1, '(AppiumBy.ID, "br.app:id/campo_email")', acao="input"), input_text=None)
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        resultado = runner(aparelho)[0].run(flow_from_steps([sem_texto]))
+        self.assertFalse(resultado.success)
+        self.assertIn("sem texto", resultado.message)
+        self.assertEqual(aparelho.digitado, [])
 
 
 class AdbFalso:

@@ -1552,9 +1552,14 @@ class EngineServer:
         x = validate_coordinate(params.get("x"), "x")
         y = validate_coordinate(params.get("y"), "y")
         element = UIHierarchyParser.find_element_at(xml, x, y)
-        if element is None:
+        sintetico = element is None
+        if sintetico:
             element = self._elemento_por_posicao(x, y, platform)
         strategy_raw = str(params.get("strategy") or settings.default_strategy).lower()
+        if sintetico and strategy_raw == "auto":
+            # O `pos_x_y` do elemento sintetico nao existe na tela: um xpath com
+            # ele venceria a coordenada no ranking e nunca casaria na reproducao.
+            strategy_raw = "position"
 
         # "auto" deixa o motor escolher pelo que e mais robusto e unico nesta
         # tela, em vez de aplicar uma estrategia fixa a todos os elementos.
@@ -1875,12 +1880,15 @@ class EngineServer:
 
     # ------------------------------------------------------- execucao de fluxo
 
-    def flow_run(self, _params: dict[str, Any]) -> dict[str, Any]:
+    def flow_run(self, params: dict[str, Any]) -> dict[str, Any]:
         """Executa os passos gravados no aparelho.
 
-        O servico ja existia e era testado, mas so a interface Tk o usava: o
-        front nativo nao tinha como rodar automacao nenhuma. O andamento sai por
-        `flow.log`, linha a linha, como o espelho faz com `stream.frame`.
+        No Android, por padrao, cada passo e procurado pelo localizador gravado,
+        com as esperas do Maestro (`runner: "locator"`): o toque segue o elemento
+        quando o layout muda. `runner: "coordinates"` (ou `MOBAILE_FLOW_RUNNER`)
+        roda o script de coordenadas de antes, o caminho de aparelho sem arvore
+        nenhuma; o iOS segue nele ate o `/source` do WDA ser medido no runner. O
+        andamento sai por `flow.log` e `flow.step`, igual nos dois.
         """
         passos = self.codegen.get_steps()
         if not passos:
@@ -1888,6 +1896,14 @@ class EngineServer:
 
         sessao = self._require_session()
         device = sessao.device_id
+        runner = str(params.get("runner") or settings.flow_runner).lower()
+        if runner not in ("locator", "coordinates"):
+            raise InvalidInputError(f"runner invalido: {runner!r}. Use locator ou coordinates.")
+        if sessao.platform is Platform.IOS:
+            runner = "coordinates"
+        flow = maestro_flow.flow_from_steps(passos) if runner == "locator" else None
+        if flow is not None:
+            self._preparar_leitura_do_flow(device or "")
         with self._state_lock:
             if self._shutdown_done:
                 raise InvalidInputError("O motor esta encerrando.")
@@ -1910,6 +1926,19 @@ class EngineServer:
             if not ok:
                 raise EngineError(motivo)
             self._check_cancelled()
+            if flow is not None:
+                ler, backend = self._leitor_do_flow(device or "")
+                execucao = maestro_flow.FlowThread(
+                    flow, AndroidFlowDevice(self.adb, device or "", hierarchy=ler, backend=backend),
+                    ao_sair, lambda sucesso, mensagem: ao_terminar(sucesso, mensagem),
+                    on_step=self._notify_flow_step,
+                )
+                with self._state_lock:
+                    if self._flow_cancelled or self._shutdown_done:
+                        raise RequestCancelledError("Execucao cancelada antes de iniciar.")
+                    self._flow_thread = execucao
+                execucao.start()
+                return {"running": True, "steps": len(passos), "runner": "locator"}
             script = flows.generate_hidden_runner_script(
                 steps=passos,
                 platform=sessao.platform.value,
@@ -1931,7 +1960,7 @@ class EngineServer:
                 self._flow_running = False
                 self._flow_thread = None
             raise
-        return {"running": True, "steps": len(passos), "script": script}
+        return {"running": True, "steps": len(passos), "runner": "coordinates", "script": script}
 
     def _release_flow(self) -> bool:
         """Solta a trava de execucao. Devolve se a execucao tinha sido cancelada."""

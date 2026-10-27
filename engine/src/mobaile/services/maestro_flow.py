@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from mobaile.domain.errors import EngineError, InvalidInputError
-from mobaile.domain.models import AutomationStep, UIElement
+from mobaile.domain.models import AutomationStep, LocatorStrategy, UIElement
 from mobaile.ports import FlowDevice
 from mobaile.services.hierarchy import UIHierarchyParser
 
@@ -122,7 +122,8 @@ class Step:
 
     command: str
     selector: Selector | None = None
-    text: str | None = None
+    # Fora do `repr`: pode ser senha, e um `logger.debug("%r", passo)` a vazaria.
+    text: str | None = field(default=None, repr=False)
     app_id: str | None = None
     optional: bool = False
     timeout_s: float | None = None
@@ -162,7 +163,7 @@ class Flow:
     on_start: tuple[Step, ...] = ()
     on_complete: tuple[Step, ...] = ()
     path: Path | None = None
-    secrets: tuple[str, ...] = ()
+    secrets: tuple[str, ...] = field(default=(), repr=False)
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -914,7 +915,9 @@ class FlowRunner:
                 self.log("  a tela nao mudou; tocando de novo")
 
     def _r_inputText(self, passo: Step) -> None:
-        if not self.device.type_text(passo.text or ""):
+        if passo.text is None:
+            raise FlowFailed("passo de digitacao sem texto gravado; nada foi digitado")
+        if not self.device.type_text(passo.text):
             raise FlowFailed("o aparelho recusou a digitacao")
         self._assentar()
 
@@ -1085,9 +1088,18 @@ def _yaml_str(texto: str) -> str:
     return json.dumps(texto, ensure_ascii=False)
 
 
+# Texto do elemento sintetico que a gravacao cria para toque em area sem no.
+_SINTETICO = re.compile(r"pos_\d+_\d+")
+
+
 def selector_from_step(passo: AutomationStep) -> dict[str, str]:
-    """Seletor Maestro equivalente ao localizador que o ranking escolheu na gravacao."""
-    m = _LOCATOR.match(passo.locator_value or "")
+    """Seletor Maestro equivalente ao localizador que o ranking escolheu na gravacao.
+
+    Sem identidade estavel o passo vira o ponto gravado: estrategia `position`,
+    xpath so com a classe (`//android.view.View`) e o elemento sintetico do toque
+    em area vazia, cujo `pos_x_y` nao existe na tela.
+    """
+    m = None if passo.strategy == LocatorStrategy.POSITION else _LOCATOR.match(passo.locator_value or "")
     if m:
         estrategia = m.group(1)
         try:
@@ -1104,7 +1116,7 @@ def selector_from_step(passo: AutomationStep) -> dict[str, str]:
                 return {"text": _literal_regex(valor)}
             if estrategia == "XPATH":
                 attrs = _XPATH_ATTR.findall(valor)
-                if len(attrs) >= 1:
+                if len(attrs) >= 1 and not _SINTETICO.fullmatch(attrs[0][1][1:-1]):
                     nome, literal = attrs[0]
                     conteudo = literal[1:-1]
                     if nome in ("resource-id", "name"):
@@ -1134,6 +1146,9 @@ def export_steps(
     roda passar os valores em `env` (como o Page Object recebe `texto`).
     """
     app = app_id or next((p.package for p in passos if p.package), None)
+    # A gravacao le o campo depois da digitacao: um passo seguinte pode ter o
+    # valor no rotulo ou no seletor de texto, inclusive escapado como regex.
+    mascarar = _mascara_dos_digitados(passos)
     linhas = []
     if app:
         linhas.append(f"appId: {_yaml_str(app)}")
@@ -1144,9 +1159,10 @@ def export_steps(
         linhas.append("- launchApp")
     variaveis: list[str] = []
     for passo in passos:
-        rotulo = passo.element_name or passo.var_name
+        rotulo = mascarar(passo.element_name or passo.var_name)
         linhas.append(f"# passo {passo.step_num}: {rotulo}".replace("\n", " "))
-        linhas.append(f"- tapOn: {_seletor_yaml(selector_from_step(passo))}")
+        seletor = {k: mascarar(v) for k, v in selector_from_step(passo).items()}
+        linhas.append(f"- tapOn: {_seletor_yaml(seletor)}")
         if passo.action_type == "input":
             var = re.sub(r"\W", "_", passo.var_name or f"TEXTO_{passo.step_num}").upper()
             if not _VAR_NAME.fullmatch(var):
@@ -1156,3 +1172,46 @@ def export_steps(
             variaveis.append(var)
             linhas.append(f"- inputText: ${{{var}}}")
     return "\n".join(linhas) + "\n", variaveis
+
+
+def _formas_do_digitado(passos: list[AutomationStep]) -> list[str]:
+    """Cada texto digitado, literal e escapado como regex, do mais longo ao mais curto."""
+    formas = {forma for p in passos if p.input_text and len(p.input_text) >= 3
+              for forma in (p.input_text, _literal_regex(p.input_text))}
+    return sorted(formas, key=len, reverse=True)
+
+
+def _mascara_dos_digitados(passos: list[AutomationStep]) -> Callable[[str], str]:
+    formas = _formas_do_digitado(passos)
+
+    def mascarar(texto: str) -> str:
+        for forma in formas:
+            texto = texto.replace(forma, "***")
+        return texto
+
+    return mascarar
+
+
+def flow_from_steps(passos: list[AutomationStep]) -> Flow:
+    """Os passos gravados como `Flow`, para o `flow.run` reproduzir pelo localizador.
+
+    Sem YAML nem `${VAR}`: o texto digitado vem do passo e so existe em memoria,
+    em `secrets` para o log o mascarar. Cada passo gravado vira um item de topo
+    (um `runFlow` sem condicao), para `flow.step` contar passo gravado. Passo sem
+    localizador estavel toca o ponto gravado e diz isso no rotulo.
+    """
+    if not passos:
+        raise InvalidInputError("Nenhum passo gravado para executar.")
+    itens = []
+    for passo in passos:
+        seletor = selector_from_step(passo)
+        rotulo = passo.element_name or passo.var_name or f"passo {passo.step_num}"
+        acao = "digitar em" if passo.action_type == "input" else "tocar em"
+        subpassos = [Step("tapOn", selector=Selector(**seletor), source=f"passo {passo.step_num}")]
+        if passo.action_type == "input":
+            subpassos.append(Step("inputText", text=passo.input_text or None, source=f"passo {passo.step_num}"))
+        nota = " (coordenada gravada: sem localizador estavel)" if "point" in seletor else ""
+        itens.append(Step("runFlow", steps=tuple(subpassos), label=f"{acao} {rotulo}{nota}",
+                          source=f"passo {passo.step_num}"))
+    return Flow(app_id=None, name="passos gravados", tags=(), steps=tuple(itens),
+                secrets=tuple(_formas_do_digitado(passos)))

@@ -58,6 +58,9 @@ class Settings:
     stream_format: str
     stream_quality: int
     wda_mjpeg_port: int
+    # Como `flow.run` reproduz os passos gravados no Android: pelo localizador,
+    # com as esperas do Maestro, ou pelo script de coordenadas de antes.
+    flow_runner: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -84,6 +87,7 @@ class Settings:
             stream_quality=int(_env_float("STREAM_QUALITY", 80, minimum=10, maximum=95)),
             # O WebDriverAgent serve MJPEG da tela nessa porta (padrao dele: 9100).
             wda_mjpeg_port=int(_env_float("WDA_MJPEG_PORT", 9100, minimum=1, maximum=65535)),
+            flow_runner=_env_choice("MOBAILE_FLOW_RUNNER", "locator", ("locator", "coordinates")),
         )
 
 

@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
+from mobaile.domain.models import AutomationStep, LocatorStrategy
 from mobaile.rpc import protocol
 from mobaile.rpc.server import EngineServer
 
@@ -100,7 +101,45 @@ class TestFlowLifecycle(ContractBase):
              patch("mobaile.rpc.server.flows.verify_preconditions", return_value=(True, "ok")), \
              patch("mobaile.rpc.server.flows.generate_hidden_runner_script", return_value="/tmp/test-flow.py"), \
              patch("mobaile.rpc.server.flows.run_flow_in_background", return_value=execution):
-            return self.ok("flow.run")
+            return self.ok("flow.run", {"runner": "coordinates"})
+
+    def passo_gravado(self):
+        return AutomationStep(
+            step_num=1, action_type="click", var_name="btn_entrar", element_name="Entrar",
+            class_name="android.widget.Button", strategy=LocatorStrategy.ID,
+            locator_value="(AppiumBy.ID, 'br.app:id/btn_entrar')", coords=(540, 480),
+        )
+
+    def test_android_roda_pelo_localizador_por_padrao_e_o_stop_chega_a_thread(self):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        with patch.object(self.server.codegen, "get_steps", return_value=[self.passo_gravado()]), \
+             patch("mobaile.rpc.server.flows.verify_preconditions", return_value=(True, "ok")), \
+             patch("mobaile.rpc.server.flows.generate_hidden_runner_script") as script, \
+             patch("mobaile.rpc.server.maestro_flow.FlowThread") as thread:
+            inicio = self.ok("flow.run")
+        self.assertEqual(inicio, {"running": True, "steps": 1, "runner": "locator"})
+        script.assert_not_called()
+        flow = thread.call_args.args[0]
+        self.assertEqual(len(flow.steps), 1, "um item de topo por passo gravado, para o flow.step")
+        thread.return_value.start.assert_called_once()
+        self.assertTrue(self.ok("flow.stop")["stopped"])
+        thread.return_value.cancel.assert_called_once()
+
+    def test_ios_segue_no_script_de_coordenadas(self):
+        self.ok("session.select_device", {"platform": "ios", "device_id": "00008110-001234560E12345A"})
+        with patch.object(self.server.codegen, "get_steps", return_value=[self.passo_gravado()]), \
+             patch("mobaile.rpc.server.flows.verify_preconditions", return_value=(True, "ok")), \
+             patch("mobaile.rpc.server.flows.generate_hidden_runner_script", return_value="/tmp/t.py"), \
+             patch("mobaile.rpc.server.flows.run_flow_in_background", return_value=MagicMock()), \
+             patch("mobaile.rpc.server.maestro_flow.FlowThread") as thread:
+            inicio = self.ok("flow.run")
+        self.assertEqual(inicio["runner"], "coordinates")
+        thread.assert_not_called()
+
+    def test_runner_desconhecido_e_recusado(self):
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+        with patch.object(self.server.codegen, "get_steps", return_value=[self.passo_gravado()]):
+            self.assertIn("runner invalido", self.erro("flow.run", {"runner": "magico"})["message"])
 
     def test_flow_stop_encaminha_cancelamento_ao_processo(self):
         execution = MagicMock()
@@ -126,7 +165,7 @@ class TestFlowLifecycle(ContractBase):
              patch("mobaile.rpc.server.flows.verify_preconditions", side_effect=preconditions), \
              patch("mobaile.rpc.server.flows.generate_hidden_runner_script", return_value="/tmp/test-flow.py"), \
              patch("mobaile.rpc.server.flows.run_flow_in_background") as run:
-            self.assertIn("error", self.call("flow.run"))
+            self.assertIn("error", self.call("flow.run", {"runner": "coordinates"}))
         run.assert_not_called()
         self.assertFalse(self.ok("flow.status")["running"])
 
@@ -263,6 +302,16 @@ class TestFluxoDeInspecao(ContractBase):
         # exibido segue o padrao do Page Object e nao a carrega.
         passos = self.ok("codegen.steps")["steps"]
         self.assertEqual(passos[-1]["coords"], [900, 1600])
+
+    def test_toque_em_area_vazia_no_modo_auto_grava_a_coordenada(self):
+        """O `pos_x_y` do sintetico nao existe na tela: no ranking, o xpath com
+        ele vencia a coordenada e a reproducao procurava um texto que nunca casa."""
+        with patch.object(self.server.adb, "get_ui_hierarchy", return_value=self.XML):
+            self.ok("hierarchy.dump")
+        self.ok("codegen.record", {"x": 900, "y": 1600, "strategy": "auto"})
+        passo = self.ok("codegen.steps")["steps"][-1]
+        self.assertEqual(passo["strategy"], "position")
+        self.assertEqual(passo["coords"], [900, 1600])
 
     def test_elemento_sintetico_usa_a_classe_da_plataforma_ativa(self):
         """iOS e Android nomeiam o no generico de formas diferentes, e o codigo

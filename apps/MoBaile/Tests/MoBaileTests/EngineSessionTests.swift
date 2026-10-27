@@ -291,6 +291,28 @@ final class EngineSessionTests: XCTestCase {
         XCTAssertFalse(estado.steps.isEmpty, "os passos não foram relidos")
     }
 
+    /// AUT-2: no Android o `flow.run` roda pelo localizador e responde sem
+    /// `script`; no runner de coordenadas o `script` volta. As duas respostas
+    /// têm de virar execução em andamento, e não erro de decodificação.
+    func testRodarPassosAceitaRespostaComESemScript() async throws {
+        let respostas = [
+            #"{"running": true, "steps": 2, "runner": "locator"}"#,
+            #"{"running": true, "steps": 2, "runner": "coordinates", "script": "/tmp/x.py"}"#,
+        ]
+        for resposta in respostas {
+            let estado = AppState()
+            let motor = FakeEngine(respostas: try resultadosDasFixtures())
+            let sessao = EngineSession(state: estado, client: motor)
+            await sessao.record(at: CGPoint(x: 60, y: 45))
+            await motor.responder("flow.run", com: Data(resposta.utf8))
+
+            await sessao.runFlow()
+
+            XCTAssertEqual(estado.runState, .running, resposta)
+            XCTAssertEqual(estado.statusMessage, "Executando 2 passo(s)…", resposta)
+        }
+    }
+
     /// Gravar dois passos acumula, e não substitui: o arquivo cresce.
     func testGravacoesSeAcumulamNosEditores() async throws {
         let estado = AppState()

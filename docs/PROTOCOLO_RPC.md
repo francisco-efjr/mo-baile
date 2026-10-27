@@ -271,7 +271,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `flow.run` | — | roda os passos gravados no alvo ativo. O andamento chega por `flow.step`, `flow.log` e `flow.finished` |
+| `flow.run` | `runner?` | roda os passos gravados no alvo ativo. No Android, por padrão (`runner: "locator"`, ou `MOBAILE_FLOW_RUNNER`), cada passo é procurado pelo localizador gravado, com as esperas do `flow.maestro_run`; passo sem localizador estável (`position`, xpath só com a classe, toque em área vazia) toca a coordenada gravada e diz isso no log. `runner: "coordinates"` roda o script de coordenadas de antes, o único caminho no iOS por enquanto. O texto digitado fica só em memória. Devolve `{running, steps, runner, script?}`, com `script` só no runner de coordenadas (3.15.0). O andamento chega por `flow.step`, `flow.log` e `flow.finished` |
 | `flow.stop` | — | pede a interrupção após o passo atual. Idempotente |
 | `flow.status` | — | `{running, cancelled}` |
 | `flow.maestro_check` | `yaml` ou `path`, `env?` | valida um flow no formato do Maestro sem tocar o aparelho: `{valid, app_id, name, tags, steps}`. Comando fora do subconjunto suportado, JavaScript e comandos de IA/nuvem dão `invalid_input` com o motivo |
