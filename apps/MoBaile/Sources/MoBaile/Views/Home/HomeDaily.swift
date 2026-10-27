@@ -85,7 +85,7 @@ struct HomeHeader: View {
 }
 
 /// Cápsula do ambiente: ponto verde (pronto) ou amarelo (pendência) e o texto
-/// curto. Leva ao Ambiente.
+/// curto. Leva ao Ambiente. É controle, não conteúdo: cápsula de vidro.
 struct HomeEnvironmentPill: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
@@ -112,7 +112,7 @@ struct HomeEnvironmentPill: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(hover ? theme.fillPrimary : theme.fillSecondary, in: Capsule())
+            .mbGlass(.capsula, in: Capsule(), interactive: true, highlighted: hover)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

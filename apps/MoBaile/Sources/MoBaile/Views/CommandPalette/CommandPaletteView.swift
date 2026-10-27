@@ -23,6 +23,7 @@ struct CommandPaletteOverlay: View {
                     .onTapGesture { appState.commandPalettePresented = false }
                     .accessibilityHidden(true)
                 CommandPaletteView()
+                    .mbGlassTransition()
                     .padding(.top, DesignMetrics.CommandPalette.topOffset)
                     .padding(.horizontal, DesignMetrics.Spacing.s7)
             }
@@ -98,12 +99,8 @@ struct CommandPaletteView: View {
             rodape
         }
         .frame(width: Self.width)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous)
-                .strokeBorder(theme.separatorStrong, lineWidth: DesignMetrics.hairline / 2)
-        )
-        .shadow(color: theme.floatingShadow, radius: DesignMetrics.Shadow.floatingRadius, y: DesignMetrics.Shadow.floatingY)
+        // Liquid Glass no macOS 26; material com borda e sombra antes.
+        .mbGlass(.flutuante, in: RoundedRectangle(cornerRadius: DesignMetrics.Radius.card, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Paleta de comandos")
         // O traço sozinho não prende o VoiceOver no AppKit: o fundo sai da

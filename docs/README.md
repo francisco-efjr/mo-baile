@@ -35,6 +35,7 @@ Para começar: [README do repositório](../README.md) e
 | [0003](adr/0003-relatorio-tagueamento.md) | Relatório de tagueamento com o `tag_audit` como núcleo |
 | [0004](adr/0004-https-sem-proxy-android.md) | HTTPS sem proxy no Android pelo log do OkHttp |
 | [0005](adr/0005-app-tk-congelado.md) | App Tk congelado; o app nativo é o produto |
+| [0006](adr/0006-liquid-glass-real.md) | Liquid Glass de verdade no macOS 26, por papéis |
 
 ## Planejamento em aberto
 

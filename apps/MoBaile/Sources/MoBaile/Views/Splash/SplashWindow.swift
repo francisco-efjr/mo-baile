@@ -203,16 +203,16 @@ struct SplashView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .tracking(0.9)
                         .foregroundStyle(Self.navy.opacity(0.75))
+                    // Trilho de vidro transparente sobre o céu; a barra é
+                    // conteúdo dentro dele.
                     GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.55))
-                            Capsule()
-                                .fill(Color(hex: "#C2456E"))
-                                .frame(width: geo.size.width * progress.fraction)
-                                .animation(reduceMotion ? nil : .linear(duration: SplashTiming.tick), value: progress.fraction)
-                        }
+                        Capsule()
+                            .fill(Color(hex: "#C2456E"))
+                            .frame(width: geo.size.width * progress.fraction)
+                            .animation(reduceMotion ? nil : .linear(duration: SplashTiming.tick), value: progress.fraction)
                     }
                     .frame(width: 190, height: 5)
+                    .mbGlass(.midia, in: Capsule())
                     .padding(.top, 16)
                     Text(progress.message)
                         .font(.system(size: 11))

@@ -197,6 +197,8 @@
   --separator-strong: rgba(255,255,255,.55);
   --control-border: rgba(255,255,255,.62);
   --accent: #D9567F;
+  /* Branco sobre #D9567F dá 3,8:1; o marinho dá 4,6:1 (3.13). */
+  --on-accent: #141543;
   --accent-text: #FFB3C9;
   --selection: #D9567F;
   --selection-inactive: rgba(255,255,255,.26);

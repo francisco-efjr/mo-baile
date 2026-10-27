@@ -75,7 +75,9 @@ struct AppSidebar: View {
         // dela. Uma paleta alternativa tem cor própria de barra lateral.
         .scrollContentBackground(themeManager.palette == nil ? .automatic : .hidden)
         .background(themeManager.palette == nil ? Color.clear : theme.bgSidebar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // Ambiente e o estado do aparelho ficam presos à base; no macOS 26 a
+        // lista rola por baixo deles com o efeito de borda do sistema.
+        .mbBottomBar {
             VStack(spacing: 0) {
                 SidebarEnvironmentItem(pending: contagem(.environment))
                 SidebarBottomBar()

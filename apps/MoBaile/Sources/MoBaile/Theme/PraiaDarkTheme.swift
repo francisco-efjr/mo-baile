@@ -45,7 +45,9 @@ struct PraiaDarkTheme: ThemeTokens {
     var accent: Color { highContrast ? Color(hex: "#D9567F") : Color(hex: "#C2456E") }
     let accentHover = Color(hex: "#CC5079")
     let accentPressed = Color(hex: "#A8365C")
-    let onAccent = Color.white
+    /// Com Aumentar contraste o destaque clareia para aparecer no fundo escuro,
+    /// e o branco sobre ele cairia para 3,8:1; o marinho do ícone dá 4,6:1.
+    var onAccent: Color { highContrast ? Color(hex: "#141543") : .white }
     var accentText: Color { highContrast ? Color(hex: "#FFB3C9") : Color(hex: "#F389A9") }
     let accentTint = Color(r: 243, g: 137, b: 169, 0.26)
     let focusRing = Color(r: 243, g: 137, b: 169, 0.60)

@@ -19,7 +19,14 @@ struct MainToolbar: ToolbarContent {
     let subtitle: String
 
     var body: some ToolbarContent {
-        if #available(macOS 15.0, *) {
+        // No macOS 26 cada item ganha uma cápsula de vidro; o título é texto da
+        // janela, não controle, e fica sem ela.
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) {
+                SectionTitleView(title: title, subtitle: subtitle)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else if #available(macOS 15.0, *) {
             ToolbarItem(placement: .navigation) {
                 SectionTitleView(title: title, subtitle: subtitle)
             }
@@ -35,8 +42,17 @@ struct MainToolbar: ToolbarContent {
             ScreenRecordingButton()
             ScrcpyButton()
         }
-        ToolbarItem(placement: .primaryAction) {
-            RunAutomationButton()
+        // O Rodar desenha a própria cápsula de vidro tingido; no macOS 26 fica
+        // fora da cápsula compartilhada, senão seria vidro sobre vidro.
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .primaryAction) {
+                RunAutomationButton()
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                RunAutomationButton()
+            }
         }
         ToolbarItem(placement: .primaryAction) {
             HierarchySearchButton()
@@ -232,7 +248,7 @@ struct ScrcpyButton: View {
 
 // MARK: - Rodar
 
-/// A única cápsula tingida da toolbar.
+/// A única cápsula tingida da toolbar (`mbProminentGlassButton`).
 struct RunAutomationButton: View {
     @Environment(AppState.self) private var appState
     @Environment(EngineSession.self) private var session
@@ -244,7 +260,7 @@ struct RunAutomationButton: View {
         } label: {
             Label("Rodar Automação", systemImage: "play.fill")
         }
-        .prominentGlassButton(Self.podeRodar(appState) && estadoDaJanela != .inactive)
+        .mbProminentGlassButton(Self.podeRodar(appState) && estadoDaJanela != .inactive)
         .disabled(!Self.podeRodar(appState))
         .help(dica)
     }
@@ -306,21 +322,5 @@ struct InspectorToggleButton: View {
               ? "O inspector volta ao conectar um aparelho"
               : (appState.inspectorShown ? "Ocultar Inspector (⌥⌘I)" : "Mostrar Inspector (⌥⌘I)"))
         .accessibilityValue(appState.inspectorShown ? "visível" : "oculto")
-    }
-}
-
-extension View {
-    /// Botão primário tingido: vidro tingido no macOS 26, preenchido antes.
-    /// Desabilitado ou com a janela inativa, volta ao estilo padrão: a cápsula
-    /// perde o tom, o ícone continua branco e o botão some no tema claro (D2).
-    @ViewBuilder
-    func prominentGlassButton(_ ativo: Bool = true) -> some View {
-        if !ativo {
-            self
-        } else if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent)
-        } else {
-            self.buttonStyle(.borderedProminent)
-        }
     }
 }

@@ -38,6 +38,11 @@
 .mb-toolbar__spacer{flex:1;min-width:8px}
 .mb-glass{background:var(--glass-bg);-webkit-backdrop-filter:var(--glass-filter);backdrop-filter:var(--glass-filter);box-shadow:var(--glass-highlight),var(--glass-edge),var(--glass-shadow);transition:box-shadow .25s var(--ease-out-standard)}
 .mb-glass.is-scrolled{box-shadow:var(--glass-highlight),var(--glass-edge),var(--glass-shadow-scrolled)}
+/* Papéis do vidro (ADR 0006). Com Reduzir transparência viram sólidos com borda. */
+.mb-glass--flutuante{border-radius:var(--radius-card,12px);box-shadow:var(--glass-highlight),var(--glass-edge),var(--glass-shadow-large)}
+.mb-glass--capsula{border-radius:999px;background:linear-gradient(var(--glass-capsule-tint),var(--glass-capsule-tint)),var(--glass-bg)}
+.mb-glass--midia{background:var(--glass-clear-bg);-webkit-backdrop-filter:var(--glass-clear-filter);backdrop-filter:var(--glass-clear-filter);box-shadow:var(--glass-highlight)}
+[data-reduce-transparency="true"] .mb-glass--flutuante,[data-reduce-transparency="true"] .mb-glass--capsula,[data-reduce-transparency="true"] .mb-glass--midia{box-shadow:0 0 0 .5px var(--separator-strong)}
 .mb-tb-group{display:inline-flex;align-items:center;height:36px;padding:2px;border-radius:var(--radius-capsule);gap:0}
 .mb-tb-item{appearance:none;border:0;background:transparent;color:var(--label-primary);font:inherit;min-width:32px;height:32px;padding:0 8px;border-radius:var(--radius-capsule);display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background-color var(--motion-hover)}
 .mb-tb-item:hover{background:var(--fill-secondary)}
