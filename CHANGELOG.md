@@ -5,6 +5,31 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.14.0] - 2026-10-27
+
+### Adicionado
+
+- 
+
+## [3.14.0] - 2026-10-27
+
+### Mudado
+
+- **O app sempre abre no Início.** Antes ia direto para Page Objects quando
+  havia aparelho conectado.
+- **Hierarquia fechada até você pedir.** O inspector (hierarquia e atributos)
+  começa oculto e só abre pelo botão da toolbar, por ⌥⌘I, por ⌘F (Buscar na
+  Hierarquia) ou por Mostrar Todos os Painéis. Sair do Modo Zen devolve o
+  inspector como estava, em vez de abri-lo.
+
+### Adicionado
+
+- **Botão para esconder o telefone.** A toolbar ganhou o botão Ocultar ou
+  Mostrar Espelho (⌥1), ao lado do botão do inspector. O ícone fica riscado
+  quando o espelho está oculto. Sem aparelho, ou nas áreas sem espelho
+  (Início, Ambiente, Relatório), o botão e o comando ficam desabilitados e
+  dizem por quê.
+
 ## [3.13.0] - 2026-10-26
 
 ### Adicionado
