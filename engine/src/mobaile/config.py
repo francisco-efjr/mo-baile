@@ -61,6 +61,9 @@ class Settings:
     # Como `flow.run` reproduz os passos gravados no Android: pelo localizador,
     # com as esperas do Maestro, ou pelo script de coordenadas de antes.
     flow_runner: str
+    # Quando o flow grava, na pasta dos logs, as telas que leu: so quando
+    # falha (padrao), sempre ou nunca. Serve para ver a tela que o enganou.
+    flow_trace: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -88,6 +91,7 @@ class Settings:
             # O WebDriverAgent serve MJPEG da tela nessa porta (padrao dele: 9100).
             wda_mjpeg_port=int(_env_float("WDA_MJPEG_PORT", 9100, minimum=1, maximum=65535)),
             flow_runner=_env_choice("MOBAILE_FLOW_RUNNER", "locator", ("locator", "coordinates")),
+            flow_trace=_env_choice("MOBAILE_FLOW_TRACE", "falha", ("falha", "sempre", "nunca")),
         )
 
 
