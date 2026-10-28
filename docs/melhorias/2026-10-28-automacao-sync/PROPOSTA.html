@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Automação no Tempo do Aparelho</title>
+<style>
+:root {
+  --bg: #f5f5f8;
+  --bg-group: #ffffff;
+  --label: rgba(20,21,67,.92);
+  --label-2: rgba(20,21,67,.64);
+  --label-3: rgba(20,21,67,.44);
+  --sep: rgba(20,21,67,.12);
+  --fill: rgba(20,21,67,.05);
+  --fill-2: rgba(20,21,67,.09);
+  --accent: #C2456E;
+  --accent-soft: rgba(194,69,110,.10);
+  --ok: #1f8a4c;   --ok-soft: rgba(31,138,76,.11);
+  --warn: #a8650b; --warn-soft: rgba(168,101,11,.12);
+  --bad: #c4352b;  --bad-soft: rgba(196,53,43,.10);
+  --info: #2a6fdb; --info-soft: rgba(42,111,219,.10);
+  --pool: #2fa6c9;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15161f; --bg-group: #1e2030;
+    --label: rgba(240,241,255,.94); --label-2: rgba(240,241,255,.66); --label-3: rgba(240,241,255,.44);
+    --sep: rgba(240,241,255,.12); --fill: rgba(240,241,255,.05); --fill-2: rgba(240,241,255,.09);
+    --accent: #ef7fa3; --accent-soft: rgba(239,127,163,.14);
+    --ok: #4cc47e; --ok-soft: rgba(76,196,126,.14);
+    --warn: #e0a24a; --warn-soft: rgba(224,162,74,.14);
+    --bad: #ff7468; --bad-soft: rgba(255,116,104,.13);
+    --info: #6ea5ff; --info-soft: rgba(110,165,255,.14);
+    --pool: #5cc7e6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15161f; --bg-group: #1e2030;
+  --label: rgba(240,241,255,.94); --label-2: rgba(240,241,255,.66); --label-3: rgba(240,241,255,.44);
+  --sep: rgba(240,241,255,.12); --fill: rgba(240,241,255,.05); --fill-2: rgba(240,241,255,.09);
+  --accent: #ef7fa3; --accent-soft: rgba(239,127,163,.14);
+  --ok: #4cc47e; --ok-soft: rgba(76,196,126,.14);
+  --warn: #e0a24a; --warn-soft: rgba(224,162,74,.14);
+  --bad: #ff7468; --bad-soft: rgba(255,116,104,.13);
+  --info: #6ea5ff; --info-soft: rgba(110,165,255,.14);
+  --pool: #5cc7e6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--label); font: 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 32px 20px 80px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 { font-size: 19px; margin: 44px 0 6px; letter-spacing: -.005em; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 8px 0; }
+.lead { color: var(--label-2); font-size: 15px; max-width: 760px; }
+.sub { color: var(--label-2); margin: 0 0 14px; max-width: 760px; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+code { background: var(--fill); padding: 1px 5px; border-radius: 4px; }
+a { color: var(--accent); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 12px/1 var(--mono); padding: 5px 9px; border-radius: 999px; background: var(--fill-2); color: var(--label-2); }
+.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.card { background: var(--bg-group); border-radius: 12px; box-shadow: inset 0 0 0 .5px var(--sep); padding: 16px; }
+.grid { display: grid; gap: 12px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.tldr .card h3 { font-size: 13px; color: var(--label-2); font-weight: 600; text-transform: none; margin-bottom: 4px; }
+.tldr .card p { margin: 0; }
+.tag { display: inline-block; font: 600 11px/1 var(--sans); padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.t-ok { background: var(--ok-soft); color: var(--ok); }
+.t-warn { background: var(--warn-soft); color: var(--warn); }
+.t-bad { background: var(--bad-soft); color: var(--bad); }
+.t-info { background: var(--info-soft); color: var(--info); }
+.t-acc { background: var(--accent-soft); color: var(--accent); }
+.t-mute { background: var(--fill-2); color: var(--label-2); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th, .tbl td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--sep); }
+.tbl th { font-weight: 600; color: var(--label-2); font-size: 12px; }
+.tbl tr:last-child td { border-bottom: 0; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.scroll .tbl { min-width: 640px; }
+.chart { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--label-2); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.note { font-size: 12.5px; color: var(--label-2); }
+.phase { margin-top: 26px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.phase h3 { font-size: 16px; }
+.prop { display: grid; grid-template-columns: 1fr 230px; gap: 16px; margin-top: 10px; }
+@media (max-width: 760px) { .prop { grid-template-columns: 1fr; } }
+.prop-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.prop-id { font: 600 12px/1 var(--mono); color: var(--accent); }
+.prop dl { display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; margin: 10px 0 0; font-size: 13px; }
+.prop dt { color: var(--label-3); }
+.prop dd { margin: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.eval { border-left: 1px solid var(--sep); padding-left: 16px; }
+@media (max-width: 760px) { .eval { border-left: 0; padding-left: 0; border-top: 1px solid var(--sep); padding-top: 12px; } }
+.eval label.small { display: block; font-size: 12px; color: var(--label-2); margin-bottom: 6px; }
+.seg { display: flex; background: var(--fill-2); border-radius: 999px; padding: 2px; gap: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--label-2); font: 500 12px/1 var(--sans); padding: 7px 6px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--bg-group); color: var(--label); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.seg button[aria-pressed="true"][data-v="fazer"] { color: var(--ok); }
+.seg button[aria-pressed="true"][data-v="ajustar"] { color: var(--warn); }
+.seg button[aria-pressed="true"][data-v="nao"] { color: var(--bad); }
+.rec { font-size: 11.5px; color: var(--label-3); margin-top: 6px; }
+textarea { width: 100%; min-height: 56px; margin-top: 10px; resize: vertical; font: 13px/1.4 var(--sans); color: var(--label); background: var(--fill); border: 0; border-radius: 7px; padding: 8px 9px; box-shadow: inset 0 0 0 .5px var(--sep); }
+textarea:focus, button:focus-visible, input:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 1px; }
+.decision { padding: 14px 16px; }
+.decision + .decision { margin-top: 10px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.opts label { display: inline-flex; gap: 7px; align-items: center; font-size: 13px; padding: 7px 11px; border-radius: 999px; background: var(--fill); cursor: pointer; }
+.opts input { accent-color: var(--accent); margin: 0; }
+.opts label.recd::after { content: "recomendado"; font-size: 10.5px; color: var(--accent); margin-left: 2px; }
+.btn { border: 0; background: var(--accent); color: #fff; font: 600 13px/1 var(--sans); padding: 10px 16px; border-radius: 999px; cursor: pointer; }
+.btn.ghost { background: var(--fill-2); color: var(--label); }
+.btn:active { filter: brightness(.9); }
+.out { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; background: var(--fill); border-radius: 8px; padding: 12px; margin-top: 12px; max-height: 320px; overflow: auto; display: none; }
+ul.clean { margin: 6px 0; padding-left: 18px; }
+ul.clean li { margin: 4px 0; }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.flow .step { background: var(--fill); border-radius: 8px; padding: 10px; font-size: 12.5px; }
+.flow .step b { display: block; font-size: 12px; color: var(--label-2); margin-bottom: 3px; }
+.flow .step.bad { background: var(--bad-soft); }
+.flow .step.ok { background: var(--ok-soft); }
+.sticky { position: sticky; bottom: 12px; display: flex; justify-content: flex-end; pointer-events: none; margin-top: 18px; }
+.sticky .card { pointer-events: auto; display: flex; gap: 10px; align-items: center; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,.14), inset 0 0 0 .5px var(--sep); }
+.count { font: 12px var(--mono); color: var(--label-2); }
+footer { margin-top: 48px; font-size: 12.5px; color: var(--label-3); }
+footer code { font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Automação no tempo do aparelho</h1>
+  <p class="lead">O runner de flow decide que a tela "assentou" quando ela ainda está carregando. Aí o passo seguinte toca ou procura cedo demais. Esta página junta a evidência, o que o Maestro faz no mesmo ponto e as soluções, para você marcar o que vamos implementar.</p>
+  <div class="meta">
+    <span class="chip accent">proposta · nada implementado</span>
+    <span class="chip">28/10/2026</span>
+    <span class="chip">branch melhoria/2026-10-27-automacao · 3.15.1</span>
+    <span class="chip">orquestrador brain-of-agent</span>
+  </div>
+</header>
+
+<section class="tldr">
+  <h2>Em uma olhada</h2>
+  <div class="grid g4">
+    <div class="card"><h3>O que acontece</h3><p>No moto g55, uma tela intermediária fica <b>idêntica por 0,6 a 2 s</b> depois de um toque. O runner a aceita como pronta.</p></div>
+    <div class="card"><h3>Onde dói mais</h3><p>No <b>passo por coordenada</b>, que toca sem olhar a tela, e no seletor que também existe na tela intermediária.</p></div>
+    <div class="card"><h3>E o Maestro?</h3><p>Cairia no mesmo settle. Ele se salva porque <b>mira de novo</b> na tela assentada antes de tocar. Spinner, ele também não detecta.</p></div>
+    <div class="card"><h3>Recomendação</h3><p><b>Fase 1</b> com 6 correções pequenas, sem mudar o formato da gravação. Custo estimado: até +300 ms por passo. Ainda não foi medido.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>O que o log mostra</h2>
+  <p class="sub">Tamanho da árvore lida pelo <code>/source</code> do UiAutomator2, aparelho físico moto g55 (<code>ZY22L3CH3X</code>), 28/10/2026 a partir de 10:47:51. Cada ponto é uma leitura real do <code>appium.log</code>.</p>
+  <div class="card">
+    <svg id="chart" class="chart" viewBox="0 0 960 300" role="img" aria-label="Linha do tempo do tamanho da árvore: 48 kB, depois 6,7 kB, depois 11,9 kB por três leituras, depois 46 kB por 17 segundos"></svg>
+    <div class="legend">
+      <span><i style="background:var(--label-3)"></i>tela anterior · 48005 B</span>
+      <span><i style="background:var(--warn)"></i>transição · 6693 B</span>
+      <span><i style="background:var(--bad)"></i>tela intermediária estável · 11887 B</span>
+      <span><i style="background:var(--pool)"></i>tela real · 46010 B</span>
+    </div>
+  </div>
+  <div class="flow">
+    <div class="step"><b>10:47:52,7</b>Última leitura da tela anterior.</div>
+    <div class="step"><b>10:47:53,1</b>A árvore cai para 6693 B: o app está trocando de tela.</div>
+    <div class="step bad"><b>10:47:53,6</b>Duas leituras iguais de 11887 B com 240 ms de diferença: <b>o critério de "assentado" passa aqui.</b></div>
+    <div class="step ok"><b>10:47:54,4</b>A tela real (46010 B) só chega 0,8 s depois.</div>
+    <div class="step bad"><b>até ~10:48:11</b>Leituras a cada ~0,5 s por cerca de 17 s, o prazo da busca, sem parar antes.</div>
+  </div>
+  <p class="note" style="margin-top:12px">O padrão <code>48005 → 6693 → 11887 ×3 → 46010</code> se repete seis vezes na sessão. Numa delas foram 7 leituras seguidas de 11887 B, cerca de 2 s. <b>Inferido:</b> o ritmo de 0,3 s entre as leituras e a busca de 17 s são do FlowRunner. O inspetor também lê pela mesma sessão. O toque do flow sai por <code>adb</code> e não aparece neste log. Animação de janela não explica a tela parada, porque a sessão já liga <code>disableWindowAnimation</code> (<code>appium.py:291</code>). É trabalho do app, provavelmente carregamento.</p>
+</section>
+
+<section>
+  <h2>Por que acontece</h2>
+  <p class="sub">Causas no código, cada uma conferida pelo arquiteto cético contra a linha citada.</p>
+  <div class="card scroll">
+    <table class="tbl">
+      <thead><tr><th>ID</th><th>Causa</th><th>Onde</th><th>Contraprova</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">C1</td><td>"Assentado" é duas leituras iguais com 200 ms entre elas. Spinner, skeleton e splash têm a árvore parada e passam.</td><td class="mono">maestro_flow.py:886-891</td><td><span class="tag t-ok">Confirmado</span></td></tr>
+        <tr><td class="mono">C3</td><td>O passo por coordenada não lê a tela antes de tocar e nunca repete o toque. Os passos gravados sem localizador estável viram coordenada.</td><td class="mono">maestro_flow.py:897-899, 919, 1109-1140</td><td><span class="tag t-ok">Confirmado</span></td></tr>
+        <tr><td class="mono">C4</td><td>O seletor pode casar também na tela intermediária. O runner não confere se a caixa do elemento parou nem se ele está habilitado.</td><td class="mono">maestro_flow.py:896-922</td><td><span class="tag t-warn">Ajustado</span> o cache não é culpado</td></tr>
+        <tr><td class="mono">C6</td><td><code>inputText</code> digita sem esperar um campo com <code>focused="true"</code>.</td><td class="mono">maestro_flow.py:924-929</td><td><span class="tag t-ok">Confirmado</span></td></tr>
+        <tr><td class="mono">C7</td><td>Quando a tela não assenta em 10 tentativas, o runner segue com a última árvore e não registra nada no log.</td><td class="mono">maestro_flow.py:887-894</td><td><span class="tag t-ok">Confirmado</span></td></tr>
+        <tr><td class="mono">C2</td><td>Com o <code>uiautomator dump</code>, a primeira leitura diferente já conta como assentada.</td><td class="mono">maestro_flow.py:880-884</td><td><span class="tag t-warn">Ajustado</span> só no caminho do dump, não explica o g55</td></tr>
+        <tr><td class="mono">C5</td><td>Os passos gravados não ligam <code>retryTapIfNoChange</code>.</td><td class="mono">maestro_flow.py:1224</td><td><span class="tag t-warn">Ajustado</span> ligar não resolveria</td></tr>
+        <tr><td class="mono">C8</td><td>No iOS, os passos seguem no script de coordenadas, com espera fixa de 0,8 s e 1,0 s.</td><td class="mono">flows.py:384, 414</td><td><span class="tag t-mute">Confirmado</span> fora do g55</td></tr>
+        <tr><td class="mono">C9</td><td>O flow dos passos gravados não tem <code>launchApp</code>.</td><td class="mono">maestro_flow.py:1236</td><td><span class="tag t-mute">Confirmado</span> relevância baixa</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:10px"><b>O que já funciona (Verificado):</b> num passo com id ou texto, o seletor dele já serve de condição de chegada, porque o runner procura por até 17 s (<code>maestro_flow.py:831-867, 900-903</code>). O buraco se concentra no toque por coordenada e no seletor que também casa na tela intermediária.</p>
+</section>
+
+<section>
+  <h2>Como o Maestro faz</h2>
+  <p class="sub">O especialista leu o bytecode do CLI dentro do Maestro Studio com <code>javap</code> e o APK do servidor com <code>dexdump</code>, sem rodar o <code>maestro</code>. A versão é a <b>2.11.0</b>, não a 2.4.0 anotada antes.</p>
+  <div class="card scroll">
+    <table class="tbl">
+      <thead><tr><th>Ponto</th><th>Maestro 2.11.0</th><th>Mo baile hoje</th><th>Proposta</th></tr></thead>
+      <tbody>
+        <tr><td>Antes do toque</td><td>Espera a tela assentar a partir da tela onde achou o alvo, acha o alvo de novo nela e toca nos bounds novos. Depois de rolar a tela, exige bounds iguais em duas leituras (100 ms, até 3 s).</td><td>Toca nos bounds da leitura da busca.</td><td class="mono">SYNC-2</td></tr>
+        <tr><td>Critério de assentado</td><td>Só a hierarquia: 10 voltas de 200 ms, duas leituras iguais. No Android há também um piso de ~750 ms de <code>waitForWindowUpdate</code>.</td><td>O mesmo, sem o piso.</td><td class="mono">SYNC-4, SYNC-7</td></tr>
+        <tr><td>Leitura no aparelho</td><td><code>waitForIdle(500)</code> e limpeza do cache de acessibilidade antes de cada dump.</td><td>O Appium não espera ócio (<code>reads_wait_for_idle</code> só vale para o adb).</td><td class="mono">SYNC-6</td></tr>
+        <tr><td>Prazo da busca</td><td>17 s ou 7 s, contados a partir da <b>última ação</b>.</td><td>Contados a partir do início da busca.</td><td class="mono">SYNC-6</td></tr>
+        <tr><td>Toque por ponto</td><td>Lê a tela antes, toca e espera assentar.</td><td>Toca sem ler a tela antes.</td><td class="mono">SYNC-3</td></tr>
+        <tr><td><code>inputText</code></td><td>Não espera foco nem teclado. Digita uma tecla a cada 75 ms.</td><td>Não espera foco.</td><td class="mono">SYNC-5</td></tr>
+        <tr><td><code>launchApp</code></td><td>Não espera nada. Quem espera é a busca do passo seguinte.</td><td>Duas leituras iguais.</td><td class="mono">SYNC-9</td></tr>
+        <tr><td>Spinner e splash</td><td><b>Nada.</b> O <code>is-loading</code> só existe para web.</td><td>Nada.</td><td class="mono">SYNC-4, SYNC-7</td></tr>
+        <tr><td>Animações do aparelho</td><td>Não desliga.</td><td>A sessão do Appium desliga as de janela.</td><td class="mono">SYNC-10</td></tr>
+        <tr><td>MCP</td><td><code>run</code> usa o mesmo Orchestra, com as mesmas esperas. <code>inspect_screen</code> faz uma leitura só, sem esperar assentar.</td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:10px"><b>Onde o Maestro também falharia:</b> numa tela de carregamento estável por duas leituras, num toque por ponto logo depois de uma transição, num <code>assertVisible</code> que casa na tela intermediária, num <code>assertNotVisible</code> avaliado durante o carregamento, num spinner que só anima e num <code>inputText</code> antes do foco. Copiar o Maestro resolve parte do problema. Os itens SYNC-3, 4, 5 e 7 vão além dele.</p>
+</section>
+
+<section>
+  <h2>Soluções</h2>
+  <p class="sub">Marque cada uma como Fazer, Ajustar ou Não fazer. O botão já começa na recomendação. A avaliação fica salva neste navegador, e o botão do fim gera o texto para você me mandar.</p>
+  <div id="props"></div>
+</section>
+
+<section>
+  <h2>Descartadas na contraprova</h2>
+  <div class="card scroll">
+    <table class="tbl">
+      <thead><tr><th>Ideia</th><th>Por que saiu</th></tr></thead>
+      <tbody>
+        <tr><td>Janela de tempo maior no "assentado" (ex.: 600 ms)</td><td>A tela intermediária ficou parada por até 2 s. Para vencê-la, a janela teria de passar de 2 s em todo passo.</td></tr>
+        <tr><td>Comparar screenshots (<code>screencap</code>)</td><td>Medido no emulador: 549 a 1773 ms por captura. Além disso, tem o mesmo defeito da janela de tempo.</td></tr>
+        <tr><td>Repetir o toque sem efeito por padrão</td><td>Em app lento, duplica "Pagar" e "Enviar", e o "Copiar Bug" geraria um bug falso. Fica como opção por passo (SYNC-13).</td></tr>
+        <tr><td>Perfil de velocidade por aparelho e fator manual</td><td>Um fator fixo não resolve uma espera que depende de evento.</td></tr>
+        <tr><td>Assinatura da tela com Jaccard ≥ 0,6</td><td>O limiar não tem fonte, a assinatura não vira um seletor exportável e o conteúdo dinâmico gera espera falsa. Foi trocada pela âncora de um elemento (SYNC-8).</td></tr>
+        <tr><td>Pré-aquecer o UiAutomator2 ao conectar</td><td>No g55 a sessão já é obrigatória, e as leituras já levavam de 30 a 400 ms. Não atinge a evidência.</td></tr>
+        <tr><td>Rodar no Maestro de verdade como correção</td><td>O Maestro tem o mesmo settle e deixou o driver dele preso no aparelho na 3.15.1. Serve só para diagnóstico (SYNC-12).</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Decisões que são suas</h2>
+  <div id="decisoes"></div>
+</section>
+
+<section>
+  <h2>Antes de implementar, preciso de você</h2>
+  <div class="card">
+    <p>O cético marcou três perguntas como bloqueantes. Elas decidem se o indicador de carregamento (SYNC-4) pega a tela de 11887 B:</p>
+    <ul class="clean">
+      <li><b>Qual app e qual passo falharam hoje às 10:47 no moto g55?</b> O passo que agiu cedo demais era por coordenada ou por id/texto?</li>
+      <li><b>Qual foi o sintoma?</b> Toque no lugar errado, "elemento não encontrado em 17 s" ou texto perdido?</li>
+      <li><b>O XML da tela intermediária.</b> O SYNC-1 grava as árvores do flow quando o tamanho muda, só em disco local. Na primeira execução depois disso já teremos o conteúdo de 6693 e 11887 B.</li>
+    </ul>
+    <p class="note">Se preferir, você só me diz o app e o passo, e eu reproduzo no emulador (<code>emulator-5554</code>). Não mexo no seu aparelho físico.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Como vamos saber que resolveu</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Aceite da Fase 1</h3>
+      <ul class="clean">
+        <li>O teste de replay com o XML real falha antes e passa depois: zero ações sobre as telas de 6693 e 11887 B.</li>
+        <li>A gravação que falha no g55 passa em 10 de 10 execuções seguidas. A linha de base é medida antes.</li>
+        <li>"seguiu sem prontidão" aparece 0 vezes em 10 execuções no emulador.</li>
+        <li>A mediana por passo, antes e depois, sai do próprio log de sincronização.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Orçamento <span class="tag t-mute">Suposição</span></h3>
+      <ul class="clean">
+        <li>Em tela sem carregamento: até +300 ms por passo, uma leitura a mais, e até +15% no flow.</li>
+        <li>Em tela com carregamento: o tempo do indicador mais uma leitura, limitado a 5 s por passo.</li>
+        <li>Diff de produção da Fase 1: cerca de 250 linhas, dentro do teto de cerca de 600.</li>
+        <li>Fluxo: <code>make check</code>, <code>make test-swift</code>, versão 3.16.0 e <code>make update-native</code>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="sticky">
+  <div class="card">
+    <span class="count" id="count"></span>
+    <button class="btn ghost" id="reset" type="button">Voltar à Recomendação</button>
+    <button class="btn" id="gerar" type="button">Gerar Minha Avaliação</button>
+  </div>
+</div>
+<div class="card" id="outCard" style="display:none; margin-top:12px">
+  <p style="margin:0"><b>Texto para colar na conversa</b> <span class="note" id="copied"></span></p>
+  <div class="out" id="out"></div>
+</div>
+
+<footer>
+  <p>Fontes:</p>
+  <ul class="clean">
+    <li>Especialista Maestro (bytecode do CLI 2.11.0, medidas no emulador): <code>docs/melhorias/2026-10-28-automacao-sync/revisao/maestro-sincronizacao.md</code></li>
+    <li>Arquiteto cético (contraprova C1–C9 e S1–S14): <code>docs/melhorias/2026-10-28-automacao-sync/revisao/cetico.md</code></li>
+    <li>Log: <code>~/Library/Logs/Mo baile/appium.log</code>, 28/10/2026, 10:47–10:51</li>
+    <li>Rodada anterior: <code>docs/melhorias/2026-10-27-automacao/MELHORIAS.md</code></li>
+  </ul>
+  <p>Rótulos: Verificado = lido no código ou medido · Inferido = dedução · Suposição = número sem medição.</p>
+</footer>
+</div>
+
+<script>
+(function () {
+  // ---------- Linha do tempo real (appium.log, 28/10/2026, segundos depois de 10:47:00)
+  var pts = [
+    [51.883,48005],[52.293,48005],[52.682,48005],[53.123,6693],[53.402,11887],[53.641,11887],[53.789,11887],
+    [54.411,46010],[54.806,46010],[55.032,46010],[55.378,46010],[55.530,46010],[55.971,46010],[56.628,46010],
+    [57.116,46010],[57.633,46010],[58.210,46010],[58.702,46010],[59.252,46010],[59.739,46010],[60.155,46010],
+    [60.937,46010],[61.892,46010],[62.391,46010],[62.862,46010],[63.429,46010],[64.037,46010],[64.653,46010],
+    [65.237,46010],[65.698,46010],[66.158,46010],[67.235,46010],[67.698,46010],[68.269,46010],[68.693,46010],
+    [69.268,46010],[69.703,46010]
+  ];
+  var svg = document.getElementById("chart"), NS = "http://www.w3.org/2000/svg";
+  var W = 960, H = 300, L = 54, R = 16, T = 22, B = 40;
+  var x0 = 51.5, x1 = 70.2, yMax = 52000;
+  function X(t) { return L + (t - x0) / (x1 - x0) * (W - L - R); }
+  function Y(v) { return T + (1 - v / yMax) * (H - T - B); }
+  function el(n, a, txt) { var e = document.createElementNS(NS, n); for (var k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; svg.appendChild(e); return e; }
+  function cor(v) { return v === 48005 ? "var(--label-3)" : v === 6693 ? "var(--warn)" : v === 11887 ? "var(--bad)" : "var(--pool)"; }
+  [0, 10000, 20000, 30000, 40000, 50000].forEach(function (v) {
+    el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--sep)", "stroke-width": 1 });
+    el("text", { x: L - 8, y: Y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--label-3)", "font-family": "var(--mono)" }, (v / 1000) + " kB");
+  });
+  for (var s = 52; s <= 70; s += 2) {
+    el("text", { x: X(s), y: H - B + 18, "text-anchor": "middle", "font-size": 11, fill: "var(--label-3)", "font-family": "var(--mono)" }, (s < 60 ? "10:47:" + s : "10:48:" + String(s - 60).padStart(2, "0")));
+  }
+  // faixa da busca de 17 s
+  el("rect", { x: X(54.41), y: T, width: X(70.2) - X(54.41), height: H - T - B, fill: "var(--bad-soft)", opacity: .55 });
+  el("text", { x: X(62), y: T + 14, "text-anchor": "middle", "font-size": 11.5, fill: "var(--bad)", "font-weight": 600 }, "busca por ~17 s na tela real, sem achar o alvo");
+  var d = pts.map(function (p, i) { return (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1); }).join(" ");
+  el("path", { d: d, fill: "none", stroke: "var(--label-3)", "stroke-width": 1.2, "stroke-dasharray": "3 3" });
+  pts.forEach(function (p) { el("circle", { cx: X(p[0]), cy: Y(p[1]), r: p[1] === 11887 ? 5 : 3.6, fill: cor(p[1]) }); });
+  // marcadores
+  el("line", { x1: X(53.641), x2: X(53.641), y1: Y(11887) - 8, y2: Y(30000), stroke: "var(--bad)", "stroke-width": 1.4 });
+  el("text", { x: X(53.641) + 6, y: Y(30000) - 4, "font-size": 12, fill: "var(--bad)", "font-weight": 600 }, "“assentado” aqui");
+  el("line", { x1: X(54.411), x2: X(54.411), y1: Y(46010) + 8, y2: Y(24000), stroke: "var(--pool)", "stroke-width": 1.4 });
+  el("text", { x: X(54.411) + 6, y: Y(24000) + 14, "font-size": 12, fill: "var(--pool)", "font-weight": 600 }, "tela real, +0,8 s");
+
+  // ---------- Propostas
+  var FASES = [
+    { id: "f1", nome: "Fase 1", tag: "t-ok", sub: "corrige o que o log mostra, sem mudar o formato da gravação nem do YAML" },
+    { id: "f2", nome: "Fase 2", tag: "t-info", sub: "estrutura: mais confiável que o Maestro; depende do resultado da Fase 1" },
+    { id: "f3", nome: "Adiar ou só com sua decisão", tag: "t-mute", sub: "não atacam a evidência de hoje ou mexem no aparelho" }
+  ];
+  var P = [
+    { id: "SYNC-1", fase: "f1", rec: "fazer", t: "Teste de replay e log de sincronização",
+      prob: "Sem saber o que o runner esperou e por quê, não dá para ajustar nem provar a correção.",
+      como: "Um teste reproduz a sequência real (48005 → 6693 → 11887 ×3 → 46010) no aparelho falso de roteiro que já existe (test_maestro_flow.py:388) e exige zero ações sobre 6693 e 11887. No log, cada passo ganha uma linha como “esperou 1,8 s: indicador de carregamento sumiu”. Com um ajuste de diagnóstico ligado, o runner grava em disco local as árvores cujo tamanho mudou, para capturar o XML da tela intermediária.",
+      ganho: "Prova vermelho → verde e permite medir antes e depois.", esf: "P", risco: "Baixo. As árvores podem ter dados da tela: só em disco local, desligado por padrão.", custo: "0", ev: "C7 · pergunta bloqueante 1" },
+    { id: "SYNC-2", fase: "f1", rec: "fazer", t: "Mirar de novo antes de tocar (como o Maestro)",
+      prob: "O toque usa a caixa da leitura da busca, que pode ser da tela intermediária ou de um elemento ainda deslizando.",
+      como: "Antes do toque, o runner espera a tela assentar a partir da tela onde achou o alvo, acha o alvo de novo nela e toca no centro novo. Depois de rolar ou deslizar a tela, exige a mesma caixa em duas leituras (100 ms, até 3 s). Se o alvo estiver com enabled=false, espera um pouco e toca com aviso.",
+      ganho: "O toque cai onde o elemento está agora, e não onde estava.", esf: "P–M", risco: "Uma leitura a mais por toque.", custo: "+30 a 400 ms por toque", ev: "C4 · Maestro.tap-HgV9Ck0" },
+    { id: "SYNC-3", fase: "f1", rec: "fazer", t: "Conferir o ponto antes de tocar uma coordenada",
+      prob: "O passo sem localizador estável toca às cegas, e é aí que a automação “corre na frente do aparelho”. O Maestro tem o mesmo buraco.",
+      como: "Antes de tocar, o runner acha o nó mais fundo que contém o ponto e exige que a classe dele seja a classe gravada (class_name, que já é gravada). Se não houver nó assim, ou se ele for um indicador de carregamento, espera com o prazo da busca e então toca com aviso no log. O toque em área vazia, que não tem classe, fica com o SYNC-4.",
+      ganho: "Ataca direto a queixa, sem mudar o formato.", esf: "P", risco: "Uma lista que troca a classe da linha (item reciclado) gera espera e aviso, nunca falha.", custo: "+1 leitura no passo por coordenada", ev: "C3 · codegen.py:377-389" },
+    { id: "SYNC-4", fase: "f1", rec: "fazer", t: "Indicador de carregamento visível impede o “assentado”",
+      prob: "Spinner, ProgressBar e skeleton deixam a árvore parada, e o critério de duas leituras iguais passa.",
+      como: "A tela só conta como assentada sem um indicador visível (área maior que zero e centro na tela). Contam como indicador ProgressBar, ActivityIndicator e ids com loading, progress, shimmer, skeleton ou spinner. O limite é de 5 s: depois dele o runner segue, com “seguiu sem prontidão” no log, e não falha.",
+      ganho: "Pega a tela de carregamento, que o Maestro não pega.", esf: "P", risco: "Um indicador permanente (player, pull-to-refresh) faz cada passo esperar 5 s. O log mostra isso na primeira vez.", custo: "0 sem indicador; até 5 s com indicador", ev: "C1 · pergunta bloqueante 1 (o XML de 11887 tem indicador?)" },
+    { id: "SYNC-5", fase: "f1", rec: "fazer", t: "Digitação espera o campo com foco",
+      prob: "O adb input text perde caracteres quando o campo ainda não tem foco.",
+      como: "Antes de digitar, o runner espera um nó editável com focused=true, com limite curto. Depois, relê o texto do campo e, se for diferente do digitado, só avisa no log, sem falhar, por causa de senha, máscara e autocorreção.",
+      ganho: "Menos texto perdido em aparelho lento. O Maestro não faz isso.", esf: "P", risco: "Baixo. O texto digitado continua mascarado no log.", custo: "+1 leitura por digitação", ev: "C6" },
+    { id: "SYNC-6", fase: "f1", rec: "fazer", t: "Ajustes pequenos no ritmo das esperas",
+      prob: "Esperas que desistem sem avisar e prazos contados do ponto errado.",
+      como: "Três mudanças. (1) Quando a tela não assenta em 10 tentativas, o runner registra no log em vez de seguir calado. (2) O prazo de 17 s ou 7 s passa a contar da última ação, como no Maestro. (3) No caminho do dump, a primeira leitura diferente só vale se não tiver indicador.",
+      ganho: "Comportamento previsível e diagnosticável.", esf: "P", risco: "Baixo.", custo: "~0", ev: "C2 · C7 · Orchestra.adjustedToLatestInteraction" },
+    { id: "SYNC-7", fase: "f2", rec: "ajustar", t: "Tela parada também na imagem (contador de quadros)",
+      prob: "Um spinner que só anima não muda a árvore nem gera evento de janela.",
+      como: "Quando a árvore está estável mas suspeita, o runner consulta o gfxinfo framestats do pacote (144 a 211 ms medidos). Se surgiram quadros novos entre duas leituras, a tela ainda está desenhando. Isso só entra se a Fase 1 não bastar.",
+      ganho: "Pega a animação pura, que nem o Maestro pega.", esf: "M", risco: "Não foi medido com a tela animando. Telas com animação contínua (carrossel) precisam do limite.", custo: "+150 a 200 ms quando é acionado", ev: "medidas no emulator-5554" },
+    { id: "SYNC-8", fase: "f2", rec: "ajustar", t: "Âncora de um elemento por passo gravado",
+      prob: "Num passo só com coordenada, nada diz qual tela ele espera.",
+      como: "Na gravação, cada passo guarda um id ou texto estável da tela, como o título da toolbar, num campo opcional e aditivo do AutomationStep. Na reprodução, o runner espera a âncora antes de agir. No YAML exportado, ela sai como extendedWaitUntil: visible: {id: …}, que é nativo do Maestro. Gravação antiga sem âncora cai no SYNC-3.",
+      ganho: "Uma condição de chegada explícita em todo passo, que também vale no Maestro.", esf: "M", risco: "Muda o formato da gravação e do YAML: é a decisão D5. Âncora com conteúdo dinâmico gera espera de 17 s.", custo: "~0 quando a âncora já está na tela", ev: "C3 · C9" },
+    { id: "SYNC-9", fase: "f2", rec: "fazer", t: "Flow gravado começa numa tela conhecida",
+      prob: "O primeiro passo toca no que estiver na tela.",
+      como: "O flow ganha um launchApp opcional, com o pacote gravado. Depois de abrir, o runner espera o mCurrentFocus do pacote (100 a 160 ms por consulta, medido) e a âncora do primeiro passo, se houver.",
+      ganho: "Começo determinístico.", esf: "P", risco: "Baixo, porque é opcional.", custo: "+0,1 a 0,3 s no início", ev: "C9 · maestro_flow.py:1236" },
+    { id: "SYNC-10", fase: "f3", rec: "nao", t: "Desligar as animações do aparelho durante o flow",
+      prob: "Transições de tela geram estados intermediários.",
+      como: "O runner põe window, transition e animator scale em 0 no começo e restaura no fim, também no caminho do dump.",
+      ganho: "Elimina estados de animação no caminho do dump.", esf: "P", risco: "Mexe na configuração do aparelho, e se o motor cair ninguém restaura. Não explica a tela parada por 2 s, porque o Appium já desliga as animações de janela.", custo: "0", ev: "D1 · appium.py:291" },
+    { id: "SYNC-11", fase: "f3", rec: "ajustar", t: "iOS no runner de localizador",
+      prob: "No iOS, as esperas fixas de 0,8 s e 1,0 s fazem a automação correr às cegas.",
+      como: "Medir o /source do WDA no simulador e, se ele couber, levar o iOS para o FlowRunner com as mesmas esperas.", ganho: "As mesmas garantias no iOS.", esf: "M", risco: "Depende da medição.", custo: "a medir", ev: "C8 · D-2 da 3.15.0" },
+    { id: "SYNC-12", fase: "f3", rec: "ajustar", t: "Rodar o flow exportado no Maestro real, para comparar",
+      prob: "Saber se uma falha é do nosso runner ou do app.",
+      como: "Rodar o YAML exportado pelo lançador offline e comparar com o nosso runner. Antes, conferir que o driver do Maestro não ficou preso no aparelho, o caso da 3.15.1.", ganho: "Diagnóstico.", esf: "P", risco: "O driver órfão segura o UiAutomation.", custo: "—", ev: "maestro-offline.sh" },
+    { id: "SYNC-13", fase: "f3", rec: "ajustar", t: "Repetir o toque sem efeito, só por opção",
+      prob: "Um toque que caiu durante a transição é ignorado pelo app.",
+      como: "Uma opção por passo (retryTapIfNoChange) na Estrutura, desligada por padrão.", ganho: "Cobre o caso raro sem risco geral.", esf: "P", risco: "Ligada em “Pagar” ou “Enviar”, duplica a ação.", custo: "0 desligada", ev: "D3 · C5" }
+  ];
+  var D = [
+    { id: "D1", q: "Desligar as animações do aparelho durante o flow (SYNC-10)?", o: [["nao", "Não por enquanto"], ["sim", "Sim, restaurando no fim"], ["opcao", "Só como opção nos Ajustes"]], rec: "nao" },
+    { id: "D3", q: "Repetir o toque sem efeito nos passos gravados?", o: [["opcao", "Só por passo, desligado"], ["sim", "Ligado por padrão"], ["nao", "Nunca"]], rec: "opcao" },
+    { id: "D5", q: "Mudar o formato da gravação e do YAML com a âncora (SYNC-8)?", o: [["fase2", "Sim, campo aditivo na Fase 2"], ["agora", "Sim, já na Fase 1"], ["nao", "Não mudar o formato"]], rec: "fase2" },
+    { id: "D6", q: "Como seguir depois da sua avaliação?", o: [["f1", "Implementar a Fase 1 e medir"], ["tudo", "Fases 1 e 2 juntas"], ["reproduzir", "Primeiro reproduzir no emulador"]], rec: "f1" }
+  ];
+
+  var KEY = "mobaile-proposta-sync-2026-10-28";
+  var estado = { p: {}, n: {}, d: {} };
+  try { var salvo = JSON.parse(localStorage.getItem(KEY) || "null"); if (salvo) estado = Object.assign(estado, salvo); } catch (e) {}
+  function salvar() { try { localStorage.setItem(KEY, JSON.stringify(estado)); } catch (e) {} contar(); }
+  function valor(id) { return estado.p[id] || P.filter(function (x) { return x.id === id; })[0].rec; }
+  var NOME = { fazer: "Fazer", ajustar: "Ajustar", nao: "Não fazer" };
+  var REC = { fazer: "Fazer", ajustar: "Ajustar", nao: "Não fazer agora" };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  var box = document.getElementById("props");
+  FASES.forEach(function (f) {
+    var h = document.createElement("div");
+    h.className = "phase";
+    h.innerHTML = '<h3>' + f.nome + '</h3><span class="tag ' + f.tag + '">' + P.filter(function (p) { return p.fase === f.id; }).length + ' itens</span><span class="note">' + f.sub + '</span>';
+    box.appendChild(h);
+    P.filter(function (p) { return p.fase === f.id; }).forEach(function (p) {
+      var c = document.createElement("article");
+      c.className = "card prop";
+      c.innerHTML =
+        '<div><div class="prop-head"><span class="prop-id">' + p.id + '</span><h3>' + esc(p.t) + '</h3></div>' +
+        '<p class="note" style="margin:0">' + esc(p.prob) + '</p>' +
+        '<dl><dt>Como</dt><dd>' + esc(p.como) + '</dd><dt>Ganho</dt><dd>' + esc(p.ganho) + '</dd><dt>Risco</dt><dd>' + esc(p.risco) + '</dd></dl>' +
+        '<div class="facts"><span class="tag t-mute">esforço ' + p.esf + '</span><span class="tag t-mute">tempo ' + esc(p.custo) + '</span><span class="tag t-acc">' + esc(p.ev) + '</span></div></div>' +
+        '<div class="eval"><label class="small">Sua avaliação</label><div class="seg" role="group" aria-label="Avaliação de ' + p.id + '">' +
+        ["fazer", "ajustar", "nao"].map(function (v) { return '<button type="button" data-id="' + p.id + '" data-v="' + v + '">' + NOME[v] + '</button>'; }).join("") +
+        '</div><div class="rec">Recomendação: ' + REC[p.rec] + '</div>' +
+        '<textarea data-note="' + p.id + '" placeholder="Comentário (opcional)" aria-label="Comentário sobre ' + p.id + '"></textarea></div>';
+      box.appendChild(c);
+    });
+  });
+  function pintar() {
+    box.querySelectorAll(".seg button").forEach(function (b) { b.setAttribute("aria-pressed", String(valor(b.dataset.id) === b.dataset.v)); });
+    box.querySelectorAll("textarea[data-note]").forEach(function (t) { t.value = estado.n[t.dataset.note] || ""; });
+    document.querySelectorAll("#decisoes input").forEach(function (i) { i.checked = (estado.d[i.name] || recD(i.name)) === i.value; });
+    contar();
+  }
+  box.addEventListener("click", function (e) { var b = e.target.closest(".seg button"); if (!b) return; estado.p[b.dataset.id] = b.dataset.v; salvar(); pintar(); });
+  box.addEventListener("input", function (e) { var t = e.target; if (t.dataset && t.dataset.note) { estado.n[t.dataset.note] = t.value; salvar(); } });
+
+  function recD(id) { return D.filter(function (x) { return x.id === id; })[0].rec; }
+  var dbox = document.getElementById("decisoes");
+  D.forEach(function (d) {
+    var c = document.createElement("div");
+    c.className = "card decision";
+    c.innerHTML = '<div class="prop-head"><span class="prop-id">' + d.id + '</span><h3>' + esc(d.q) + '</h3></div><div class="opts">' +
+      d.o.map(function (o) { return '<label class="' + (o[0] === d.rec ? "recd" : "") + '"><input type="radio" name="' + d.id + '" value="' + o[0] + '"> ' + esc(o[1]) + '</label>'; }).join("") + '</div>';
+    dbox.appendChild(c);
+  });
+  dbox.addEventListener("change", function (e) { if (e.target.name) { estado.d[e.target.name] = e.target.value; salvar(); } });
+
+  function contar() {
+    var n = { fazer: 0, ajustar: 0, nao: 0 };
+    P.forEach(function (p) { n[valor(p.id)]++; });
+    document.getElementById("count").textContent = n.fazer + " fazer · " + n.ajustar + " ajustar · " + n.nao + " não";
+  }
+  document.getElementById("reset").addEventListener("click", function () { estado = { p: {}, n: {}, d: {} }; salvar(); pintar(); });
+  document.getElementById("gerar").addEventListener("click", function () {
+    var linhas = ["Avaliação da proposta de sincronização (28/10/2026)", ""];
+    FASES.forEach(function (f) {
+      linhas.push(f.nome + ":");
+      P.filter(function (p) { return p.fase === f.id; }).forEach(function (p) {
+        var v = valor(p.id), nota = (estado.n[p.id] || "").trim();
+        linhas.push("- " + p.id + " " + p.t + ": " + NOME[v] + (v !== p.rec ? " (recomendado: " + NOME[p.rec] + ")" : "") + (nota ? " — " + nota : ""));
+      });
+      linhas.push("");
+    });
+    linhas.push("Decisões:");
+    D.forEach(function (d) {
+      var v = estado.d[d.id] || d.rec;
+      linhas.push("- " + d.id + " " + d.q + " " + d.o.filter(function (o) { return o[0] === v; })[0][1]);
+    });
+    var txt = linhas.join("\n");
+    var out = document.getElementById("out");
+    out.textContent = txt; out.style.display = "block";
+    document.getElementById("outCard").style.display = "block";
+    var aviso = document.getElementById("copied");
+    try {
+      navigator.clipboard.writeText(txt).then(function () { aviso.textContent = "copiado para a área de transferência"; }, function () { aviso.textContent = "selecione e copie"; });
+    } catch (e) { aviso.textContent = "selecione e copie"; }
+    document.getElementById("outCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  pintar();
+})();
+</script>
+</body>
+</html>
