@@ -33,6 +33,7 @@ Quando um flow falha, as últimas telas lidas ficam guardadas para diagnóstico.
 | Mutação de cada mudança (SYNC-2, 3, 4, 5, 6, R-01, R-02, R-05) | — | todas pegas pelos testes |
 | Flow de exemplo no emulador, rodadas 1–6 (o app aberto também lia o emulador) | 5 de 6 passaram (uma vez o toque em "Network & internet" não abriu a tela); 46 a 69 s | 6 de 6 passaram; 39 a 64 s |
 | Flow de exemplo no emulador, rodadas 7–12 | — | **Não vale como medida.** O app aberto passou a ler o emulador pelo Appium, a instrumentação do UiAutomator2 ocupou o UiAutomation e o dump falhou nos dois runners. A medição limpa fica para depois de fechar o app (ver COMO-TESTAR) |
+| **Flow de exemplo no emulador, medição limpa** (app fechado, emulador sem instrumentação, dump em 2,0 s), 3 rodadas intercaladas | 30,1 / 30,0 / 30,1 s, 3 de 3 passaram | 30,2 / 30,1 / 30,1 s, 3 de 3 passaram, nenhum aviso nem "seguiu sem prontidao" |
 
 **Achado da medição:** a tela de Bateria tem uma `ProgressBar` horizontal permanente (id `progress`, o nível da bateria). A primeira versão do SYNC-4 esperava 5 s nela a cada visita. Corrigido: classe e id "progress" só contam com formato de spinner. Teste: `test_barra_de_progresso_horizontal_nao_conta`.
 
@@ -66,10 +67,10 @@ Janela de tempo maior, comparação de screenshots, repetir o toque por padrão,
 - Uma tela intermediária **sem** indicador, cujo seletor também casa, continua passando para passos por id ou texto. O Maestro tem o mesmo comportamento. A âncora por passo (SYNC-8, Fase 2) cobre esse caso.
 - Pelo dump, um quadro de transição sem indicador é aceito numa leitura só. Para os passos gravados, o SYNC-3 o pega.
 - iOS: `flow.run` continua no script de coordenadas (SYNC-11, adiado). O `flow.maestro_run` no iOS ganha o SYNC-2 e o SYNC-4, mas não o SYNC-5.
-- **Ainda não medido no moto g55 nem com o XML real da tela de 11887 B.** As perguntas bloqueantes do cético (qual app, qual passo e qual sintoma) seguem sem resposta. O rastro do primeiro flow que falhar responde à terceira.
+- **No emulador, a sincronização nova não custou tempo** (30 s nos dois runners). **Ainda não medido no moto g55 nem com o XML real da tela de 11887 B.** As perguntas bloqueantes do cético (qual app, qual passo e qual sintoma) seguem sem resposta. O rastro do primeiro flow que falhar responde à terceira.
 
 ## Próximos passos
 
-1. Medição limpa no emulador com o app fechado, e o flow que falhava no g55 rodado 10 vezes (aceite da PROPOSTA).
+1. O flow que falhava no g55 rodado 10 vezes (aceite da PROPOSTA). A medição limpa no emulador está feita: sem custo de tempo.
 2. Ler o rastro da próxima falha no g55 e ajustar a lista de indicadores, se for preciso.
 3. Fase 2: SYNC-9 (aprovado), SYNC-8 (âncora, campo aditivo), SYNC-7 (contador de quadros, só se a Fase 1 não bastar), SYNC-12 (comparar com o Maestro real no emulador).

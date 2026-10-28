@@ -74,7 +74,9 @@ Para desligar o rastro: `MOBAILE_FLOW_TRACE=nunca`. Para gravá-lo sempre: `MOBA
   - `make check` e `make test-swift` verdes;
   - os testes vermelhos antes da correção;
   - mutação de cada mudança;
-  - 12 execuções do flow de exemplo no `emulator-5554`. Só as 6 primeiras valem: depois disso, o app aberto passou a disputar o UiAutomation.
+  - 12 execuções do flow de exemplo no `emulator-5554` com o app aberto. Só as 6 primeiras valem: depois disso, o app passou a disputar o UiAutomation;
+  - medição limpa, com o app fechado: 3 rodadas intercaladas, 30,0 a 30,2 s nos dois runners, todas passando;
+  - `make update-native`: OK na versão 3.16.0, motor igual a `engine/src`, handshake com `/usr/local/bin/python3`.
 - **Não verificado:**
   - o moto g55 (não usei o aparelho físico);
   - o XML real da tela de 11887 B;
