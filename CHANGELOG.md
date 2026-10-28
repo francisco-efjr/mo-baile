@@ -5,6 +5,36 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.16.0] - 2026-10-28
+
+### Mudado
+
+- **A automação espera a tela do aparelho chegar antes de agir.** No moto g55
+  a tela passava por uma etapa intermediária que ficava igual por até 2 s, e o
+  "duas leituras iguais" a aceitava como pronta: o passo seguinte tocava nela.
+  Agora:
+  - o passo gravado por coordenada só toca quando o elemento sob o ponto é da
+    mesma classe da gravação; no prazo, toca e avisa no log;
+  - tela com indicador de carregamento visível (spinner, `ProgressBar`
+    quadrado, id `loading`/`shimmer`/`skeleton`, "Carregando…") não conta como
+    pronta, por até 5 s; barra de progresso horizontal não conta;
+  - alvo achado no meio de uma transição é procurado de novo na tela parada,
+    e o toque vai para onde ele está agora; alvo desabilitado espera até 2 s;
+  - a digitação espera um campo com foco (Android) e avisa, sem mostrar o
+    valor, se o campo não ficou com o texto;
+  - o prazo de busca conta da última ação, como no Maestro, e recomeça a cada
+    tentativa do `retry` e no `onFlowComplete`;
+  - `scrollUntilVisible` tolera uma leitura vazia em vez de falhar na hora.
+
+### Adicionado
+
+- **Linha `sincronia:` no log de cada passo**, com o tempo, as leituras e o
+  motivo da espera ("indicador de carregamento sumiu em 1,2 s").
+- **Rastro das telas de um flow que falha** em `~/Library/Logs/Mo baile/flow-rastro/`
+  (as últimas 60 telas diferentes, arquivos só do dono, com os valores de
+  `${VAR}` mascarados, 5 execuções guardadas). `MOBAILE_FLOW_TRACE` = `falha`
+  (padrão), `sempre` ou `nunca`.
+
 ## [3.15.1] - 2026-10-27
 
 ### Corrigido
