@@ -1204,6 +1204,30 @@ final class EngineSession {
         }
     }
 
+    /// Grava os passos como flow do Maestro em `~/Documents/Mo baile/flows/`
+    /// e devolve o caminho, para quem chamou revelar no Finder.
+    ///
+    /// O texto digitado não vai para o arquivo: vira `${VARIAVEL}`, e o status
+    /// diz quais o flow pede, porque sem elas em `env` ele não roda.
+    func exportMaestroFlow() async -> String? {
+        guard let client, !state.steps.isEmpty else { return nil }
+        do {
+            let resultado: EngineDTO.MaestroExport = try await client.call(
+                "flow.maestro_export",
+                params: ["save": .bool(true), "name": .string(engineInfo?.pageObjectsKey ?? "fluxo")]
+            )
+            guard let caminho = resultado.path else { return nil }
+            let arquivo = "flows/\(URL(fileURLWithPath: caminho).lastPathComponent)"
+            state.statusMessage = resultado.variables.isEmpty
+                ? "Flow salvo em \(arquivo)"
+                : "Flow salvo em \(arquivo) · pede \(resultado.variables.joined(separator: ", ")) em env"
+            return caminho
+        } catch {
+            report(error)
+            return nil
+        }
+    }
+
     // MARK: - Execucao de fluxo
 
     /// Roda os passos gravados no aparelho.

@@ -70,6 +70,9 @@ class UIHierarchyParser:
                             platform="android",
                             depth=depth,
                             parent_idx=parent_idx,
+                            enabled=attribs.get("enabled", "true").lower() != "false",
+                            focused=attribs.get("focused", "false").lower() == "true",
+                            password=attribs.get("password", "false").lower() == "true",
                         )
                     )
             next_parent = current_idx if current_idx is not None else parent_idx
@@ -127,6 +130,8 @@ class UIHierarchyParser:
                         platform="ios",
                         depth=depth,
                         parent_idx=parent_idx,
+                        enabled=attribs.get("enabled", "true").lower() != "false",
+                        password="SecureTextField" in tag,
                     )
                 )
 
@@ -139,7 +144,15 @@ class UIHierarchyParser:
 
     @classmethod
     def find_element_at(cls, xml_content: str, x: int, y: int) -> UIElement | None:
-        elements = cls.parse_xml(xml_content)
+        return cls.element_at(cls.parse_xml(xml_content), x, y)
+
+    @staticmethod
+    def element_at(elements: list[UIElement], x: int, y: int) -> UIElement | None:
+        """O elemento que a gravacao escolhe para um toque em (x, y).
+
+        O runner de flow usa a mesma regra para conferir, na reproducao, que o
+        ponto gravado caiu no mesmo tipo de elemento.
+        """
         candidates = [
             elem for elem in elements
             if elem.bounds[0] <= x <= elem.bounds[2] and elem.bounds[1] <= y <= elem.bounds[3]

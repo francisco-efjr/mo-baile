@@ -166,6 +166,27 @@ class AppiumBridge:
             logger.warning("Log do Appium desligado: %s", exc)
             return subprocess.DEVNULL, Path("/dev/null")
 
+    @staticmethod
+    def _server_env(binary: str) -> dict[str, str]:
+        """Ambiente do servidor com o `node` alcancavel.
+
+        O `appium` do npm comeca com `#!/usr/bin/env node`. Aberto pelo Finder,
+        o app herda um PATH sem o Homebrew nem o nvm, e o Appium morria com
+        "env: node: No such file or directory". O `node` mora ao lado do
+        `appium` que o npm instalou, entao a pasta dele vai na frente.
+        """
+        env = dict(os.environ)
+        atual = [p for p in env.get("PATH", "").split(os.pathsep) if p]
+        extras = [str(Path(binary).parent), "/opt/homebrew/bin", "/usr/local/bin"]
+        env["PATH"] = os.pathsep.join(dict.fromkeys([*extras, *atual]))
+        # O driver UiAutomator2 acha o adb pelo ANDROID_HOME, que tambem so
+        # existe no shell. O SDK padrao do Android Studio cobre o caso comum.
+        if not env.get("ANDROID_HOME") and not env.get("ANDROID_SDK_ROOT"):
+            sdk = Path.home() / "Library" / "Android" / "sdk"
+            if (sdk / "platform-tools").is_dir():
+                env["ANDROID_HOME"] = str(sdk)
+        return env
+
     def _start_server_locked(self) -> tuple[bool, str]:
         if self.is_running():
             return True, "Servidor Appium ja estava no ar."
@@ -196,6 +217,7 @@ class AppiumBridge:
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
+                env=self._server_env(binary),
             )
         except OSError as exc:
             return False, f"Nao foi possivel iniciar o Appium: {exc}"

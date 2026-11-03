@@ -898,8 +898,24 @@ class EngineServer:
             self._android_backend[device] = "adb"
             return xml
 
-        logger.info("uiautomator dump vazio para %s; memorizando backend Appium.", device)
-        self._android_backend[device] = "appium"
+        bloqueio = self.adb.dump_blocked_by.get(device)
+        if bloqueio:
+            # O Appium esbarraria na mesma instrumentacao depois de dezenas de
+            # segundos, e memoriza-lo deixaria o aparelho preso a ele depois
+            # que a outra ferramenta saisse.
+            self._android_backend.pop(device, None)
+            self._ultima_falha_de_hierarquia = self._mensagem_de_bloqueio(device, bloqueio)
+            logger.warning("Hierarquia de %s bloqueada pela instrumentacao %s.", device, bloqueio)
+            return None
+
+        # So o SIGKILL prova que o aparelho nao tem dump. Um vazio por tela sem
+        # ocio ou por corrida com outra leitura abre o Appium para esta leitura,
+        # mas nao troca o backend do aparelho para sempre.
+        if self.adb.dump_killed.get(device):
+            logger.info("uiautomator dump morto para %s; memorizando backend Appium.", device)
+            self._android_backend[device] = "appium"
+        else:
+            logger.info("uiautomator dump vazio para %s; tentando o Appium nesta leitura.", device)
         # Entre o dump rapido e o Appium, que na primeira vez leva dezenas de
         # segundos: e o ponto natural para parar se o front ja desistiu.
         self._check_cancelled()
@@ -911,6 +927,70 @@ class EngineServer:
             return None
         self._progress("Lendo a hierarquia pelo Appium")
         return self.appium.get_page_source()
+
+    @staticmethod
+    def _mensagem_de_bloqueio(device: str, pacote: str) -> str:
+        """Diz quem segura o UiAutomation e o comando que o libera."""
+        app = pacote.removesuffix(".test")
+        dono = "O driver do Maestro" if app == "dev.mobile.maestro" else f"A instrumentacao {pacote}"
+        return (
+            f"{dono} esta rodando no aparelho e ocupa o UiAutomation, que so aceita um "
+            "cliente por vez: nem o 'uiautomator dump' nem o Appium conseguem ler a tela. "
+            "Encerre a ferramenta que o abriu ou, se ela ja foi fechada, libere o aparelho "
+            f"com: adb -s {device} shell am force-stop {app}"
+        )
+
+    def _sessao_appium_aberta(self, device: str) -> bool:
+        return bool(self.appium.session_id and self.appium.session_platform == "android"
+                    and self.appium.session_udid == device)
+
+    _SEM_SESSAO_APPIUM = (
+        "Este aparelho so devolve a tela pelo Appium, e a sessao nao esta aberta. Atualize a "
+        "hierarquia no inspetor, que abre a sessao, e rode de novo."
+    )
+
+    def _conferir_leitura_do_flow(self, device: str) -> None:
+        """Recusa o flow antes de ocupar o aparelho quando ele nao tera como ler a tela.
+
+        O aparelho que so le pelo Appium precisa da sessao aberta. Abri-la aqui
+        levaria ate minutos dentro de um pedido de 30 s, sem progresso; o
+        inspetor faz isso com progresso e cancelamento.
+        """
+        if self._android_backend.get(device) == "appium" and not self._sessao_appium_aberta(device):
+            raise EngineError(self._SEM_SESSAO_APPIUM)
+
+    def _leitor_do_flow(self, device: str) -> tuple[Callable[[], str | None], Callable[[], str | None]]:
+        """Leitor da arvore para a thread do flow e o backend da ultima leitura.
+
+        Uma sessao UiAutomator2 ja aberta le em centesimos de segundo, contra
+        cerca de 2 s do `uiautomator dump`, e e usada sempre que existir. O
+        leitor nunca abre sessao nem muda o backend memorizado do aparelho. A
+        arvore lida vira a atual, para o inspetor do espelho, que pede a sua a
+        cada tela assentada, achar a leitura pronta em vez de disputar o dump.
+        """
+        with self._state_lock:
+            epoch = self._session_epoch
+        estado: dict[str, str | None] = {"backend": None}
+
+        def ler() -> str | None:
+            xml, backend = None, None
+            if self._sessao_appium_aberta(device):
+                xml, backend = self.appium.get_page_source(), "appium"
+            if not xml and self._android_backend.get(device) != "appium":
+                xml, backend = self.adb.get_ui_hierarchy(device), "adb"
+                bloqueio = None if xml else self.adb.dump_blocked_by.get(device)
+                if bloqueio:
+                    raise EngineError(self._mensagem_de_bloqueio(device, bloqueio))
+                if not xml and self.adb.dump_killed.get(device):
+                    # Dump morto (137) num aparelho que o motor ainda nao conhecia:
+                    # sem isto o flow falharia em 17 s dizendo so que nao leu nada.
+                    raise EngineError(self._SEM_SESSAO_APPIUM)
+            estado["backend"] = backend if xml else None
+            if xml:
+                self._store_hierarchy(xml, epoch)
+            return xml
+
+        return ler, lambda: estado["backend"]
 
     def _motivo_de_hierarquia_indisponivel(self) -> str:
         """Erro que diz o que fazer, e nao so que falhou.
@@ -924,6 +1004,8 @@ class EngineServer:
                 "Use 'Iniciar WebDriverAgent' na tela inicial."
             )
         detalhe = getattr(self, "_ultima_falha_de_hierarquia", None)
+        if detalhe and "ocupa o UiAutomation" in detalhe:
+            return f"Hierarquia indisponivel no Android. {detalhe}"
         base = (
             "Hierarquia indisponivel no Android. O 'uiautomator dump' nao devolveu nada "
             "e a sessao do Appium tambem nao abriu."
@@ -1502,9 +1584,14 @@ class EngineServer:
         x = validate_coordinate(params.get("x"), "x")
         y = validate_coordinate(params.get("y"), "y")
         element = UIHierarchyParser.find_element_at(xml, x, y)
-        if element is None:
+        sintetico = element is None
+        if sintetico:
             element = self._elemento_por_posicao(x, y, platform)
         strategy_raw = str(params.get("strategy") or settings.default_strategy).lower()
+        if sintetico and strategy_raw == "auto":
+            # O `pos_x_y` do elemento sintetico nao existe na tela: um xpath com
+            # ele venceria a coordenada no ranking e nunca casaria na reproducao.
+            strategy_raw = "position"
 
         # "auto" deixa o motor escolher pelo que e mais robusto e unico nesta
         # tela, em vez de aplicar uma estrategia fixa a todos os elementos.
@@ -1825,12 +1912,15 @@ class EngineServer:
 
     # ------------------------------------------------------- execucao de fluxo
 
-    def flow_run(self, _params: dict[str, Any]) -> dict[str, Any]:
+    def flow_run(self, params: dict[str, Any]) -> dict[str, Any]:
         """Executa os passos gravados no aparelho.
 
-        O servico ja existia e era testado, mas so a interface Tk o usava: o
-        front nativo nao tinha como rodar automacao nenhuma. O andamento sai por
-        `flow.log`, linha a linha, como o espelho faz com `stream.frame`.
+        No Android, por padrao, cada passo e procurado pelo localizador gravado,
+        com as esperas do Maestro (`runner: "locator"`): o toque segue o elemento
+        quando o layout muda. `runner: "coordinates"` (ou `MOBAILE_FLOW_RUNNER`)
+        roda o script de coordenadas de antes, o caminho de aparelho sem arvore
+        nenhuma; o iOS segue nele ate o `/source` do WDA ser medido no runner. O
+        andamento sai por `flow.log` e `flow.step`, igual nos dois.
         """
         passos = self.codegen.get_steps()
         if not passos:
@@ -1838,6 +1928,14 @@ class EngineServer:
 
         sessao = self._require_session()
         device = sessao.device_id
+        runner = str(params.get("runner") or settings.flow_runner).lower()
+        if runner not in ("locator", "coordinates"):
+            raise InvalidInputError(f"runner invalido: {runner!r}. Use locator ou coordinates.")
+        if sessao.platform is Platform.IOS:
+            runner = "coordinates"
+        flow = maestro_flow.flow_from_steps(passos) if runner == "locator" else None
+        if flow is not None:
+            self._conferir_leitura_do_flow(device or "")
         with self._state_lock:
             if self._shutdown_done:
                 raise InvalidInputError("O motor esta encerrando.")
@@ -1860,6 +1958,19 @@ class EngineServer:
             if not ok:
                 raise EngineError(motivo)
             self._check_cancelled()
+            if flow is not None:
+                ler, backend = self._leitor_do_flow(device or "")
+                execucao = maestro_flow.FlowThread(
+                    flow, AndroidFlowDevice(self.adb, device or "", hierarchy=ler, backend=backend),
+                    ao_sair, lambda sucesso, mensagem: ao_terminar(sucesso, mensagem),
+                    on_step=self._notify_flow_step,
+                )
+                with self._state_lock:
+                    if self._flow_cancelled or self._shutdown_done:
+                        raise RequestCancelledError("Execucao cancelada antes de iniciar.")
+                    self._flow_thread = execucao
+                execucao.start()
+                return {"running": True, "steps": len(passos), "runner": "locator"}
             script = flows.generate_hidden_runner_script(
                 steps=passos,
                 platform=sessao.platform.value,
@@ -1881,7 +1992,7 @@ class EngineServer:
                 self._flow_running = False
                 self._flow_thread = None
             raise
-        return {"running": True, "steps": len(passos), "script": script}
+        return {"running": True, "steps": len(passos), "runner": "coordinates", "script": script}
 
     def _release_flow(self) -> bool:
         """Solta a trava de execucao. Devolve se a execucao tinha sido cancelada."""
@@ -1963,15 +2074,20 @@ class EngineServer:
             raiz = pathlib.Path.home() / "Documents" / "Mo baile"
             pasta = raiz / "flows"
             base = re.sub(r"[^A-Za-z0-9_-]+", "_", str(nome or "flow")).strip("_")[:64] or "flow"
-            arquivo = pasta / f"{base}.yaml"
-            contador = 2
-            while arquivo.exists():
-                arquivo = pasta / f"{base}_{contador}.yaml"
-                contador += 1
-            if not _dentro_de(arquivo, raiz):
-                raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
             pasta.mkdir(parents=True, exist_ok=True)
-            arquivo.write_text(yaml_texto, encoding="utf-8")
+            contador = 1
+            while True:
+                arquivo = pasta / (f"{base}.yaml" if contador == 1 else f"{base}_{contador}.yaml")
+                if not _dentro_de(arquivo, raiz):
+                    raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
+                # "x" cria ou falha: entre conferir e gravar, outra exportacao
+                # nao consegue ocupar o mesmo nome e ter o arquivo sobrescrito.
+                try:
+                    with arquivo.open("x", encoding="utf-8") as saida:
+                        saida.write(yaml_texto)
+                    break
+                except FileExistsError:
+                    contador += 1
             resultado["path"] = str(arquivo)
             self._remember("maestro", arquivo.name, f"Flow do Maestro · {len(passos)} passos", str(arquivo))
         return resultado
@@ -1990,7 +2106,9 @@ class EngineServer:
         if sessao.platform is Platform.IOS:
             aparelho = IOSFlowDevice(self.ios, device_id)
         else:
-            aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=lambda: self._android_hierarchy(device_id))
+            self._conferir_leitura_do_flow(device_id)
+            ler, backend = self._leitor_do_flow(device_id)
+            aparelho = AndroidFlowDevice(self.adb, device_id, hierarchy=ler, backend=backend)
         with self._state_lock:
             if self._shutdown_done:
                 raise InvalidInputError("O motor esta encerrando.")

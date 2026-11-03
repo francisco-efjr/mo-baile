@@ -41,13 +41,26 @@ def validate_app_id(app_id: str) -> str:
 class AndroidFlowDevice:
     platform = "android"
 
-    def __init__(self, adb: ADBBridge, serial: str, hierarchy: Callable[[], str | None] | None = None):
+    def __init__(
+        self,
+        adb: ADBBridge,
+        serial: str,
+        hierarchy: Callable[[], str | None] | None = None,
+        backend: Callable[[], str | None] | None = None,
+    ):
         self.adb = adb
         self.serial = validate_device_id(serial)
-        # O servidor passa o leitor dele, que cai no Appium quando o
-        # `uiautomator dump` e morto (Android 14+ fisico).
+        # O servidor passa o leitor dele, que le pela sessao do Appium quando ha
+        # uma aberta, e `backend`, que diz por onde saiu a ultima leitura.
         self._hierarchy = hierarchy or (lambda: adb.get_ui_hierarchy(self.serial))
+        self._backend = backend or ((lambda: "adb") if hierarchy is None else (lambda: None))
         self._tamanho: tuple[int, int] | None = None
+
+    @property
+    def reads_wait_for_idle(self) -> bool:
+        """A ultima leitura saiu do `uiautomator dump`, que so despeja a arvore
+        depois de 1 s sem eventos de acessibilidade: ela ja e uma tela assentada."""
+        return self._backend() == "adb"
 
     def _shell(self, *args: str, timeout: int = 10) -> bool:
         try:

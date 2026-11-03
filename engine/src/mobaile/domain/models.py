@@ -74,6 +74,11 @@ class UIElement:
     platform: str = "android"
     depth: int = 0
     parent_idx: int | None = None
+    # Estado do no, para o runner de flow saber se pode agir agora. Fica fora
+    # de `to_dict`: o front nao usa, e o contrato RPC nao muda.
+    enabled: bool = True
+    focused: bool = False
+    password: bool = False
 
     @property
     def chip_type(self) -> str:

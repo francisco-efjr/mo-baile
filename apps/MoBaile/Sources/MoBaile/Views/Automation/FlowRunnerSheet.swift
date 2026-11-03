@@ -122,7 +122,7 @@ struct FlowRunnerSheet: View {
         let theme = themeManager.current
         return VStack(spacing: 0) {
             HStack {
-                Text(".flow_runner.py")
+                Text("runner do motor")
                 Spacer()
                 Text("stdout · streaming")
             }

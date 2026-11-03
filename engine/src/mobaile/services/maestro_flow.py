@@ -20,18 +20,28 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
+import os
 import re
+import shutil
+import tempfile
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
+from mobaile.config import settings
 from mobaile.domain.errors import EngineError, InvalidInputError
-from mobaile.domain.models import AutomationStep, UIElement
+from mobaile.domain.models import AutomationStep, LocatorStrategy, UIElement
 from mobaile.ports import FlowDevice
+from mobaile.security import logs_dir
 from mobaile.services.hierarchy import UIHierarchyParser
+
+logger = logging.getLogger(__name__)
 
 # Os mesmos prazos do Orchestra do Maestro (lookupTimeoutMs/optionalLookupTimeoutMs).
 LOOKUP_TIMEOUT_S = 17.0
@@ -45,11 +55,38 @@ EXTENDED_WAIT_TIMEOUT_S = 10.0
 SETTLE_TRIES = 10
 SETTLE_INTERVAL_S = 0.2
 POLL_INTERVAL_S = 0.3
+# A arvore da ultima tela assentada serve a busca seguinte se tiver ate esta
+# idade, contada do fim da leitura. Qualquer acao no aparelho a descarta.
+SETTLED_CACHE_TTL_S = 2.0
 MAX_RETRIES = 3
 MAX_FLOW_DEPTH = 8
 MAX_FLOW_BYTES = 512 * 1024
 # eraseText sem quantidade apaga 50 caracteres, como no Maestro.
 DEFAULT_ERASE = 50
+# Tela com indicador de carregamento visivel nao conta como assentada: a arvore
+# de um spinner fica parada e passaria nas duas leituras iguais. Depois deste
+# limite o runner segue e diz isso no log, em vez de falhar.
+LOADING_TIMEOUT_S = 5.0
+# Alvo que mudou de lugar entre a busca e a tela assentada: leituras a cada
+# 100 ms ate a caixa sair igual duas vezes (refreshElementUntilStable do Maestro).
+BOUNDS_INTERVAL_S = 0.1
+BOUNDS_TIMEOUT_S = 3.0
+# Alvo desabilitado e campo sem foco: espera curta e depois age, com aviso.
+ENABLED_TIMEOUT_S = 2.0
+FOCUS_TIMEOUT_S = 3.0
+# Rastro das telas lidas: quantas telas diferentes por flow e quantas execucoes guardar.
+TRACE_MAX_SCREENS = 60
+TRACE_KEEP_RUNS = 5
+
+# O que conta como indicador de carregamento: o rotulo que comeca com
+# "Carregando", o id de carregamento (`pb_loading`, `shimmer_view`) ou a
+# classe de progresso. Classe e id "progress" so valem com formato de spinner,
+# quase quadrado: a barra horizontal e progresso determinado e pode ficar na
+# tela para sempre (o nivel da bateria nas Configuracoes do Android e uma).
+_INDICADOR_CLASSE = re.compile(r"ProgressBar|ActivityIndicator", re.IGNORECASE)
+_INDICADOR_ID = re.compile(r"(^|[_.-])(loading|loader|spinner|shimmer|skeleton)([_.-]|$)", re.IGNORECASE)
+_PROGRESSO_ID = re.compile(r"(^|[_.-])progress", re.IGNORECASE)
+_INDICADOR_ROTULO = re.compile(r"(carregando|aguarde|loading)\b", re.IGNORECASE)
 
 _VAR = re.compile(r"\$\{([^}]*)\}")
 _VAR_NAME = re.compile(r"[A-Za-z_]\w*")
@@ -119,7 +156,8 @@ class Step:
 
     command: str
     selector: Selector | None = None
-    text: str | None = None
+    # Fora do `repr`: pode ser senha, e um `logger.debug("%r", passo)` a vazaria.
+    text: str | None = field(default=None, repr=False)
     app_id: str | None = None
     optional: bool = False
     timeout_s: float | None = None
@@ -132,6 +170,9 @@ class Step:
     clear_state: bool = False
     stop_first: bool = True
     retry_if_no_change: bool = False
+    # Toque por ponto vindo de uma gravacao: a classe do elemento que estava sob
+    # o ponto. O runner so toca quando a mesma classe estiver la (ou no prazo).
+    expect_class: str | None = None
     visible: bool = True
     when: dict[str, Any] | None = None
     max_retries: int = 1
@@ -159,7 +200,7 @@ class Flow:
     on_start: tuple[Step, ...] = ()
     on_complete: tuple[Step, ...] = ()
     path: Path | None = None
-    secrets: tuple[str, ...] = ()
+    secrets: tuple[str, ...] = field(default=(), repr=False)
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -665,6 +706,43 @@ _DIRECOES = {
 _ROLAGEM = {"DOWN": "UP", "UP": "DOWN", "LEFT": "RIGHT", "RIGHT": "LEFT"}
 
 
+# Tudo o que o runner pede ao aparelho e que nao e leitura.
+_ACOES_NO_APARELHO = frozenset({"tap", "type_text", "press_key", "swipe", "launch_app", "stop_app", "clear_state"})
+
+
+class _AparelhoVigiado:
+    """O `FlowDevice` do flow, com a ultima arvore lida e um aviso antes de cada acao.
+
+    O aviso vem antes da chamada, e nao depois do sucesso: um toque que estoura
+    o prazo pode ter chegado ao aparelho e mudado a tela.
+    """
+
+    def __init__(self, device: FlowDevice, antes_da_acao: Callable[[], None],
+                 ao_ler: Callable[[str | None], None] = lambda _x: None):
+        self._device = device
+        self._antes_da_acao = antes_da_acao
+        self._ao_ler = ao_ler
+        self.ultima_leitura: str | None = None
+        self.leituras = 0
+
+    def hierarchy(self) -> str | None:
+        self.ultima_leitura = self._device.hierarchy()
+        self.leituras += 1
+        self._ao_ler(self.ultima_leitura)
+        return self.ultima_leitura
+
+    def __getattr__(self, nome: str) -> Any:
+        valor = getattr(self._device, nome)
+        if nome not in _ACOES_NO_APARELHO:
+            return valor
+
+        def acao(*args: Any) -> Any:
+            self._antes_da_acao()
+            return valor(*args)
+
+        return acao
+
+
 class FlowRunner:
     """Roda um `Flow` num `FlowDevice`, com as esperas do Maestro.
 
@@ -684,7 +762,7 @@ class FlowRunner:
         lookup_timeout_s: float = LOOKUP_TIMEOUT_S,
         optional_lookup_timeout_s: float = OPTIONAL_LOOKUP_TIMEOUT_S,
     ):
-        self.device = device
+        self.device = _AparelhoVigiado(device, self._antes_da_acao, self._ao_ler)
         self._log = log
         self._cancelled = cancelled
         self._on_step = on_step
@@ -695,12 +773,51 @@ class FlowRunner:
         self._app_id: str | None = None
         self._segredos: tuple[str, ...] = ()
         self._linhas: list[str] = []
+        # Ultima tela assentada (arvore, fim da leitura) e a arvore lida antes da
+        # ultima acao, para saber se a tela mudou.
+        self._assentada: tuple[str, float] | None = None
+        self._antes: str | None = None
+        self._casaram = 0
+        # Hora da ultima acao no aparelho: os prazos de busca contam dela.
+        self._ultima_acao: float | None = None
+        # As ultimas telas diferentes lidas no flow, com o segundo em que
+        # chegaram: numa falha, interessa a tela do passo que falhou. Vai para
+        # disco so pela `salvar_rastro`.
+        self.rastro: deque[tuple[float, str]] = deque(maxlen=TRACE_MAX_SCREENS)
+        # Indicadores que ja estouraram `LOADING_TIMEOUT_S`: um ProgressBar que
+        # nunca some nao cobra a espera de novo a cada passo.
+        self._indicadores_vencidos: set[tuple[str, str, tuple[int, int, int, int]]] = set()
+        self._inicio = 0.0
+        # O que o passo atual esperou, para a linha "sincronia:" do log.
+        self._motivos: list[str] = []
+
+    def _antes_da_acao(self) -> None:
+        self._assentada = None
+        self._antes = self.device.ultima_leitura
+        self._ultima_acao = self._clock()
+
+    def _ao_ler(self, xml: str | None) -> None:
+        if xml and (not self.rastro or self.rastro[-1][1] != xml):
+            self.rastro.append((self._clock() - self._inicio, xml))
+
+    def _motivo(self, texto: str) -> None:
+        if texto not in self._motivos:
+            self._motivos.append(texto)
+
+    def _restante(self, prazo_s: float) -> float:
+        """Como o Maestro: o prazo de busca conta da ultima acao, nao do fim da espera."""
+        if self._ultima_acao is None:
+            return prazo_s
+        return max(0.0, prazo_s - (self._clock() - self._ultima_acao))
 
     def _mascarar(self, texto: str) -> str:
-        """Troca por `***` o valor de cada `${VAR}` usado, inclusive como sai em `repr`."""
+        """Troca por `***` o valor de cada `${VAR}` usado, inclusive como sai em `repr`
+        e escapado num atributo XML (`&amp;`, `&quot;`), que e como sai no rastro."""
         for segredo in self._segredos:
             if len(segredo) >= 3:
-                texto = texto.replace(segredo, "***").replace(repr(segredo)[1:-1], "***")
+                texto = (texto.replace(segredo, "***").replace(repr(segredo)[1:-1], "***")
+                         .replace(escape(segredo, {'"': "&quot;", "'": "&apos;"}), "***")
+                         .replace(escape(segredo, {'"': "&quot;"}), "***"))
         return texto
 
     def log(self, linha: str) -> None:
@@ -712,6 +829,11 @@ class FlowRunner:
         self._app_id = flow.app_id
         self._segredos = flow.secrets
         self._linhas = []
+        self._assentada, self._antes = None, None
+        self._ultima_acao = None
+        self.rastro.clear()
+        self._indicadores_vencidos = set()
+        self._inicio = self._clock()
         nome = flow.name or (flow.path.name if flow.path else "flow")
         self.log(f"Flow {nome}: {len(flow.steps)} comandos, app {flow.app_id or '(nenhum)'}")
         feitos = 0
@@ -728,7 +850,13 @@ class FlowRunner:
                 # subpassos de runFlow/retry nao contam na barra do front.
                 self._checar()
                 self._on_step(n, total)
-                self._passo(passo, f"{n}/{total}")
+                inicio, leituras = self._clock(), self.device.leituras
+                self._motivos = []
+                try:
+                    self._passo(passo, f"{n}/{total}")
+                finally:
+                    # Tambem no passo que falhou: e o que mais precisa da linha.
+                    self._sincronia(self._clock() - inicio, self.device.leituras - leituras)
                 feitos += 1
             falha = None
         except FlowCancelled:
@@ -738,6 +866,7 @@ class FlowRunner:
         finally:
             # Como no Maestro, onFlowComplete roda mesmo depois de falha.
             if flow.on_complete and not self._cancelled():
+                self._ultima_acao = self._clock()
                 try:
                     for passo in flow.on_complete:
                         self._passo(passo, "onFlowComplete")
@@ -749,6 +878,11 @@ class FlowRunner:
         self.log(("✔ " if sucesso else "✘ ") + mensagem)
         return FlowResult(sucesso, mensagem, feitos, self._mascarar(falha.describe()) if falha else None,
                           list(self._linhas))
+
+    def _sincronia(self, segundos: float, leituras: int) -> None:
+        """Quanto o passo esperou o aparelho e por que, numa linha do log."""
+        linha = f"  sincronia: {_segundos(segundos)} · {leituras} leitura{'s' if leituras != 1 else ''}"
+        self.log(linha + "".join(f" · {m}" for m in self._motivos))
 
     # --- passos
 
@@ -764,6 +898,8 @@ class FlowRunner:
         except FlowFailed as exc:
             if passo.optional:
                 self.log(f"  opcional, seguindo: {exc}")
+                # O tempo gasto procurando o opcional nao sai do prazo do passo seguinte.
+                self._ultima_acao = self._clock()
                 return
             raise FlowFailed(f"{passo.source or posicao}: {exc}") from exc
 
@@ -782,43 +918,138 @@ class FlowRunner:
                          _invisivel(e) for e in elementos]
         return elementos
 
-    def _procurar(self, sel: Selector, prazo_s: float) -> tuple[UIElement | None, str]:
-        """Le a arvore ate o seletor casar ou o prazo acabar."""
+    def _procurar(self, sel: Selector, prazo_s: float, *, usar_cache: bool = True) -> tuple[UIElement | None, str]:
+        """Le a arvore ate o seletor casar ou o prazo acabar.
+
+        A primeira volta usa a tela que a ultima espera assentou, em vez de
+        le-la de novo; achar algo nela nao muda a tela, entao ela segue valendo
+        ate a proxima acao. Ela cai se nao casar, se uma leitura nova vier
+        diferente ou se passar da idade. Checagem negativa (`assertNotVisible`,
+        `when`) passa `usar_cache=False`: decidir que algo sumiu pede a tela de agora.
+        """
         limite = self._clock() + prazo_s
+        cache = self._assentada if usar_cache else None
+        leu = False
         while True:
             self._checar()
-            xml = self.device.hierarchy() or ""
+            if cache and self._clock() - cache[1] <= SETTLED_CACHE_TTL_S:
+                xml = cache[0]
+            else:
+                cache = None
+                xml = self.device.hierarchy() or ""
+                if self._assentada and xml != self._assentada[0]:
+                    self._assentada = None
+            leu = leu or bool(xml)
             elementos = self._elementos(xml) if xml else []
             achados = [i for i in select_elements(sel, elementos) if elementos[i].area > 0]
             if achados:
+                self._casaram = len(achados)
                 return elementos[achados[0]], xml
+            if cache:
+                # A tela guardada nao casou: le a de agora antes de decidir,
+                # inclusive com prazo 0 (scrollUntilVisible, checagem pontual).
+                cache = self._assentada = None
+                continue
             if self._clock() >= limite:
+                if not leu:
+                    raise FlowFailed(f"o aparelho nao devolveu a hierarquia em {prazo_s:.0f} s")
                 return None, xml
             self._sleep(POLL_INTERVAL_S)
 
-    def _assentar(self, prazo_s: float | None = None) -> str | None:
-        """Espera duas leituras seguidas iguais da hierarquia (waitForAppToSettle)."""
-        anterior = self.device.hierarchy()
+    def _assentada_agora(self, xml: str) -> str:
+        self._assentada = (xml, self._clock())
+        return xml
+
+    def _assentar(self, prazo_s: float | None = None, *, uma_leitura: bool = True,
+                  inicial: str | None = None) -> str | None:
+        """Espera a tela parar e nao ter indicador de carregamento visivel.
+
+        Parar e o waitForAppToSettle do Maestro: duas leituras seguidas iguais.
+        So isso deixa passar a tela de carregamento, cuja arvore fica parada
+        enquanto o spinner gira (no moto g55, tres leituras iguais de uma tela
+        intermediaria). Por isso a tela com indicador visivel volta a ser lida
+        ate ele sumir, por ate `LOADING_TIMEOUT_S`.
+        """
+        # Com prazo declarado (waitToSettleTimeoutMs, waitForAnimationToEnd), ele
+        # vale para a espera inteira, indicador incluido.
+        fim = self._clock() + prazo_s if prazo_s else None
+        limite_indicador = min(LOADING_TIMEOUT_S, prazo_s) if prazo_s else LOADING_TIMEOUT_S
+        desde = None
+        while True:
+            resta = max(SETTLE_INTERVAL_S, fim - self._clock()) if fim is not None else None
+            xml = self._parada(resta, uma_leitura=uma_leitura, inicial=inicial)
+            inicial = None
+            indicador = _indicador(self._elementos(xml), self._indicadores_vencidos) if xml else None
+            if indicador is None:
+                if desde is not None:
+                    self._motivo(f"indicador de carregamento sumiu em {_segundos(self._clock() - desde)}")
+                return xml
+            if desde is None:
+                desde = self._clock()
+            elif self._clock() - desde >= limite_indicador or (fim is not None and self._clock() >= fim):
+                self._indicadores_vencidos.add(_assinatura(indicador))
+                self.log(f"  seguiu sem prontidao: {_nome_do_indicador(indicador)} ainda visivel "
+                         f"depois de {_segundos(self._clock() - desde)}; nesta tela ele nao sera mais esperado")
+                return xml
+            # A tela com indicador nao vale como assentada nem como a de antes da acao.
+            self._assentada = None
+            self._antes = xml
+            self._checar()
+            self._sleep(POLL_INTERVAL_S)
+
+    def _parada(self, prazo_s: float | None, *, uma_leitura: bool, inicial: str | None) -> str | None:
+        """Duas leituras seguidas iguais, ou a primeira igual a `inicial`.
+
+        Quando o leitor ja espera a tela ficar ociosa (`reads_wait_for_idle`,
+        o `uiautomator dump`), uma leitura basta, desde que a tela tenha mudado
+        desde antes da acao: tela igual pode ser a antiga, ainda esperando rede.
+        """
+        anterior = inicial if inicial is not None else self.device.hierarchy()
+        if (inicial is None and uma_leitura and prazo_s is None and anterior and anterior != self._antes
+                and getattr(self.device, "reads_wait_for_idle", False)):
+            return self._assentada_agora(anterior)
         limite = self._clock() + prazo_s if prazo_s else None
         for _ in range(SETTLE_TRIES if limite is None else 10_000):
             self._checar()
             self._sleep(SETTLE_INTERVAL_S)
             atual = self.device.hierarchy()
             if atual == anterior:
-                return atual
+                return self._assentada_agora(atual) if atual else atual
             anterior = atual
             if limite is not None and self._clock() >= limite:
                 break
+        quanto = f"{prazo_s:.0f} s" if limite is not None else f"{SETTLE_TRIES} leituras"
+        self.log(f"  seguiu sem prontidao: a tela nao parou em {quanto}")
         return anterior
 
-    def _alvo(self, sel: Selector, optional: bool) -> tuple[tuple[int, int], str | None]:
+    def _tela_pronta(self) -> str | None:
+        """A tela assentada guardada, se ainda vale; senao, espera assentar."""
+        if self._assentada and self._clock() - self._assentada[1] <= SETTLED_CACHE_TTL_S:
+            return self._assentada[0]
+        return self._assentar()
+
+    def _alvo(self, sel: Selector, optional: bool,
+              expect_class: str | None = None) -> tuple[tuple[int, int], str | None]:
+        """Onde tocar e a tela de antes do toque, ja assentada."""
+        prazo = self.optional_lookup_timeout_s if optional else self.lookup_timeout_s
         if sel.point is not None and sel.text is None and sel.id is None:
             largura, altura = self.device.screen_size()
-            return resolve_point(sel.point, largura, altura), None
-        prazo = self.optional_lookup_timeout_s if optional else self.lookup_timeout_s
-        elemento, xml = self._procurar(sel, prazo)
-        if elemento is None:
-            raise FlowFailed(f"elemento nao encontrado em {prazo:.0f} s: {sel.describe()}")
+            ponto = resolve_point(sel.point, largura, altura)
+            return ponto, self._conferir_ponto(ponto, expect_class, self._restante(prazo))
+        limite = self._clock() + self._restante(prazo)
+        while True:
+            elemento, xml = self._procurar(sel, max(0.0, limite - self._clock()))
+            if elemento is None:
+                raise FlowFailed(f"elemento nao encontrado em {prazo:.0f} s: {sel.describe()}")
+            mirado = self._mirar(sel, elemento, xml)
+            if mirado is not None:
+                elemento, xml = mirado
+                break
+            if self._clock() >= limite:
+                raise FlowFailed(f"o elemento sumiu antes do toque: {sel.describe()}")
+        elemento, xml = self._esperar_habilitado(sel, elemento, xml)
+        if self._casaram > 1:
+            self.log(f"  aviso: {self._casaram} elementos casam com {sel.describe()}; tocando o primeiro")
         if sel.point is not None:
             # point junto com seletor e relativo ao elemento, como relativePoint.
             x1, y1, x2, y2 = elemento.bounds
@@ -826,8 +1057,133 @@ class FlowRunner:
             return (x1 + dx, y1 + dy), xml
         return elemento.center, xml
 
+    def _achar(self, sel: Selector, xml: str) -> tuple[int, list[UIElement]] | None:
+        elementos = self._elementos(xml) if xml else []
+        achados = [i for i in select_elements(sel, elementos) if elementos[i].area > 0]
+        if not achados:
+            return None
+        self._casaram = len(achados)
+        return achados[0], elementos
+
+    def _mirar(self, sel: Selector, elemento: UIElement, xml: str) -> tuple[UIElement, str] | None:
+        """Como o `Maestro.tap`: assenta a partir da tela da busca e acha o alvo de novo nela.
+
+        Achado na tela assentada guardada, o alvo ja esta numa tela parada.
+        Achado numa leitura avulsa, a tela pode estar no meio da transicao:
+        toca-se nos bounds da tela assentada. Se o alvo mudou de lugar, espera a
+        caixa sair igual duas vezes. `None` quando ele sumiu da tela assentada.
+        """
+        if self._assentada and self._assentada[0] == xml:
+            return elemento, xml
+        if (getattr(self.device, "reads_wait_for_idle", False) and xml != self._antes
+                and _indicador(self._elementos(xml), self._indicadores_vencidos) is None):
+            # O dump so devolve a arvore depois de 1 s de ocio: a mesma regra do
+            # atalho do `_assentar`, sem pagar mais 2 s de leitura por toque.
+            self._assentada_agora(xml)
+            return elemento, xml
+        assentada = self._assentar(inicial=xml) or ""
+        achado = self._achar(sel, assentada)
+        if achado is None:
+            return None
+        i, elementos = achado
+        if elementos[i].bounds == elemento.bounds:
+            return elementos[i], assentada
+        self._motivo("o alvo andou; mirei de novo")
+        caixa, atual = elementos[i], assentada
+        limite = self._clock() + BOUNDS_TIMEOUT_S
+        while self._clock() < limite:
+            self._checar()
+            self._sleep(BOUNDS_INTERVAL_S)
+            leitura = self.device.hierarchy() or ""
+            achado = self._achar(sel, leitura)
+            if achado is None:
+                return None
+            i, elementos = achado
+            if elementos[i].bounds == caixa.bounds:
+                return elementos[i], leitura
+            caixa, atual = elementos[i], leitura
+        return caixa, atual
+
+    def _esperar_habilitado(self, sel: Selector, elemento: UIElement, xml: str) -> tuple[UIElement, str]:
+        """Alvo (ou um pai dele) com `enabled=false`: espera um pouco e toca com aviso."""
+        achado = self._achar(sel, xml)
+        if achado is None or not _desabilitado(*achado):
+            return elemento, xml
+        limite = self._clock() + ENABLED_TIMEOUT_S
+        while self._clock() < limite:
+            self._checar()
+            self._sleep(POLL_INTERVAL_S)
+            leitura = self.device.hierarchy() or ""
+            novo = self._achar(sel, leitura)
+            if novo is None:
+                break
+            achado, xml = novo, leitura
+            if not _desabilitado(*achado):
+                self._motivo("o alvo habilitou")
+                return achado[1][achado[0]], xml
+        self.log(f"  aviso: o alvo continua desabilitado depois de {ENABLED_TIMEOUT_S:.0f} s; tocando mesmo assim")
+        return achado[1][achado[0]], xml
+
+    def _conferir_ponto(self, ponto: tuple[int, int], classe: str | None, prazo_s: float) -> str | None:
+        """Tela pronta antes de tocar uma coordenada.
+
+        Com a classe gravada, espera tambem que o elemento sob o ponto seja da
+        mesma classe, pela mesma regra da gravacao (`element_at`): e o que
+        impede o toque na tela intermediaria, que nem o Maestro confere. No
+        prazo, toca o ponto assim mesmo e diz o que havia la.
+        """
+        xml = self._tela_pronta()
+        if classe is None:
+            return xml
+        inicio = self._clock()
+        limite = inicio + prazo_s
+        while True:
+            sob = UIHierarchyParser.element_at(UIHierarchyParser.parse_xml(xml or ""), *ponto)
+            achada = sob.class_name if sob else None
+            if achada == classe:
+                if self._clock() > inicio:
+                    self._motivo(f"a classe gravada apareceu sob o ponto em {_segundos(self._clock() - inicio)}")
+                return xml
+            if self._clock() >= limite:
+                self.log(f"  aviso: sob o ponto {ponto} esta {_curta(achada) or 'nada'}, e a gravacao tinha "
+                         f"{_curta(classe)}; tocando o ponto mesmo assim")
+                return xml
+            self._assentada = None
+            self._checar()
+            self._sleep(POLL_INTERVAL_S)
+            xml = self._assentar()
+
+    def _esperar_foco(self) -> None:
+        """Antes de digitar, um campo com foco: o `input text` do adb perde letras sem ele.
+
+        So no Android: a arvore do WDA nao diz qual campo tem foco.
+        """
+        if self.device.platform != "android":
+            return
+        inicio = self._clock()
+        limite = inicio + FOCUS_TIMEOUT_S
+        xml = self._tela_pronta()
+        while _focado(self._elementos(xml) if xml else []) is None:
+            if self._clock() >= limite:
+                self.log(f"  aviso: nenhum campo com foco em {FOCUS_TIMEOUT_S:.0f} s; digitando mesmo assim")
+                return
+            self._checar()
+            self._sleep(POLL_INTERVAL_S)
+            xml = self.device.hierarchy()
+        if self._clock() > inicio:
+            self._motivo(f"o campo ganhou foco em {_segundos(self._clock() - inicio)}")
+
+    def _conferir_digitado(self, texto: str, xml: str | None) -> None:
+        """So aviso: senha, mascara de CPF e autocorrecao mudam o que o campo mostra."""
+        campo = _focado(self._elementos(xml)) if xml else None
+        if campo is None or campo.password or not texto.strip():
+            return
+        if texto.strip() not in (campo.text or ""):
+            self.log("  aviso: o campo com foco nao mostra o texto digitado "
+                     "(mascara, autocorrecao ou caractere perdido)")
+
     def _r_tapOn(self, passo: Step) -> None:
-        (x, y), antes = self._alvo(passo.selector, passo.optional)
+        (x, y), antes = self._alvo(passo.selector, passo.optional, passo.expect_class)
         for tentativa in range(2 if passo.retry_if_no_change else 1):
             if not self.device.tap(x, y):
                 raise FlowFailed(f"o toque em ({x}, {y}) foi recusado pelo aparelho")
@@ -838,9 +1194,12 @@ class FlowRunner:
                 self.log("  a tela nao mudou; tocando de novo")
 
     def _r_inputText(self, passo: Step) -> None:
-        if not self.device.type_text(passo.text or ""):
+        if passo.text is None:
+            raise FlowFailed("passo de digitacao sem texto gravado; nada foi digitado")
+        self._esperar_foco()
+        if not self.device.type_text(passo.text):
             raise FlowFailed("o aparelho recusou a digitacao")
-        self._assentar()
+        self._conferir_digitado(passo.text, self._assentar())
 
     def _r_eraseText(self, passo: Step) -> None:
         for _ in range(passo.count or 0):
@@ -855,16 +1214,25 @@ class FlowRunner:
         self._assentar()
 
     def _r_assertVisible(self, passo: Step) -> None:
-        prazo = passo.timeout_s or (self.optional_lookup_timeout_s if passo.optional else self.lookup_timeout_s)
+        padrao = self.optional_lookup_timeout_s if passo.optional else self.lookup_timeout_s
+        prazo = passo.timeout_s or padrao
+        espera = passo.timeout_s or self._restante(padrao)
         if passo.visible:
-            elemento, _ = self._procurar(passo.selector, prazo)
+            elemento, _ = self._procurar(passo.selector, espera)
             if elemento is None:
                 raise FlowFailed(f"nao ficou visivel em {prazo:.0f} s: {passo.selector.describe()}")
             return
-        limite = self._clock() + prazo
+        limite = self._clock() + espera
         while True:
             self._checar()
-            elemento, _ = self._procurar(passo.selector, 0)
+            try:
+                elemento, _ = self._procurar(passo.selector, 0, usar_cache=False)
+            except FlowFailed:
+                # Sem arvore nesta leitura (tela sem ocio, por exemplo): tenta ate o prazo.
+                if self._clock() >= limite:
+                    raise FlowFailed(f"o aparelho nao devolveu a hierarquia em {prazo:.0f} s") from None
+                self._sleep(POLL_INTERVAL_S)
+                continue
             if elemento is None:
                 return
             if self._clock() >= limite:
@@ -895,7 +1263,16 @@ class FlowRunner:
     def _r_scrollUntilVisible(self, passo: Step) -> None:
         limite = self._clock() + (passo.timeout_s or SCROLL_UNTIL_VISIBLE_TIMEOUT_S)
         while True:
-            elemento, _ = self._procurar(passo.selector, 0)
+            try:
+                elemento, _ = self._procurar(passo.selector, 0)
+            except FlowFailed:
+                # Uma leitura vazia (o dump sem ocio enquanto a tela anima) nao
+                # derruba o passo: tenta de novo ate o prazo, sem rolar as cegas.
+                if self._clock() >= limite:
+                    raise
+                self._motivo("leitura vazia; li de novo")
+                self._sleep(POLL_INTERVAL_S)
+                continue
             if elemento is not None:
                 return
             if self._clock() >= limite:
@@ -917,7 +1294,8 @@ class FlowRunner:
             raise FlowFailed(f"nao foi possivel limpar o estado de {app}")
         if not self.device.launch_app(app):
             raise FlowFailed(f"nao foi possivel abrir {app}")
-        self._assentar()
+        # Partida a frio e o pior caso da espera: segue com duas leituras iguais.
+        self._assentar(uma_leitura=False)
 
     def _r_stopApp(self, passo: Step) -> None:
         if not self.device.stop_app(self._app(passo)):
@@ -932,10 +1310,10 @@ class FlowRunner:
         if "platform" in quando and quando["platform"] != self.device.platform.lower():
             self.log("  pulado: outra plataforma")
             return
-        if "visible" in quando and self._procurar(quando["visible"], 0)[0] is None:
+        if "visible" in quando and self._procurar(quando["visible"], 0, usar_cache=False)[0] is None:
             self.log("  pulado: condicao `visible` falsa")
             return
-        if "notVisible" in quando and self._procurar(quando["notVisible"], 0)[0] is not None:
+        if "notVisible" in quando and self._procurar(quando["notVisible"], 0, usar_cache=False)[0] is not None:
             self.log("  pulado: condicao `notVisible` falsa")
             return
         for sub in passo.steps:
@@ -943,11 +1321,14 @@ class FlowRunner:
 
     def _r_retry(self, passo: Step) -> None:
         for tentativa in range(passo.max_retries + 1):
+            # Cada tentativa tem o prazo inteiro, e nao o que sobrou da anterior.
+            self._ultima_acao = self._clock()
             try:
                 for sub in passo.steps:
                     self._passo(sub, "  retry")
                 return
             except FlowFailed as exc:
+                self._assentada = None
                 if tentativa == passo.max_retries:
                     raise
                 self.log(f"  tentativa {tentativa + 1} falhou ({exc}); repetindo")
@@ -966,6 +1347,7 @@ class FlowThread(threading.Thread):
     ):
         super().__init__(daemon=True, name="mobaile-maestro-flow")
         self.flow = flow
+        self.on_output = on_output
         self.on_finished = on_finished
         self._cancelado = threading.Event()
         self.runner = FlowRunner(device, log=on_output, cancelled=self._cancelado.is_set, on_step=on_step)
@@ -981,12 +1363,109 @@ class FlowThread(threading.Thread):
         except Exception as exc:
             # So o tipo: a mensagem poderia repetir um texto digitado.
             sucesso, mensagem = False, f"Erro inesperado no flow: {type(exc).__name__}"
+        self._guardar_rastro(sucesso)
         self.on_finished(sucesso, mensagem)
+
+    def _guardar_rastro(self, sucesso: bool) -> None:
+        """As telas lidas vao para a pasta dos logs quando o flow falha (`MOBAILE_FLOW_TRACE`)."""
+        modo = settings.flow_trace
+        if not self.runner.rastro or modo == "nunca" or self._cancelado.is_set():
+            return
+        if sucesso and modo != "sempre":
+            return
+        try:
+            pasta = salvar_rastro(self.runner.rastro, logs_dir() / "flow-rastro", self.runner._mascarar)
+        except OSError as exc:
+            logger.warning("Rastro do flow nao foi gravado: %s", exc)
+            return
+        self.on_output(f"Telas lidas no flow guardadas em {pasta}")
 
 
 def _invisivel(e: UIElement) -> UIElement:
     """Copia com area zero: fica na arvore (para parentesco), mas nunca e escolhida."""
     return replace(e, area=0)
+
+
+def _indicador(elementos: list[UIElement], ignorar: set | frozenset = frozenset()) -> UIElement | None:
+    """O primeiro indicador de carregamento visivel na tela, se houver, fora os de `ignorar`."""
+    for e in elementos:
+        if e.area <= 0 or (ignorar and _assinatura(e) in ignorar):
+            continue
+        rid = e.resource_id.rsplit("/", 1)[-1]
+        if _INDICADOR_ROTULO.match(e.text or "") or _INDICADOR_ROTULO.match(e.content_desc or ""):
+            return e
+        if rid and _INDICADOR_ID.search(rid):
+            return e
+        if (_INDICADOR_CLASSE.search(e.class_name) or (rid and _PROGRESSO_ID.search(rid))) and _quadrado(e):
+            return e
+    return None
+
+
+def _assinatura(e: UIElement) -> tuple[str, str, tuple[int, int, int, int]]:
+    return e.class_name, e.resource_id, e.bounds
+
+
+def _quadrado(e: UIElement) -> bool:
+    x1, y1, x2, y2 = e.bounds
+    largura, altura = x2 - x1, y2 - y1
+    return largura > 0 and altura > 0 and max(largura, altura) <= 2 * min(largura, altura)
+
+
+def _nome_do_indicador(e: UIElement) -> str:
+    rid = e.resource_id.rsplit("/", 1)[-1]
+    return f"indicador de carregamento ({_curta(e.class_name)}{' ' + rid if rid else ''})"
+
+
+def _focado(elementos: list[UIElement]) -> UIElement | None:
+    return next((e for e in elementos if e.focused and e.area > 0), None)
+
+
+def _desabilitado(i: int, elementos: list[UIElement]) -> bool:
+    return not elementos[i].enabled or any(not elementos[a].enabled for a in _ancestrais(i, elementos))
+
+
+def _curta(classe: str | None) -> str | None:
+    return classe.rsplit(".", 1)[-1] if classe else classe
+
+
+def _segundos(s: float) -> str:
+    return f"{s:.1f} s".replace(".", ",")
+
+
+_PASTA_DO_RASTRO = re.compile(r"\d{8}-\d{6}-")
+
+
+def salvar_rastro(rastro: list[tuple[float, str]], base: Path, mascarar: Callable[[str], str] = lambda t: t) -> Path:
+    """Grava as telas diferentes que um flow leu, para entender uma falha de sincronia.
+
+    Fica so em disco local, numa pasta 0700 com arquivos 0600, com a mesma
+    mascara do log (o valor de cada `${VAR}` vira `***`). Guarda as ultimas
+    `TRACE_KEEP_RUNS` execucoes e apaga as mais velhas que ele mesmo criou.
+    """
+    if base.is_symlink():
+        raise OSError(f"Pasta do rastro recusada (symlink): {base}")
+    base.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if base.is_symlink() or not base.is_dir() or base.stat().st_uid != os.getuid():
+        raise OSError(f"Pasta do rastro recusada: {base}")
+    pasta = Path(tempfile.mkdtemp(prefix=time.strftime("%Y%m%d-%H%M%S-"), dir=base))
+    resumo = []
+    for n, (segundo, xml) in enumerate(rastro, start=1):
+        nome = f"{n:02d}-{segundo:07.2f}s-{len(xml)}B.xml"
+        _gravar_privado(pasta / nome, mascarar(xml))
+        resumo.append(f"{n:02d}  +{segundo:7.2f} s  {len(xml):>7} B  {nome}")
+    _gravar_privado(pasta / "resumo.txt", "\n".join(resumo) + "\n")
+    antigas = sorted((p for p in base.iterdir() if p.is_dir() and not p.is_symlink()
+                      and _PASTA_DO_RASTRO.match(p.name)), key=lambda p: (p.stat().st_mtime_ns, p.name))
+    for velha in antigas[:-TRACE_KEEP_RUNS]:
+        if velha != pasta:
+            shutil.rmtree(velha, ignore_errors=True)
+    return pasta
+
+
+def _gravar_privado(caminho: Path, texto: str) -> None:
+    fd = os.open(caminho, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as arquivo:
+        arquivo.write(texto)
 
 
 # --------------------------------------------------------------- exportacao
@@ -1007,9 +1486,18 @@ def _yaml_str(texto: str) -> str:
     return json.dumps(texto, ensure_ascii=False)
 
 
+# Texto do elemento sintetico que a gravacao cria para toque em area sem no.
+_SINTETICO = re.compile(r"pos_\d+_\d+")
+
+
 def selector_from_step(passo: AutomationStep) -> dict[str, str]:
-    """Seletor Maestro equivalente ao localizador que o ranking escolheu na gravacao."""
-    m = _LOCATOR.match(passo.locator_value or "")
+    """Seletor Maestro equivalente ao localizador que o ranking escolheu na gravacao.
+
+    Sem identidade estavel o passo vira o ponto gravado: estrategia `position`,
+    xpath so com a classe (`//android.view.View`) e o elemento sintetico do toque
+    em area vazia, cujo `pos_x_y` nao existe na tela.
+    """
+    m = None if passo.strategy == LocatorStrategy.POSITION else _LOCATOR.match(passo.locator_value or "")
     if m:
         estrategia = m.group(1)
         try:
@@ -1026,7 +1514,7 @@ def selector_from_step(passo: AutomationStep) -> dict[str, str]:
                 return {"text": _literal_regex(valor)}
             if estrategia == "XPATH":
                 attrs = _XPATH_ATTR.findall(valor)
-                if len(attrs) >= 1:
+                if len(attrs) >= 1 and not _SINTETICO.fullmatch(attrs[0][1][1:-1]):
                     nome, literal = attrs[0]
                     conteudo = literal[1:-1]
                     if nome in ("resource-id", "name"):
@@ -1056,6 +1544,9 @@ def export_steps(
     roda passar os valores em `env` (como o Page Object recebe `texto`).
     """
     app = app_id or next((p.package for p in passos if p.package), None)
+    # A gravacao le o campo depois da digitacao: um passo seguinte pode ter o
+    # valor no rotulo ou no seletor de texto, inclusive escapado como regex.
+    mascarar = _mascara_dos_digitados(passos)
     linhas = []
     if app:
         linhas.append(f"appId: {_yaml_str(app)}")
@@ -1066,9 +1557,11 @@ def export_steps(
         linhas.append("- launchApp")
     variaveis: list[str] = []
     for passo in passos:
-        rotulo = passo.element_name or passo.var_name
+        rotulo = mascarar(passo.element_name or passo.var_name)
         linhas.append(f"# passo {passo.step_num}: {rotulo}".replace("\n", " "))
-        linhas.append(f"- tapOn: {_seletor_yaml(selector_from_step(passo))}")
+        # A coordenada nunca carrega texto digitado, e mascara-la a quebraria.
+        seletor = {k: v if k == "point" else mascarar(v) for k, v in selector_from_step(passo).items()}
+        linhas.append(f"- tapOn: {_seletor_yaml(seletor)}")
         if passo.action_type == "input":
             var = re.sub(r"\W", "_", passo.var_name or f"TEXTO_{passo.step_num}").upper()
             if not _VAR_NAME.fullmatch(var):
@@ -1078,3 +1571,50 @@ def export_steps(
             variaveis.append(var)
             linhas.append(f"- inputText: ${{{var}}}")
     return "\n".join(linhas) + "\n", variaveis
+
+
+def _formas_do_digitado(passos: list[AutomationStep]) -> list[str]:
+    """Cada texto digitado, literal e escapado como regex, do mais longo ao mais curto."""
+    formas = {forma for p in passos if p.input_text and len(p.input_text) >= 3
+              for forma in (p.input_text, _literal_regex(p.input_text))}
+    return sorted(formas, key=len, reverse=True)
+
+
+def _mascara_dos_digitados(passos: list[AutomationStep]) -> Callable[[str], str]:
+    formas = _formas_do_digitado(passos)
+
+    def mascarar(texto: str) -> str:
+        for forma in formas:
+            texto = texto.replace(forma, "***")
+        return texto
+
+    return mascarar
+
+
+def flow_from_steps(passos: list[AutomationStep]) -> Flow:
+    """Os passos gravados como `Flow`, para o `flow.run` reproduzir pelo localizador.
+
+    Sem YAML nem `${VAR}`: o texto digitado vem do passo e so existe em memoria,
+    em `secrets` para o log o mascarar. Cada passo gravado vira um item de topo
+    (um `runFlow` sem condicao), para `flow.step` contar passo gravado. Passo sem
+    localizador estavel toca o ponto gravado e diz isso no rotulo.
+    """
+    if not passos:
+        raise InvalidInputError("Nenhum passo gravado para executar.")
+    itens = []
+    for passo in passos:
+        seletor = selector_from_step(passo)
+        rotulo = passo.element_name or passo.var_name or f"passo {passo.step_num}"
+        acao = "digitar em" if passo.action_type == "input" else "tocar em"
+        # O toque em area vazia (elemento sintetico `pos_x_y`) nao tem classe na arvore.
+        classe = (passo.class_name or None) if "point" in seletor and not _SINTETICO.fullmatch(
+            passo.element_name or "") else None
+        subpassos = [Step("tapOn", selector=Selector(**seletor), expect_class=classe,
+                          source=f"passo {passo.step_num}")]
+        if passo.action_type == "input":
+            subpassos.append(Step("inputText", text=passo.input_text or None, source=f"passo {passo.step_num}"))
+        nota = " (coordenada gravada: sem localizador estavel)" if "point" in seletor else ""
+        itens.append(Step("runFlow", steps=tuple(subpassos), label=f"{acao} {rotulo}{nota}",
+                          source=f"passo {passo.step_num}"))
+    return Flow(app_id=None, name="passos gravados", tags=(), steps=tuple(itens),
+                secrets=tuple(_formas_do_digitado(passos)))

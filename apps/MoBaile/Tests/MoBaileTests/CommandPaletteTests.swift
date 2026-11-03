@@ -125,6 +125,19 @@ final class CommandPaletteTests: XCTestCase {
         XCTAssertEqual(CommandRegistry.command(.restartEngine, in: c)?.disabledReason, "O motor está reiniciando")
     }
 
+    /// AUT-3: exportar só lê os passos, então não pede aparelho nem PyYAML.
+    func testExportarFlowPedePassosEMotorMasNaoAparelho() {
+        var c = contextoCheio()
+        c.selectedDevice = nil
+        XCTAssertTrue(CommandRegistry.command(.exportFlow, in: c)?.isEnabled == true)
+        c.stepCount = 0
+        XCTAssertEqual(CommandRegistry.command(.exportFlow, in: c)?.disabledReason, "Grave ao menos um passo")
+        c.engineConnected = false
+        XCTAssertEqual(CommandRegistry.command(.exportFlow, in: c)?.disabledReason, "O motor está parado")
+        let achados = CommandSearch.sections(CommandRegistry.commands(in: contextoCheio()), query: "maestro", recents: [])
+        XCTAssertTrue(achados.flatMap(\.commands).contains { $0.id == .exportFlow }, "a paleta acha por \"maestro\"")
+    }
+
     func testContextoMudaTituloEMotivo() {
         var c = contextoCheio()
         c.proxyRunning = true

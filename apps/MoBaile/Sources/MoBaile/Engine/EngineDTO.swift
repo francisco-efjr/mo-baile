@@ -375,10 +375,22 @@ enum EngineDTO {
         let screen: [Int]
     }
 
+    /// `flow.maestro_export`: o YAML, as variáveis que substituem o texto
+    /// digitado e, com `save`, onde o arquivo ficou.
+    struct MaestroExport: Decodable {
+        let yaml: String
+        let variables: [String]
+        let steps: Int
+        let path: String?
+    }
+
     struct FlowRun: Decodable {
         let running: Bool
         let steps: Int
-        let script: String
+        /// `locator` (padrão no Android) ou `coordinates`, o script de antes.
+        let runner: String?
+        /// Só no runner de coordenadas, que grava um script por execução.
+        let script: String?
     }
 
     /// `flow.step`: começou o passo `index` (a partir de 1) de `total`, nos

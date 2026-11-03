@@ -60,6 +60,13 @@ struct StructureSheet: View {
                     Exporters.copy(resumo)
                     appState.statusMessage = "Resumo do fluxo copiado"
                 }
+                Button("Exportar Flow…") {
+                    Task {
+                        if let caminho = await session.exportMaestroFlow() { Exporters.revealInFinder(caminho) }
+                    }
+                }
+                .help("Grava os passos como flow do Maestro em Documentos › Mo baile › flows")
+                .disabled(appState.steps.isEmpty)
                 Spacer()
                 Button("Rodar…") {
                     dismiss()

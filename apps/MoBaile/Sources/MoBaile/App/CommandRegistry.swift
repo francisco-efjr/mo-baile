@@ -54,6 +54,7 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
     static let run: CommandID = "automation.run"
     static let stopRun: CommandID = "automation.stop"
     static let structure: CommandID = "automation.structure"
+    static let exportFlow: CommandID = "automation.exportFlow"
     static let save: CommandID = "automation.save"
     static let copyActions: CommandID = "automation.copyActions"
     static let copyLocators: CommandID = "automation.copyLocators"
@@ -430,6 +431,11 @@ enum CommandRegistry {
             AppCommand(
                 id: .structure, title: "Estrutura do Fluxo…", category: .automation, symbol: "list.number",
                 keywords: ["passos", "tabela", "resumo"], disabledReason: c.stepCount == 0 ? Motivo.semPassos : nil
+            ),
+            AppCommand(
+                id: .exportFlow, title: "Exportar Flow do Maestro…", category: .automation, symbol: "square.and.arrow.up",
+                keywords: ["maestro", "yaml", "flow", "exportar", "fluxo", "passos"],
+                disabledReason: motor ?? (c.stepCount == 0 ? Motivo.semPassos : nil)
             ),
             AppCommand(
                 id: .save, title: "Salvar Page Object", category: .automation, symbol: "square.and.arrow.down",
