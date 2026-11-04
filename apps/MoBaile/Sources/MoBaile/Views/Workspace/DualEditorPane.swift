@@ -18,6 +18,9 @@ struct PageObjectsView: View {
     @Environment(ThemeManager.self) private var themeManager
 
     @State private var arquivo: EditorFile = .pages
+    /// Posição do cursor no último editor que mexeu (rodapé, PO-4).
+    @State private var linha = 1
+    @State private var coluna = 1
 
     var body: some View {
         @Bindable var state = appState
@@ -46,13 +49,13 @@ struct PageObjectsView: View {
             } else {
                 HStack(spacing: 0) {
                     if appState.splitEditors || arquivo == .pages {
-                        CodeEditorPane(file: .pages, text: $state.actionsCode)
+                        CodeEditorPane(file: .pages, text: $state.actionsCode, onCursor: moverCursor)
                     }
                     if appState.splitEditors {
                         Rectangle().fill(theme.separator).frame(width: 1)
                     }
                     if appState.splitEditors || arquivo == .locators {
-                        CodeEditorPane(file: .locators, text: $state.locatorsCode)
+                        CodeEditorPane(file: .locators, text: $state.locatorsCode, onCursor: moverCursor)
                     }
                 }
             }
@@ -60,6 +63,8 @@ struct PageObjectsView: View {
             footer
         }
         .background(theme.bgContent)
+        // O interpretador do rodapé vem do `setup.check`, que o Início já pede.
+        .task { if session.setup == nil { await session.refreshSetup() } }
     }
 
     private func barra(compacta: Bool) -> some View {
@@ -128,12 +133,33 @@ struct PageObjectsView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 8)
-            StatusIndicator(status: .ok, label: "Código sincronizado", mono: false)
+            // Status do editor como no PyCharm, no lugar do "Código
+            // sincronizado" fixo, que dizia "sincronizado" mesmo sem salvar.
+            ViewThatFits(in: .horizontal) {
+                statusDoEditor(compacto: false)
+                statusDoEditor(compacto: true)
+            }
         }
         .padding(.horizontal, 12)
         .frame(height: DesignMetrics.Heights.codeFooter)
         .background(theme.bgContent)
         .overlay(alignment: .top) { Rectangle().fill(theme.separator).frame(height: 1) }
+    }
+
+    private func statusDoEditor(compacto: Bool) -> some View {
+        EditorStatusBar(
+            linha: linha, coluna: coluna,
+            python: session.setup?.python.version, pythonPath: session.setup?.python.path,
+            salvamento: EditorStatus.salvamento(
+                acoes: appState.actionsCode, locators: appState.locatorsCode, salvo: appState.codigoSalvo
+            ),
+            caminho: appState.codigoSalvo?.caminho, compacto: compacto
+        )
+    }
+
+    private func moverCursor(_ novaLinha: Int, _ novaColuna: Int) {
+        linha = novaLinha
+        coluna = novaColuna
     }
 
     private var rodape: String {
@@ -153,6 +179,7 @@ struct CodeEditorPane: View {
 
     let file: EditorFile
     @Binding var text: String
+    var onCursor: ((Int, Int) -> Void)? = nil
 
     var body: some View {
         let theme = themeManager.current
@@ -214,7 +241,8 @@ struct CodeEditorPane: View {
             CodeEditorView(
                 text: $text,
                 accessibilityLabel: file == .pages ? "Código das ações (pages)" : "Código dos localizadores (locators)",
-                highlight: appState.selectedStep?.varName
+                highlight: appState.selectedStep?.varName,
+                onCursor: onCursor
             )
         }
         .frame(maxWidth: .infinity)

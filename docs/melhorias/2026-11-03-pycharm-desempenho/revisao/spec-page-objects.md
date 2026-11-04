@@ -74,7 +74,7 @@ Dicas do editor vazio (só atalhos que existem no Mo baile, D-2):
 
 ## Rodapé (status do editor)
 
-`passo N · ação · estratégia` à esquerda (como hoje). À direita, como na status bar do PyCharm: `linha:coluna`, `LF`, `UTF-8`, `4 spaces`, `Python 3.x.y` (de `setup.check`, tooltip com o caminho), estado salvo. Coluna: grafemas, com tab expandido até a próxima parada de 4 (Inferido do PyCharm; conferir no oráculo com L3 e L6).
+`passo N · ação · estratégia` à esquerda (como hoje). À direita, como na status bar do PyCharm: `linha:coluna`, `LF`, `UTF-8`, `4 espaços`, `Python 3.x.y` (de `setup.check`, tooltip com o caminho), estado salvo. Coluna: grafemas, com tab expandido até a próxima parada de 4 (Inferido do PyCharm; conferir no oráculo com L3 e L6).
 
 ## Árvore Projeto
 

@@ -1191,13 +1191,15 @@ final class EngineSession {
     func saveCode() async {
         guard let client else { return }
         do {
+            let (acoes, locators) = (state.actionsCode, state.locatorsCode)
             let resultado: EngineDTO.SaveResult = try await client.call(
                 "codegen.save",
                 params: [
-                    "actions_code": .string(state.actionsCode),
-                    "locators_code": .string(state.locatorsCode),
+                    "actions_code": .string(acoes),
+                    "locators_code": .string(locators),
                 ]
             )
+            state.codigoSalvo = CodigoSalvo(acoes: acoes, locators: locators, em: Date(), caminho: resultado.paths.first)
             state.statusMessage = "Salvo em \(resultado.directory)"
         } catch {
             report(error)
