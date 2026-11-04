@@ -153,6 +153,11 @@ privado descrito no [SECURITY.md](SECURITY.md), nunca em issue pública.
 
 [MIT](LICENSE) © 2026 Francisco Edson Ferreira Junior.
 
+O editor de Page Objects usa a fonte JetBrains Mono, embutida em
+`assets/fonts/`: Copyright 2020 The JetBrains Mono Project Authors
+(https://github.com/JetBrains/JetBrainsMono), sob a SIL Open Font License 1.1
+([assets/fonts/OFL.txt](assets/fonts/OFL.txt)).
+
 ---
 
 ## English summary

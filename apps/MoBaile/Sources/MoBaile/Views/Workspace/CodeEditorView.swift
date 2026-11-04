@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Editor de código com Python colorido e numeração de linha real no estilo IDE.
+/// Editor de código no modelo do PyCharm: JetBrains Mono 13, esquema
+/// "PyCharm", linha atual realçada, realce incremental e caracteres literais.
 struct CodeEditorView: NSViewRepresentable {
     @Binding var text: String
     /// Nome da área de texto para o leitor de tela. Com dois editores lado a
@@ -10,27 +11,29 @@ struct CodeEditorView: NSViewRepresentable {
     /// Trecho a destacar (o locator do passo escolhido na barra lateral). As
     /// linhas que o contêm ganham o fundo de seleção de conteúdo.
     var highlight: String? = nil
+    /// Python colorido. Falso para YAML e texto abertos da árvore Projeto.
+    var python = true
+    var editable = true
+    /// Linha e coluna do cursor (a partir de 1), para o rodapé.
+    var onCursor: ((Int, Int) -> Void)? = nil
     @Environment(ThemeManager.self) var themeManager
-
-    private static let fonte = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+    @AppStorage(EditorScheme.chave) private var escolhaDeEsquema = EditorScheme.pycharmID
 
     func makeNSView(context: Context) -> IDEEditorContainerView {
         let container = IDEEditorContainerView()
-        let textView = container.textView
-
         // A entrada literal (PO-1) já vem do contêiner.
-        textView.delegate = context.coordinator
-        textView.font = Self.fonte
-        textView.backgroundColor = .clear
-        textView.setAccessibilityLabel(accessibilityLabel)
-
+        container.textView.delegate = context.coordinator
+        container.textView.setAccessibilityLabel(accessibilityLabel)
         return container
     }
 
     func updateNSView(_ container: IDEEditorContainerView, context: Context) {
         let textView = container.textView
         let tema = themeManager.current
+        let coordinator = context.coordinator
+        coordinator.parent = self
         textView.setAccessibilityLabel(accessibilityLabel)
+        textView.isEditable = editable
 
         // Texto que chega com CR ou CRLF entra como o PyCharm guardaria: `\n`.
         let normalizado = EditorText.normalizarQuebras(text)
@@ -38,50 +41,48 @@ struct CodeEditorView: NSViewRepresentable {
             DispatchQueue.main.async { self.text = normalizado }
         }
 
-        context.coordinator.aplicando = true
-        defer { context.coordinator.aplicando = false }
+        let esquema = EditorScheme.atual(tema, escolha: escolhaDeEsquema)
+        let fonte = EditorFont.fonte()
+        let assinatura = "\(escolhaDeEsquema)|\(tema.id)|\(tema.isDark)|\(tema.highContrast)|\(python)|\(fonte.fontName)"
+        let esquemaMudou = coordinator.assinatura != assinatura
+        textView.esquema = esquema
+        textView.python = python
+        textView.font = fonte
+        textView.typingAttributes = EditorFont.atributos(fonte, cor: esquema.texto)
 
-        let destaqueMudou = context.coordinator.destaque != highlight || context.coordinator.temaID != tema.id + "\(tema.highContrast)"
-        if textView.string != normalizado || destaqueMudou {
-            // A posição do cursor é preservada: sem isso, cada passo gravado
-            // jogava o cursor para o início enquanto alguém editava.
-            let selecao = textView.selectedRange()
-            let colorido = NSMutableAttributedString(
-                attributedString: PythonHighlighter.destacar(normalizado, tema: tema, fonte: Self.fonte)
-            )
-            let primeira = Self.destacarLinhas(contendo: highlight, em: colorido, cor: NSColor(tema.selectionContent))
-            let trocouTexto = textView.string != normalizado
-            textView.textStorage?.setAttributedString(colorido)
-            // Troca por fora do editor: o histórico antigo aponta para faixas
-            // que não existem mais.
-            if trocouTexto { textView.historico.removeAllActions() }
-            let limite = (textView.string as NSString).length
-            textView.setSelectedRange(NSRange(location: min(selecao.location, limite), length: 0))
-            if destaqueMudou, let primeira {
-                textView.scrollRangeToVisible(primeira)
-            }
-            context.coordinator.destaque = highlight
-            context.coordinator.temaID = tema.id + "\(tema.highContrast)"
+        coordinator.aplicando = true
+        let recriou = container.carregar(normalizado)
+        coordinator.aplicando = false
+
+        let destaqueMudou = coordinator.destaque != highlight
+        if esquemaMudou || destaqueMudou || (recriou && highlight != nil) {
+            // Só atributos: o texto, a seleção e o desfazer ficam.
+            let tudo = NSRange(location: 0, length: container.armazenamento.length)
+            container.armazenamento.setAttributes(textView.typingAttributes, range: tudo)
+            textView.recolorir(nil)
+            let primeira = Self.destacarLinhas(contendo: highlight, em: container.armazenamento, cor: NSColor(tema.selectionContent))
+            if destaqueMudou, let primeira { textView.scrollRangeToVisible(primeira) }
+            coordinator.assinatura = assinatura
+            coordinator.destaque = highlight
         }
 
-        let bgEditor = NSColor(tema.bgContent)
-        textView.backgroundColor = bgEditor
-        container.scrollView.backgroundColor = bgEditor
-        textView.insertionPointColor = NSColor(tema.labelPrimary)
-
-        // Numeração de linha no fundo do editor, separada por 1 pt.
-        container.gutterView.gutterBackgroundColor = bgEditor
-        container.gutterView.separatorColor = NSColor(tema.separator)
-        container.gutterView.textColor = NSColor(tema.syntaxGutter)
-        container.layoutManager.corDaEtiqueta = NSColor(tema.syntaxGutter)
-
-        container.updateGutterWidth(forLineCount: EditorText.linhasDoGutter(text))
+        textView.backgroundColor = esquema.fundo
+        container.scrollView.backgroundColor = esquema.fundo
+        textView.insertionPointColor = esquema.texto
+        container.layoutManager.corDaEtiqueta = esquema.etiqueta
+        container.gutterView.gutterBackgroundColor = esquema.fundo
+        container.gutterView.separatorColor = esquema.fundo
+        container.gutterView.textColor = esquema.numeroLinha
+        container.gutterView.currentLineTextColor = esquema.numeroLinhaAtual
+        container.gutterView.font = EditorFont.fonte(tamanho: EditorFont.tamanho - 1)
         container.gutterView.needsDisplay = true
+        textView.needsDisplay = true
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     /// Pinta o fundo das linhas que contêm `trecho`. Devolve a primeira.
+    @discardableResult
     static func destacarLinhas(contendo trecho: String?, em texto: NSMutableAttributedString, cor: NSColor) -> NSRange? {
         guard let trecho, !trecho.isEmpty else { return nil }
         let conteudo = texto.string as NSString
@@ -96,21 +97,27 @@ struct CodeEditorView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeEditorView
-        /// Evita que a recoloração dispare o callback de edição de volta.
+        /// Evita que a carga vinda do estado dispare o callback de edição de volta.
         var aplicando = false
-        /// Último destaque e tema aplicados, para recolorir só quando mudam.
+        /// Último destaque e esquema aplicados, para recolorir só quando mudam.
         var destaque: String?
-        var temaID: String?
+        var assinatura: String?
 
         init(_ parent: CodeEditorView) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard !aplicando, let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
-            if let container = textView.superview?.superview?.superview as? IDEEditorContainerView {
+            if let container = textView.enclosingScrollView?.superview as? IDEEditorContainerView {
                 container.updateGutterWidth(forLineCount: EditorText.linhasDoGutter(textView.string))
                 container.gutterView.needsDisplay = true
             }
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView, let onCursor = parent.onCursor else { return }
+            let posicao = EditorText.linhaEColuna(em: textView.string as NSString, posicao: textView.selectedRange().location)
+            DispatchQueue.main.async { onCursor(posicao.linha, posicao.coluna) }
         }
     }
 }

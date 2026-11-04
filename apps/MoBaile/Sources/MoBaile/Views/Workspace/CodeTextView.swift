@@ -14,8 +14,11 @@ final class IDEGutterView: NSView {
 
     var gutterBackgroundColor: NSColor = .clear
     var textColor: NSColor = .secondaryLabelColor
+    /// Número da linha do cursor, mais claro (`#A1A3AB` no PyCharm escuro).
+    var currentLineTextColor: NSColor = .labelColor
     var separatorColor: NSColor = .separatorColor
-    var font: NSFont = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    /// Mesma família do texto, 1 pt menor (diretriz da JetBrains para o gutter).
+    var font: NSFont = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
 
     override var isFlipped: Bool { true }
 
@@ -65,43 +68,41 @@ final class IDEGutterView: NSView {
 
         lm.ensureLayout(for: tc)
         let str = tv.string as NSString
-        let scrollY = sv.contentView.bounds.origin.y
-        let topInset = tv.textContainerInset.height
+        let deslocamento = tv.textContainerOrigin.y - sv.contentView.bounds.origin.y
+        let linhaDoCursor = EditorText.linhaEColuna(em: str, posicao: tv.selectedRange().location).linha
+        let semSelecao = tv.selectedRange().length == 0
+        // Linha de base do texto dentro do fragmento: o número fica na mesma
+        // linha de base do código, como no PyCharm (P0-6).
+        let fonteDoTexto = tv.font ?? EditorFont.fonte()
+        let alturaDoFragmento = EditorFont.alturaDaLinha(fonteDoTexto)
+        let linhaDeBase = alturaDoFragmento + fonteDoTexto.descender - EditorFont.deslocamentoDaLinhaDeBase(fonteDoTexto)
 
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor
-        ]
+        func numero(_ n: Int, topo: CGFloat, altura: CGFloat) {
+            let y = topo + deslocamento
+            guard y + altura >= 0, y <= bounds.height else { return }
+            let atual = semSelecao && n == linhaDoCursor
+            let label = NSAttributedString(string: "\(n)", attributes: [
+                .font: font, .foregroundColor: atual ? currentLineTextColor : textColor,
+            ])
+            let x = bounds.width - label.size().width - 10
+            label.draw(at: NSPoint(x: max(4, x), y: y + linhaDeBase - font.ascender))
+        }
 
         if str.length == 0 {
-            let label = NSAttributedString(string: "1", attributes: attrs)
-            let x = bounds.width - label.size().width - 8
-            label.draw(at: NSPoint(x: max(4, x), y: topInset - scrollY))
+            numero(1, topo: 0, altura: alturaDoFragmento)
             return
         }
 
         var lineNum = 1
         lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { rect, _, _, glyphRange, _ in
             let charRange = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-            let isLineStart = charRange.location == 0 || str.character(at: charRange.location - 1) == 0x0a
-            if isLineStart {
-                let y = rect.minY + topInset - scrollY
-                if y + rect.height >= 0 && y <= self.bounds.height {
-                    let label = NSAttributedString(string: "\(lineNum)", attributes: attrs)
-                    let x = self.bounds.width - label.size().width - 8
-                    label.draw(at: NSPoint(x: max(4, x), y: y))
-                }
+            if charRange.location == 0 || str.character(at: charRange.location - 1) == 0x0a {
+                numero(lineNum, topo: rect.minY, altura: rect.height)
                 lineNum += 1
             }
         }
-
         if lm.extraLineFragmentRect.height > 0 {
-            let y = lm.extraLineFragmentRect.minY + topInset - scrollY
-            if y + lm.extraLineFragmentRect.height >= 0 && y <= self.bounds.height {
-                let label = NSAttributedString(string: "\(lineNum)", attributes: attrs)
-                let x = bounds.width - label.size().width - 8
-                label.draw(at: NSPoint(x: max(4, x), y: y))
-            }
+            numero(lineNum, topo: lm.extraLineFragmentRect.minY, altura: lm.extraLineFragmentRect.height)
         }
     }
 }
@@ -189,6 +190,40 @@ final class IDEEditorContainerView: NSView {
             needsLayout = true
         }
     }
+
+    /// Põe `texto` no editor (PO-3). Se for o texto atual mais um trecho no fim
+    /// (passo novo gravado), só acrescenta: o cursor e o desfazer da pessoa
+    /// ficam. Qualquer outra troca recria o texto e zera o histórico, que
+    /// apontaria para faixas que não existem mais.
+    /// Devolve `true` quando recriou o texto inteiro.
+    @discardableResult
+    func carregar(_ texto: String) -> Bool {
+        let atual = textView.string as NSString
+        guard atual as String != texto else { return false }
+        var recriou = false
+        let novo = texto as NSString
+        let atributos = textView.typingAttributes
+        if atual.length > 0, novo.hasPrefix(atual as String) {
+            // `atual` pode ser a string viva do armazenamento: o tamanho é
+            // lido antes de mexer nele.
+            let fim = atual.length
+            textView.breakUndoCoalescing()
+            let resto = novo.substring(from: fim)
+            armazenamento.replaceCharacters(in: NSRange(location: fim, length: 0),
+                                            with: NSAttributedString(string: resto, attributes: atributos))
+            textView.recolorir(NSRange(location: fim, length: (resto as NSString).length))
+        } else {
+            let selecao = textView.selectedRange()
+            armazenamento.setAttributedString(NSAttributedString(string: texto, attributes: atributos))
+            textView.historico.removeAllActions()
+            textView.setSelectedRange(NSRange(location: min(selecao.location, novo.length), length: 0))
+            textView.recolorir(nil)
+            recriou = true
+        }
+        updateGutterWidth(forLineCount: EditorText.linhasDoGutter(texto))
+        gutterView.needsDisplay = true
+        return recriou
+    }
 }
 
 /// Layout do editor. Desenha as etiquetas de caractere especial (PO-2): a
@@ -251,6 +286,72 @@ class CodeTextView: NSTextView {
     let historico = UndoManager()
 
     override var undoManager: UndoManager? { historico }
+
+    /// Cores do editor. `nil` deixa o texto como está (sem esquema ainda).
+    var esquema: EditorScheme?
+    /// Falso para YAML e texto simples: tudo na cor do texto.
+    var python = true
+    /// Faixa trocada na edição em curso, para recolorir só o parágrafo.
+    private var faixaEditada: NSRange?
+
+    override func shouldChangeText(in faixa: NSRange, replacementString texto: String?) -> Bool {
+        guard super.shouldChangeText(in: faixa, replacementString: texto) else { return false }
+        faixaEditada = NSRange(location: faixa.location, length: (texto as NSString?)?.length ?? 0)
+        return true
+    }
+
+    override func didChangeText() {
+        if let faixa = faixaEditada { recolorir(faixa) }
+        faixaEditada = nil
+        super.didChangeText()
+    }
+
+    /// Recolore o parágrafo editado (ou tudo, com `nil`). Muda só atributos
+    /// do armazenamento, sem passar pelo desfazer.
+    func recolorir(_ editada: NSRange?) {
+        guard let esquema, let armazenamento = textStorage else { return }
+        let texto = armazenamento.string as NSString
+        let tudo = NSRange(location: 0, length: texto.length)
+        if !python {
+            armazenamento.addAttribute(.foregroundColor, value: esquema.texto, range: tudo)
+            return
+        }
+        let faixa = editada.map { PythonHighlighter.faixaParaRecolorir(texto, editada: $0) } ?? tudo
+        PythonHighlighter.colorir(armazenamento, faixa: faixa, esquema: esquema)
+    }
+
+    // MARK: Linha atual
+
+    /// Retângulo da linha do cursor, em coordenadas do editor.
+    func retanguloDaLinhaAtual() -> NSRect? {
+        guard let lm = layoutManager, let tc = textContainer else { return nil }
+        let texto = string as NSString
+        let cursor = selectedRange().location
+        var linha: NSRect
+        if texto.length == 0 || (cursor >= texto.length && texto.character(at: texto.length - 1) == 0x0A) {
+            linha = lm.extraLineFragmentRect
+        } else {
+            lm.ensureLayout(for: tc)
+            linha = lm.lineFragmentRect(forGlyphAt: lm.glyphIndexForCharacter(at: min(cursor, texto.length - 1)), effectiveRange: nil)
+        }
+        if linha.height == 0 { linha.size.height = EditorFont.alturaDaLinha(font ?? EditorFont.fonte()) }
+        return NSRect(x: 0, y: linha.minY + textContainerOrigin.y, width: bounds.width, height: linha.height)
+    }
+
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        // Como o PyCharm: realce da linha do cursor só sem seleção.
+        guard let cor = esquema?.linhaAtual, selectedRange().length == 0,
+              let linha = retanguloDaLinhaAtual(), linha.intersects(rect) else { return }
+        cor.setFill()
+        linha.fill()
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        needsDisplay = true
+        (enclosingScrollView?.superview as? IDEEditorContainerView)?.gutterView.needsDisplay = true
+    }
 
     // ⌘Z e ⇧⌘Z do menu Editar descem pelo responder chain até a janela, que
     // usaria o histórico dela. O editor responde antes, com o próprio.
