@@ -84,16 +84,12 @@ from mobaile.services.devices import DeviceWatcher
 from mobaile.services.diagnostics import DiagnosticsService
 from mobaile.services.hierarchy import UIHierarchyParser
 from mobaile.services.home import HomeService
+from mobaile.services.perf import PerfGovernor
 from mobaile.services.report import ReportService
 from mobaile.services.setup import SetupService
 from mobaile.services.streaming import RealTimeStreamEngine
 
 logger = logging.getLogger(__name__)
-
-# PNG cru de aparelho moderno passa de 1 MB por quadro. O espelho e reduzido
-# antes de virar base64: a fidelidade que importa e a de layout, nao a de pixel,
-# e o inspetor continua usando a captura em resolucao cheia quando precisa.
-STREAM_MAX_WIDTH = 900
 
 # Quanto o encerramento espera as filas terminarem o que ja estava nelas. Passado
 # isso o motor encerra assim mesmo: as threads das filas sao daemon, e uma
@@ -230,7 +226,8 @@ class EngineServer:
         self.adb = ADBBridge()
         self.ios = IOSBridge()
         self.scrcpy = ScrcpyManager()
-        self.proxy = MobileNetworkProxy()
+        # Ninguem drena a fila de eventos no app nativo: so o callback (K7).
+        self.proxy = MobileNetworkProxy(queue_events=False)
         # Mesmo historico e mesma notificacao do proxy: para o front, e so
         # outra origem de requisicoes.
         self.ios_netlog = IOSDebugNetworkCapture(emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id)
@@ -239,7 +236,7 @@ class EngineServer:
             adb_path=lambda: self.adb.adb_path, emit=self.proxy.emit_event, next_id=self.proxy.get_next_event_id,
         )
         self.recorder = ScreenRecorder(self.adb, self.ios)
-        self.analytics = FirebaseAnalyticsListener(adb_bridge=self.adb)
+        self.analytics = FirebaseAnalyticsListener(adb_bridge=self.adb, queue_events=False)
         # Uma vez so: registrar a cada analytics.start duplicava cada evento
         # na UI apos parar e reiniciar a escuta.
         self.analytics.add_event_callback(lambda event: self.notify("analytics.event", event.to_dict()))
@@ -283,6 +280,17 @@ class EngineServer:
         # uma vez so).
         self._proxy_teardown_lock = threading.Lock()
         self._stream: RealTimeStreamEngine | None = None
+        # O front pediu a pausa do espelho (janela oculta, PERF-1). Vale tambem
+        # para o espelho que ligar depois, ate o front pedir a retomada.
+        self._pausa_pedida = False
+        # Perfil de desempenho (PERF-3). `_stream_cfg` e o que o espelho ligado
+        # le a cada quadro; `explicit` sao os campos que o chamador fixou no
+        # `stream.start` e que o perfil nao mexe.
+        self.perf = PerfGovernor()
+        self._perf_timer: threading.Timer | None = None
+        self._perf_timer_lock = threading.Lock()
+        self._stream_cfg: dict[str, Any] | None = None
+        self._watch_interval_explicit = False
         # Leitor do MJPEG do WDA, so enquanto o espelho iOS estiver ligado.
         self._mjpeg: MJPEGReader | None = None
         self._watcher: DeviceWatcher | None = None
@@ -328,6 +336,11 @@ class EngineServer:
             "stream.start": self.stream_start,
             "stream.stop": self.stream_stop,
             "stream.stats": self.stream_stats,
+            "stream.pause": self.stream_pause,
+            "stream.resume": self.stream_resume,
+            "perf.signals": self.perf_signals,
+            "perf.set_preference": self.perf_set_preference,
+            "perf.status": self.perf_status,
             "scrcpy.start": self.scrcpy_start,
             "scrcpy.stop": self.scrcpy_stop,
             "scrcpy.status": self.scrcpy_status,
@@ -419,9 +432,14 @@ class EngineServer:
     def _require_device(self) -> str:
         return self._require_session().device_id
 
-    def _capture_image(self, sessao: _Sessao):
-        """Captura a tela do alvo do retrato. Faz I/O: nunca chamar segurando o lock."""
+    def _capture_image(self, sessao: _Sessao, jpeg: bool = False):
+        """Captura a tela do alvo do retrato. Faz I/O: nunca chamar segurando o lock.
+
+        `jpeg` so vale para o plano B do espelho iOS (perfil, K3).
+        """
         if sessao.platform is Platform.IOS:
+            if jpeg:
+                return self.ios.take_screenshot(sessao.device_id, fmt="jpeg")
             return self.ios.take_screenshot(sessao.device_id)
         return self.adb.take_screenshot(sessao.device_id)
 
@@ -636,8 +654,10 @@ class EngineServer:
         interface nao faz polling, e o aparelho aparece sozinho ao ser plugado.
         """
         self.devices_watch_stop({})
+        # Sem intervalo pedido, vale o do perfil de desempenho (K5).
+        self._watch_interval_explicit = bool(params.get("poll_interval"))
         interval = validate_number(
-            params.get("poll_interval") or settings.poll_interval, "poll_interval", minimum=0.01, maximum=3600,
+            params.get("poll_interval") or self.perf.knobs.poll_interval, "poll_interval", minimum=0.01, maximum=3600,
         )
 
         def on_changed(platform: str, device_id: str) -> None:
@@ -1044,6 +1064,7 @@ class EngineServer:
         x = validate_coordinate(params.get("x"), "x")
         y = validate_coordinate(params.get("y"), "y")
         ok = self.ios.tap(x, y) if sessao.platform is Platform.IOS else self.adb.tap(sessao.device_id, x, y)
+        self._acordar_espelho()
         return {"ok": bool(ok)}
 
     def input_text(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -1058,7 +1079,19 @@ class EngineServer:
         # a interface recebia {"ok": false} sem motivo: o usuario via "digitei e
         # nao aconteceu nada". Aqui a recusa vira erro tipado com explicacao.
         build_adb_input_text_args(text)
-        return {"ok": bool(self.adb.type_text(device, text))}
+        ok = self.adb.type_text(device, text)
+        self._acordar_espelho()
+        return {"ok": bool(ok)}
+
+    def _acordar_espelho(self) -> None:
+        """Interacao do usuario: o espelho sai da cadencia ociosa na hora (PERF-2).
+
+        A primeira mudanca de tela depois do toque chega no tempo normal, e nao
+        no intervalo de tela parada.
+        """
+        stream = self._stream
+        if stream is not None:
+            stream.wake()
 
     # -------------------------------------------------------------- streaming
 
@@ -1094,12 +1127,23 @@ class EngineServer:
 
     def stream_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self.stream_stop({})
-        fps = validate_number(params.get("fps") or settings.stream_fps, "fps", minimum=0.1, maximum=120)
-        max_width = validate_integer(params.get("max_width") or STREAM_MAX_WIDTH, "max_width", minimum=16, maximum=16384)
+        # O que o chamador nao fixou vem do perfil de desempenho (PERF-3).
+        knobs = self.perf.knobs
+        fps = validate_number(params.get("fps") or knobs.stream_fps, "fps", minimum=0.1, maximum=120)
+        max_width = validate_integer(params.get("max_width") or knobs.stream_max_width, "max_width",
+                                     minimum=16, maximum=16384)
         fmt = str(params.get("format") or settings.stream_format).lower()
         if fmt not in ("jpeg", "png"):
             raise InvalidInputError(f"Formato de quadro invalido: {fmt!r}")
-        quality = validate_integer(params.get("quality") or settings.stream_quality, "quality", minimum=10, maximum=95)
+        quality = validate_integer(params.get("quality") or knobs.stream_quality, "quality", minimum=10, maximum=95)
+        idle_fps = params.get("idle_fps", knobs.stream_idle_fps)
+        idle_fps = validate_number(idle_fps, "idle_fps", minimum=0, maximum=120) if idle_fps else None
+        explicitos = {chave for chave in ("fps", "max_width", "quality") if params.get(chave)}
+        if "idle_fps" in params:
+            explicitos.add("idle_fps")
+        cfg = {"max_width": max_width, "quality": quality, "capture_jpeg": knobs.stream_capture_jpeg,
+               "explicit": explicitos}
+        self._stream_cfg = cfg
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
@@ -1119,7 +1163,7 @@ class EngineServer:
                             self._mjpeg = None
                     reader.stop()
                     logger.info("MJPEG do WDA caiu; espelho iOS volta ao simctl.")
-                    return self._capture_image(sessao)
+                    return self._capture_image(sessao, jpeg=cfg["capture_jpeg"])
                 quadro = reader.latest()
                 if quadro is None or quadro[1] == ultimo_seq[0]:
                     return None
@@ -1128,7 +1172,7 @@ class EngineServer:
                 image.load()
                 image.info["mobaile_jpeg"] = data
                 return image
-            return self._capture_image(sessao)
+            return self._capture_image(sessao, jpeg=cfg["capture_jpeg"])
 
         def on_frame(image) -> None:
             try:
@@ -1137,7 +1181,7 @@ class EngineServer:
                 # front o desenharia sob o aparelho novo.
                 if sessao.epoch != self._sessao().epoch:
                     return
-                payload = self._encode_frame(image, max_width, fmt, quality)
+                payload = self._encode_frame(image, cfg["max_width"], fmt, cfg["quality"])
                 payload["device_id"] = sessao.device_id
                 # As metricas vao junto com o quadro de proposito.
                 #
@@ -1160,10 +1204,13 @@ class EngineServer:
             on_frame_callback=on_frame,
             on_screen_settled_callback=lambda: self.notify("stream.settled", {}),
             fps=fps,
+            idle_fps=idle_fps,
         )
         self._stream.start()
+        self._aplicar_pausa()
         return {
             "started": True, "fps": fps, "max_width": max_width, "format": fmt, "quality": quality,
+            "idle_fps": idle_fps or 0, "profile": self.perf.estado.perfil,
             "source": "wda_mjpeg" if self._mjpeg is not None else "capture",
         }
 
@@ -1181,6 +1228,111 @@ class EngineServer:
             self._stream.stop()
             self._stream = None
         return {"stopped": True}
+
+    def _espelho_mantido_por(self) -> str | None:
+        """Quem precisa do espelho ligado mesmo com a janela oculta."""
+        if self._flow_running:
+            return "flow"
+        if self._passive is not None:
+            return "passive"
+        return None
+
+    def _aplicar_pausa(self) -> dict[str, Any]:
+        """Pausa ou retoma o espelho conforme o pedido do front e quem o usa.
+
+        Chamado no pedido do front e sempre que um flow ou a escuta passiva
+        comeca ou termina: a pausa nunca vale durante automacao ou gravacao.
+        """
+        stream = self._stream
+        mantido = self._espelho_mantido_por() if self._pausa_pedida else None
+        pausar = self._pausa_pedida and mantido is None
+        if stream is not None:
+            if pausar:
+                stream.pause()
+            else:
+                stream.resume()
+        return {"running": stream is not None, "paused": stream is not None and pausar, "kept_for": mantido}
+
+    def stream_pause(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Janela oculta: para de capturar sem desligar o espelho (PERF-1)."""
+        self._pausa_pedida = True
+        return self._aplicar_pausa()
+
+    def stream_resume(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Janela visivel de novo: volta a capturar e reenvia o quadro atual."""
+        self._pausa_pedida = False
+        return self._aplicar_pausa()
+
+    # ------------------------------------------------------------- desempenho
+
+    def perf_signals(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Sinais do Mac vindos do front; campo ausente fica como estava (PERF-3)."""
+        sinais = {chave: valor for chave, valor in params.items() if chave != "progress_token"}
+        return self._perf_atualizar(sinais=sinais)
+
+    def perf_set_preference(self, params: dict[str, Any]) -> dict[str, Any]:
+        """`auto`, `completo`, `equilibrado` ou `leve`. Manual ganha, exceto Mac critico."""
+        return self._perf_atualizar(preferencia=str(params.get("preference") or ""))
+
+    def perf_status(self, _params: dict[str, Any]) -> dict[str, Any]:
+        return self.perf.status()
+
+    def _perf_atualizar(self, sinais: dict[str, Any] | None = None, preferencia: str | None = None) -> dict[str, Any]:
+        try:
+            estado, mudou = self.perf.atualizar(sinais=sinais, preferencia=preferencia)
+        except ValueError as exc:
+            raise InvalidInputError(str(exc)) from exc
+        self._perf_aplicar(estado, mudou)
+        return self.perf.status()
+
+    def _perf_reavaliar(self) -> None:
+        """Temporizador da histerese: sem sinal novo, o perfil tambem melhora."""
+        try:
+            estado, mudou = self.perf.reavaliar()
+            self._perf_aplicar(estado, mudou)
+        except Exception:
+            logger.exception("Falha ao reavaliar o perfil de desempenho.")
+
+    def _perf_aplicar(self, estado, mudou: bool) -> None:
+        if mudou:
+            self._aplicar_knobs()
+            logger.info("Perfil de desempenho: %s (%s)", estado.perfil, estado.motivo)
+            self.notify("perf.profile", self.perf.status())
+        quando = estado.proxima_reavaliacao()
+        with self._perf_timer_lock:
+            if self._perf_timer is not None:
+                self._perf_timer.cancel()
+                self._perf_timer = None
+            if quando is None or self._shutdown_done:
+                return
+            # No relogio do governador, para teste com relogio falso nao virar laco.
+            espera = max(0.0, quando - self.perf.agora()) + 0.05
+            self._perf_timer = threading.Timer(espera, self._perf_reavaliar)
+            self._perf_timer.daemon = True
+            self._perf_timer.start()
+
+    def _aplicar_knobs(self) -> None:
+        """Leva o perfil novo ao que ja esta ligado: espelho, vigia e historicos."""
+        knobs = self.perf.knobs
+        stream, cfg = self._stream, self._stream_cfg
+        if stream is not None and cfg is not None:
+            explicitos = cfg["explicit"]
+            if "max_width" not in explicitos:
+                cfg["max_width"] = knobs.stream_max_width
+            if "quality" not in explicitos:
+                cfg["quality"] = knobs.stream_quality
+            cfg["capture_jpeg"] = knobs.stream_capture_jpeg
+            fps = 1.0 / stream.frame_interval if "fps" in explicitos else knobs.stream_fps
+            if "idle_fps" in explicitos:
+                idle = 1.0 / stream.idle_interval if stream.idle_interval else None
+            else:
+                idle = knobs.stream_idle_fps
+            stream.set_cadence(fps, idle)
+        watcher = self._watcher
+        if watcher is not None and not self._watch_interval_explicit:
+            watcher.poll_interval = knobs.poll_interval
+        self.proxy.set_history_limit(knobs.proxy_history)
+        self.analytics.set_history_limit(knobs.analytics_history)
 
     def stream_stats(self, _params: dict[str, Any]) -> dict[str, Any]:
         if not self._stream:
@@ -1790,6 +1942,7 @@ class EngineServer:
         if encerrando:
             ouvinte.stop()
             raise EngineError("O motor esta encerrando; a escuta passiva nao foi ligada.")
+        self._aplicar_pausa()
         logger.info("Escuta passiva ligada para %s (%sx%s)", device, largura, altura)
         return {"listening": True, "platform": sessao.platform.value, "screen": [largura, altura]}
 
@@ -1824,6 +1977,7 @@ class EngineServer:
             self._passive.stop()
         finally:
             self._passive = None
+            self._aplicar_pausa()
         return {"listening": False}
 
     def passive_status(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -1881,10 +2035,13 @@ class EngineServer:
     def _on_passive_tap(self, x: int, y: int) -> None:
         """Um toque no aparelho vira passo gravado.
 
+        O toque tambem tira o espelho da cadencia ociosa (PERF-2).
+
         Resolve contra `current_xml`, que e a arvore de antes do toque — que e
         justamente a que descreve o que foi tocado. Fazer um dump aqui seria
         errado alem de lento: leria a tela seguinte, ja depois da navegacao.
         """
+        self._acordar_espelho()
         try:
             if self._teclado_aberto():
                 # Toque com teclado aberto e tecla, nao passo.
@@ -1977,6 +2134,7 @@ class EngineServer:
             self._flow_running = True
             self._flow_cancelled = False
             self._flow_thread = None
+        self._aplicar_pausa()
 
         def ao_sair(linha: str) -> None:
             self.notify("flow.log", {"line": linha})
@@ -2024,6 +2182,7 @@ class EngineServer:
             with self._state_lock:
                 self._flow_running = False
                 self._flow_thread = None
+            self._aplicar_pausa()
             raise
         return {"running": True, "steps": len(passos), "runner": "coordinates", "script": script}
 
@@ -2032,7 +2191,9 @@ class EngineServer:
         with self._state_lock:
             self._flow_running = False
             self._flow_thread = None
-            return self._flow_cancelled
+            cancelado = self._flow_cancelled
+        self._aplicar_pausa()
+        return cancelado
 
     def _notify_flow_step(self, index: int, total: int) -> None:
         """Inicio de um passo de nivel superior; `index` comeca em 1."""
@@ -2149,6 +2310,7 @@ class EngineServer:
                 raise InvalidInputError("Ja existe uma execucao em andamento.")
             self._flow_running = True
             self._flow_cancelled = False
+        self._aplicar_pausa()
 
         caminho_flow = str(params["path"]) if params.get("path") and not params.get("yaml") else None
 
@@ -2416,6 +2578,10 @@ class EngineServer:
                 return
             self._shutdown_done = True
         self._running = False
+        with self._perf_timer_lock:
+            if self._perf_timer is not None:
+                self._perf_timer.cancel()
+                self._perf_timer = None
         self.flow_stop({})
         self.stream_stop({})
         self.devices_watch_stop({})

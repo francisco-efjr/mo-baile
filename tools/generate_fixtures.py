@@ -304,6 +304,26 @@ def build() -> dict:
         with patch.object(server.adb, "get_screen_size", return_value=(1080, 2400)):
             fixtures["screen.size"] = call("screen.size")
         fixtures["stream.stats"] = call("stream.stats")
+        fixtures["stream.pause"] = call("stream.pause")
+        fixtures["stream.resume"] = call("stream.resume")
+        # Perfis de desempenho (PERF-3): o estado inicial, um sinal quente que
+        # leva ao leve (com a notificacao), e a volta ao automatico.
+        fixtures["perf.status"] = call("perf.status")
+        out.seek(0)
+        out.truncate()
+        fixtures["perf.signals"] = call("perf.signals", {
+            "thermal": "serious", "low_power": False, "memory_pressure": "normal",
+            "physical_memory_gb": 16, "arch": "arm64", "translated": False,
+        })
+        avisos = [json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip()]
+        fixtures["notif_perf.profile"] = next(m for m in avisos if m.get("method") == "perf.profile")
+        fixtures["perf.set_preference"] = call("perf.set_preference", {"preference": "leve"})
+        call("perf.set_preference", {"preference": "auto"})
+        call("perf.signals", {"thermal": "nominal"})
+        # Governador zerado e knobs do completo de volta, para o resto das
+        # fixtures nao depender da ordem.
+        server.perf = type(server.perf)()
+        server._aplicar_knobs()
         fixtures["proxy.events"] = call("proxy.events")
         with patch.object(server.adb, "is_proxy_configured", return_value=False):
             fixtures["proxy.diagnose"] = call("proxy.diagnose")

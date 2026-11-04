@@ -42,6 +42,16 @@ final class GlassTests: XCTestCase {
         }
     }
 
+    /// Perfil leve de desempenho (PERF-4): mesmo caminho de Reduzir transparência.
+    func testPerfilLeveViraSuperficieOpaca() {
+        for papel in GlassRole.allCases {
+            XCTAssertEqual(GlassSurface.resolve(papel, glassAvailable: true, reduceTransparency: false, perfLight: true),
+                           .solid)
+            XCTAssertEqual(GlassSurface.resolve(papel, glassAvailable: false, reduceTransparency: false, perfLight: true),
+                           .solid)
+        }
+    }
+
     func testBordaPropriaSoOndeOVidroDoSistemaNaoDesenha() {
         XCTAssertFalse(GlassSurface.glass(clear: false, interactive: false).drawsOwnEdge)
         XCTAssertFalse(GlassSurface.fill.drawsOwnEdge)

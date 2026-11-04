@@ -37,6 +37,9 @@ struct CommandPerformer {
             openSettings()
         case .restartEngine:
             Task { await session.restartEngine() }
+        case .perfLight:
+            let nova: PerfPreference = appState.perf.preference == .leve ? .auto : .leve
+            Task { await session.setPerfPreference(nova) }
 
         case .inspector:
             appState.toggleInspector()
