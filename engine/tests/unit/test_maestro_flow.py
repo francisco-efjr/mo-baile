@@ -968,6 +968,34 @@ class SincroniaTest(unittest.TestCase):
         self.assertTrue(resultado.success, resultado.message)
         self.assertEqual(aparelho.deslizes, 0, "rolou sem ter visto a tela")
 
+    def test_launch_app_espera_o_app_em_primeiro_plano(self):
+        # SYNC-9: o monkey volta antes de a activity abrir; o launcher ainda na tela
+        # passaria nas duas leituras iguais.
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        focos = iter([None, None, "com.android.launcher", "br.app"])
+        aparelho.foreground_app = lambda: next(focos, "br.app")
+        r, linhas, relogio = runner(aparelho)
+        self.assertTrue(r.run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertGreaterEqual(relogio.t, 0.9)
+        self.assertTrue(any("o app abriu" in linha for linha in linhas), linhas)
+
+    def test_launch_app_que_nao_chega_ao_primeiro_plano_segue_com_aviso(self):
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        aparelho.foreground_app = lambda: "com.outro.app"
+        r, linhas, relogio = runner(aparelho)
+        self.assertTrue(r.run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertGreaterEqual(relogio.t, 10)
+        self.assertTrue(any("nao ficou em primeiro plano" in linha for linha in linhas), linhas)
+
+    def test_flow_gravado_pode_comecar_abrindo_o_app(self):
+        flow = flow_from_steps(PASSOS_G55, abrir_app=True)
+        self.assertEqual([(s.command, s.app_id) for s in flow.on_start], [("launchApp", "br.app")])
+        self.assertEqual(len(flow.steps), len(PASSOS_G55), "abrir o app nao vira passo gravado")
+        self.assertEqual(flow_from_steps(PASSOS_G55).on_start, ())
+        sem_pacote = [replace(p, package="") for p in PASSOS_G55]
+        with self.assertRaisesRegex(InvalidInputError, "pacote"):
+            flow_from_steps(sem_pacote, abrir_app=True)
+
     def test_log_de_sincronia_por_passo_e_rastro_das_telas(self):
         # SYNC-1: cada passo diz quanto esperou; o rastro guarda cada tela diferente.
         aparelho = AparelhoComCarregamento(ROTEIRO_G55)

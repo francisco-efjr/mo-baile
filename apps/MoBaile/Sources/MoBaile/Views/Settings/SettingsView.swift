@@ -22,6 +22,7 @@ struct GeneralSettings: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage(LocatorStrategy.defaultKey) private var seletorPadrao: LocatorStrategy = .auto
+    @AppStorage(FlowRunOptions.launchAppKey) private var abrirAppAntes = false
 
     var body: some View {
         @Bindable var state = appState
@@ -68,6 +69,16 @@ struct GeneralSettings: View {
                     Text("O espelho começa assim que um aparelho é detectado.")
                         .font(DSFont.subheadline)
                         .foregroundStyle(themeManager.current.labelSecondary)
+                }
+            }
+
+            LabeledContent("Ao rodar automação:") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Abrir o app do zero antes do primeiro passo", isOn: $abrirAppAntes)
+                    Text("Fecha e abre o app gravado, para o primeiro passo começar sempre na mesma tela. Só no Android.")
+                        .font(DSFont.subheadline)
+                        .foregroundStyle(themeManager.current.labelSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

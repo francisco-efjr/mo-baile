@@ -44,6 +44,14 @@ enum LocatorStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+/// Opções de Rodar Automação (⌘R) guardadas nos Ajustes.
+enum FlowRunOptions {
+    static let launchAppKey = "mobaile.flowAbrirApp"
+
+    /// Ajustes › Geral › Abrir o app do zero antes do primeiro passo.
+    static var launchApp: Bool { UserDefaults.standard.bool(forKey: launchAppKey) }
+}
+
 enum WorkspaceTab: String, CaseIterable, Identifiable, Sendable {
     case home, pageObjects, network, analytics, report, environment
     var id: String { rawValue }

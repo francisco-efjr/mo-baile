@@ -80,6 +80,9 @@ if a[:1] == ["shell"] and len(a) >= 2:
     if a[1:3] == ["dumpsys", "input_method"]:
         print("mInputShown=" + ("true" if (AQUI / "teclado_aberto").exists() else "false"))
         sys.exit(0)
+    if a[1:3] == ["dumpsys", "window"]:
+        print("  mCurrentFocus=Window{1a2b u0 br.app/br.app.MainActivity}")
+        sys.exit(0)
     if a[1:3] == ["input", "tap"]:
         registrar({"toque_inicio": a[3:5]})
         time.sleep(float(ler("atraso_toque", "0") or 0))

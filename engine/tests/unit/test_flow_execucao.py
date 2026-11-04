@@ -119,6 +119,40 @@ class TestPrivacidadeDaEntrada(FluxoBase):
         self.assertNotIn("Exemplo", self.out.getvalue())
 
 
+class TestAbrirAppAntes(FluxoBase):
+    """SYNC-9: `launch_app` abre o app gravado do zero antes do primeiro passo."""
+
+    def test_launch_app_para_e_abre_o_pacote_gravado_antes_dos_passos(self):
+        self.gravar_android((540, 480, "id"))
+        self.adb.limpar_registro()
+
+        self.ok("flow.run", {"launch_app": True})
+        fim = self.esperar_fim()
+
+        self.assertTrue(fim["success"], fim)
+        comandos = [" ".join(c) for c in self.adb.chamadas()]
+        parar = next(i for i, c in enumerate(comandos) if "am force-stop br.app" in c)
+        abrir = next(i for i, c in enumerate(comandos) if "monkey -p br.app" in c)
+        tocar = next(i for i, c in enumerate(comandos) if "input tap" in c)
+        self.assertLess(parar, abrir)
+        self.assertLess(abrir, tocar, "o toque saiu antes de abrir o app")
+        self.assertEqual([(n["index"], n["total"]) for n in self.notificacoes("flow.step")], [(1, 1)],
+                         "abrir o app nao conta passo")
+
+    def test_sem_launch_app_nada_e_aberto(self):
+        self.gravar_android((540, 480, "id"))
+        self.adb.limpar_registro()
+        self.ok("flow.run")
+        self.esperar_fim()
+        self.assertFalse(any("monkey" in " ".join(c) for c in self.adb.chamadas()))
+
+    def test_launch_app_que_nao_e_booleano_e_recusado(self):
+        self.gravar_android((540, 480, "id"))
+        resposta = self.call("flow.run", {"launch_app": "sim"})
+        self.assertIn("error", resposta)
+        self.assertIn("launch_app", resposta["error"]["message"])
+
+
 class TestDigitacaoIOS(FluxoBase):
     """F3: no iOS o passo de digitacao digitava nada e era dado como sucesso."""
 

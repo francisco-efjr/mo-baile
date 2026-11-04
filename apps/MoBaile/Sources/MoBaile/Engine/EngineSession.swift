@@ -1234,7 +1234,8 @@ final class EngineSession {
     ///
     /// O serviço existia no motor e era testado, mas só a interface Tk o usava:
     /// o front nativo não tinha como rodar automação. O andamento chega por
-    /// `flow.step` (passo atual) e `flow.log` (linha a linha).
+    /// `flow.step` (passo atual) e `flow.log` (linha a linha). Com a opção dos
+    /// Ajustes ligada, o motor abre o app gravado do zero antes do primeiro passo.
     func runFlow() async {
         guard let client, !state.steps.isEmpty else { return }
         state.runLog.removeAll()
@@ -1244,7 +1245,8 @@ final class EngineSession {
         state.runStartedAt = Date()
         state.runState = .running
         do {
-            let inicio: EngineDTO.FlowRun = try await client.call("flow.run")
+            let params: [String: JSONValue] = FlowRunOptions.launchApp ? ["launch_app": .bool(true)] : [:]
+            let inicio: EngineDTO.FlowRun = try await client.call("flow.run", params: params)
             state.statusMessage = "Executando \(inicio.steps) passo(s)…"
         } catch {
             state.runState = .failed

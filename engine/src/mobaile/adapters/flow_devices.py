@@ -80,6 +80,10 @@ class AndroidFlowDevice:
             self._tamanho = self.adb.get_screen_size(self.serial)
         return self._tamanho
 
+    def foreground_app(self) -> str | None:
+        """Pacote em primeiro plano (`mCurrentFocus`), para o `launchApp` esperar o app abrir."""
+        return self.adb.get_current_package(self.serial)
+
     def tap(self, x: int, y: int) -> bool:
         return self.adb.tap(self.serial, x, y)
 

@@ -74,6 +74,8 @@ BOUNDS_TIMEOUT_S = 3.0
 # Alvo desabilitado e campo sem foco: espera curta e depois age, com aviso.
 ENABLED_TIMEOUT_S = 2.0
 FOCUS_TIMEOUT_S = 3.0
+# Depois do launchApp, quanto esperar o app chegar ao primeiro plano (Android).
+LAUNCH_FOREGROUND_TIMEOUT_S = 10.0
 # Rastro das telas lidas: quantas telas diferentes por flow e quantas execucoes guardar.
 TRACE_MAX_SCREENS = 60
 TRACE_KEEP_RUNS = 5
@@ -1294,8 +1296,33 @@ class FlowRunner:
             raise FlowFailed(f"nao foi possivel limpar o estado de {app}")
         if not self.device.launch_app(app):
             raise FlowFailed(f"nao foi possivel abrir {app}")
+        self._esperar_primeiro_plano(app)
         # Partida a frio e o pior caso da espera: segue com duas leituras iguais.
         self._assentar(uma_leitura=False)
+
+    def _esperar_primeiro_plano(self, app: str) -> None:
+        """O `monkey` volta antes de a activity abrir: espera o app em primeiro plano.
+
+        Sem isso, as duas leituras iguais podiam ser as do launcher ainda na
+        tela. So onde o aparelho diz o app em foco (`foreground_app`, o
+        `mCurrentFocus` do Android); no prazo, segue com aviso.
+        """
+        consultar = getattr(self.device, "foreground_app", None)
+        if consultar is None:
+            return
+        inicio = self._clock()
+        while True:
+            em_foco = consultar()
+            if em_foco == app:
+                if self._clock() > inicio:
+                    self._motivo(f"o app abriu em {_segundos(self._clock() - inicio)}")
+                return
+            if self._clock() - inicio >= LAUNCH_FOREGROUND_TIMEOUT_S:
+                self.log(f"  aviso: {app} nao ficou em primeiro plano em {LAUNCH_FOREGROUND_TIMEOUT_S:.0f} s "
+                         f"(em foco: {em_foco or 'nada'}); seguindo")
+                return
+            self._checar()
+            self._sleep(POLL_INTERVAL_S)
 
     def _r_stopApp(self, passo: Step) -> None:
         if not self.device.stop_app(self._app(passo)):
@@ -1591,16 +1618,27 @@ def _mascara_dos_digitados(passos: list[AutomationStep]) -> Callable[[str], str]
     return mascarar
 
 
-def flow_from_steps(passos: list[AutomationStep]) -> Flow:
+def flow_from_steps(passos: list[AutomationStep], *, abrir_app: bool = False) -> Flow:
     """Os passos gravados como `Flow`, para o `flow.run` reproduzir pelo localizador.
 
     Sem YAML nem `${VAR}`: o texto digitado vem do passo e so existe em memoria,
     em `secrets` para o log o mascarar. Cada passo gravado vira um item de topo
     (um `runFlow` sem condicao), para `flow.step` contar passo gravado. Passo sem
     localizador estavel toca o ponto gravado e diz isso no rotulo.
+
+    Com `abrir_app`, o flow comeca com o app gravado aberto do zero (`launchApp`
+    em `onFlowStart`, fora da contagem de passos): o primeiro passo deixa de
+    depender da tela em que o aparelho estava.
     """
     if not passos:
         raise InvalidInputError("Nenhum passo gravado para executar.")
+    inicio: tuple[Step, ...] = ()
+    if abrir_app:
+        app = next((p.package for p in passos if p.package), "")
+        if not app:
+            raise InvalidInputError("Os passos gravados nao dizem o pacote do app; rode sem abrir o app.")
+        inicio = (Step("launchApp", app_id=app, label=f"abrir {app} do zero",
+                       source="abrir o app"),)
     itens = []
     for passo in passos:
         seletor = selector_from_step(passo)
@@ -1616,5 +1654,5 @@ def flow_from_steps(passos: list[AutomationStep]) -> Flow:
         nota = " (coordenada gravada: sem localizador estavel)" if "point" in seletor else ""
         itens.append(Step("runFlow", steps=tuple(subpassos), label=f"{acao} {rotulo}{nota}",
                           source=f"passo {passo.step_num}"))
-    return Flow(app_id=None, name="passos gravados", tags=(), steps=tuple(itens),
+    return Flow(app_id=None, name="passos gravados", tags=(), steps=tuple(itens), on_start=inicio,
                 secrets=tuple(_formas_do_digitado(passos)))

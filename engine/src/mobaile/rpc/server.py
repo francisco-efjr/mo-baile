@@ -1920,7 +1920,9 @@ class EngineServer:
         quando o layout muda. `runner: "coordinates"` (ou `MOBAILE_FLOW_RUNNER`)
         roda o script de coordenadas de antes, o caminho de aparelho sem arvore
         nenhuma; o iOS segue nele ate o `/source` do WDA ser medido no runner. O
-        andamento sai por `flow.log` e `flow.step`, igual nos dois.
+        andamento sai por `flow.log` e `flow.step`, igual nos dois. Com
+        `launch_app`, o runner de localizador abre o app gravado do zero antes
+        do primeiro passo.
         """
         passos = self.codegen.get_steps()
         if not passos:
@@ -1933,7 +1935,11 @@ class EngineServer:
             raise InvalidInputError(f"runner invalido: {runner!r}. Use locator ou coordinates.")
         if sessao.platform is Platform.IOS:
             runner = "coordinates"
-        flow = maestro_flow.flow_from_steps(passos) if runner == "locator" else None
+        abrir_app = params.get("launch_app", False)
+        if not isinstance(abrir_app, bool):
+            raise InvalidInputError("launch_app deve ser verdadeiro ou falso.")
+        # Abrir o app do zero e do runner de localizador; o de coordenadas (iOS) ignora.
+        flow = maestro_flow.flow_from_steps(passos, abrir_app=abrir_app) if runner == "locator" else None
         if flow is not None:
             self._conferir_leitura_do_flow(device or "")
         with self._state_lock:
