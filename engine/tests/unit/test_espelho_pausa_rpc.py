@@ -78,3 +78,29 @@ class TestPausaDoEspelho(FluxoBase):
         self.ok("stream.resume")
         self.ok("stream.start", {"fps": 30, "max_width": 30})
         self.assertFalse(self.server._stream.paused)
+
+
+class TestEspelhoAcordaNoToque(FluxoBase):
+    """PERF-2: toque repassado tira o espelho da cadencia de tela parada."""
+
+    def setUp(self):
+        super().setUp()
+        self.server.adb.take_screenshot = lambda *_a, **_k: Image.new("RGB", (60, 120), "black")
+        self.ok("session.select_device", {"platform": "android", "device_id": "emulator-5554"})
+
+    def test_input_tap_acorda_o_espelho(self):
+        self.server.adb.tap = MagicMock(return_value=True)
+        espelho = MagicMock()
+        self.server._stream = espelho
+        try:
+            self.ok("input.tap", {"x": 10, "y": 20})
+        finally:
+            self.server._stream = None
+        espelho.wake.assert_called_once()
+
+    def test_stream_start_liga_a_cadencia_ociosa_e_idle_fps_zero_desliga(self):
+        self.ok("stream.start", {"fps": 30, "max_width": 30})
+        self.assertIsNotNone(self.server._stream.idle_interval)
+        self.ok("stream.start", {"fps": 30, "max_width": 30, "idle_fps": 0})
+        self.assertIsNone(self.server._stream.idle_interval)
+        self.ok("stream.stop")

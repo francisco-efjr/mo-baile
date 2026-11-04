@@ -94,6 +94,9 @@ logger = logging.getLogger(__name__)
 # antes de virar base64: a fidelidade que importa e a de layout, nao a de pixel,
 # e o inspetor continua usando a captura em resolucao cheia quando precisa.
 STREAM_MAX_WIDTH = 900
+# Tela parada: a captura cai para esta cadencia ate o proximo toque ou mudanca
+# (PERF-2). `idle_fps: 0` no `stream.start` desliga.
+STREAM_IDLE_FPS = 2.0
 
 # Quanto o encerramento espera as filas terminarem o que ja estava nelas. Passado
 # isso o motor encerra assim mesmo: as threads das filas sao daemon, e uma
@@ -1037,6 +1040,7 @@ class EngineServer:
         x = validate_coordinate(params.get("x"), "x")
         y = validate_coordinate(params.get("y"), "y")
         ok = self.ios.tap(x, y) if sessao.platform is Platform.IOS else self.adb.tap(sessao.device_id, x, y)
+        self._acordar_espelho()
         return {"ok": bool(ok)}
 
     def input_text(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -1051,7 +1055,19 @@ class EngineServer:
         # a interface recebia {"ok": false} sem motivo: o usuario via "digitei e
         # nao aconteceu nada". Aqui a recusa vira erro tipado com explicacao.
         build_adb_input_text_args(text)
-        return {"ok": bool(self.adb.type_text(device, text))}
+        ok = self.adb.type_text(device, text)
+        self._acordar_espelho()
+        return {"ok": bool(ok)}
+
+    def _acordar_espelho(self) -> None:
+        """Interacao do usuario: o espelho sai da cadencia ociosa na hora (PERF-2).
+
+        A primeira mudanca de tela depois do toque chega no tempo normal, e nao
+        no intervalo de tela parada.
+        """
+        stream = self._stream
+        if stream is not None:
+            stream.wake()
 
     # -------------------------------------------------------------- streaming
 
@@ -1093,6 +1109,8 @@ class EngineServer:
         if fmt not in ("jpeg", "png"):
             raise InvalidInputError(f"Formato de quadro invalido: {fmt!r}")
         quality = validate_integer(params.get("quality") or settings.stream_quality, "quality", minimum=10, maximum=95)
+        idle_fps = params.get("idle_fps", STREAM_IDLE_FPS)
+        idle_fps = validate_number(idle_fps, "idle_fps", minimum=0, maximum=120) if idle_fps else None
         # Retrato da sessao usado na ultima captura. Captura e emissao rodam em
         # sequencia na mesma thread do espelho, entao uma variavel basta.
         retrato: list[_Sessao] = []
@@ -1153,6 +1171,7 @@ class EngineServer:
             on_frame_callback=on_frame,
             on_screen_settled_callback=lambda: self.notify("stream.settled", {}),
             fps=fps,
+            idle_fps=idle_fps,
         )
         self._stream.start()
         self._aplicar_pausa()
@@ -1890,10 +1909,13 @@ class EngineServer:
     def _on_passive_tap(self, x: int, y: int) -> None:
         """Um toque no aparelho vira passo gravado.
 
+        O toque tambem tira o espelho da cadencia ociosa (PERF-2).
+
         Resolve contra `current_xml`, que e a arvore de antes do toque — que e
         justamente a que descreve o que foi tocado. Fazer um dump aqui seria
         errado alem de lento: leria a tela seguinte, ja depois da navegacao.
         """
+        self._acordar_espelho()
         try:
             if self._teclado_aberto():
                 # Toque com teclado aberto e tecla, nao passo.

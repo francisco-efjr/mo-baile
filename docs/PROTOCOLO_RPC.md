@@ -234,7 +234,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
+| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80), `idle_fps` (cadência com a tela parada; `0` desliga) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
 | `stream.pause` | — | para de capturar sem desligar o espelho (janela oculta, coberta ou minimizada). Vale também para o espelho que ligar depois, até o `stream.resume`. Durante `flow.run`, `flow.maestro_run` ou a escuta passiva o espelho continua, e a pausa passa a valer quando eles terminam. Devolve `{running, paused, kept_for}`: `kept_for` é `flow`, `passive` ou nulo. Idempotente |
@@ -321,9 +321,13 @@ com `~`; o motor normaliza, confere tipo e tamanho (spec até 5 MB, log até
 `position`; a interface, `coords`. A tradução acontece em um lugar só,
 `EngineDTO.StepPayload.mappedStrategy`.
 
-**Quadro só é enviado quando a tela muda.** O motor continua capturando na
-cadência pedida, mas descarta quadro idêntico. `stream.stats` mostra a
-proporção descartada.
+**Quadro só é enviado quando a tela muda.** O motor captura na cadência pedida
+e descarta quadro idêntico. `stream.stats` mostra a proporção descartada.
+Desde a trilha de desempenho (PERF-2), depois de 5 capturas iguais seguidas e
+2 s sem toque nem mudança a captura cai para `idle_fps`; `input.tap`,
+`input.text`, o toque da escuta passiva ou um quadro diferente voltam à
+cadência normal na hora. Quando a captura é mais lenta que o intervalo, o laço
+ainda descansa um quarto do tempo dela (no mínimo 50 ms).
 
 **Credencial já chega redigida.** A interface nunca recebe o token. Ver
 `docs/SEGURANCA.md`.
@@ -340,6 +344,7 @@ ou `0` continua valendo o padrão.
 | `max_width` | `screen.capture`, `stream.start` | inteiro, 16 a 16.384 |
 | `fps` | `stream.start` | 0,1 a 120; em `scrcpy.start`, inteiro de 1 a 240 |
 | `quality` | `stream.start` | inteiro, 10 a 95 |
+| `idle_fps` | `stream.start` | 0 a 120; `0` desliga a cadência de tela parada |
 | `max_size` | `scrcpy.start` | inteiro, 16 a 16.384 |
 | `step_num` | `session.correlate` | inteiro, 0 a 1.000.000 |
 | `before_s`, `after_s` | `session.correlate` | 0 a 60 s |

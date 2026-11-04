@@ -23,6 +23,19 @@ from mobaile.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Cadencia adaptativa (PERF-2). Com a tela parada por `IDLE_AFTER_FRAMES`
+# capturas seguidas e ha pelo menos `IDLE_GRACE_S` sem toque nem mudanca, a
+# captura cai para `idle_fps`. Toque (`wake`) ou quadro diferente voltam ao
+# normal na hora. O diff vem depois da captura, entao so espacar a captura
+# poupa o `simctl`/`screencap`.
+IDLE_AFTER_FRAMES = 5
+IDLE_GRACE_S = 2.0
+# Quando a captura e mais lenta que o intervalo pedido, o laco ainda descansa
+# uma fracao do que ela levou, com um piso. Antes esperava 10 ms e capturava de
+# novo: a thread e o processo de captura ficavam ocupados o tempo todo.
+MIN_REST_S = 0.05
+REST_RATIO = 0.25
+
 
 @dataclass
 class StreamStats:
@@ -93,11 +106,20 @@ class RealTimeStreamEngine:
         on_frame_callback: Callable[[Image.Image], None],
         on_screen_settled_callback: Callable[[], None],
         fps: float | None = None,
+        idle_fps: float | None = None,
+        idle_after: int = IDLE_AFTER_FRAMES,
+        idle_grace_s: float = IDLE_GRACE_S,
     ):
         self.get_frame_fn = get_frame_fn
         self.on_frame_callback = on_frame_callback
         self.on_screen_settled_callback = on_screen_settled_callback
         self.frame_interval = 1.0 / (fps or settings.stream_fps)
+        # Sem `idle_fps`, a cadencia nunca cai (comportamento de antes).
+        self.idle_interval = 1.0 / idle_fps if idle_fps else None
+        self.idle_after = idle_after
+        self.idle_grace_s = idle_grace_s
+        self._identicos = 0
+        self._ultima_atividade = time.monotonic()
 
         self.diff_detector = ScreenDiffDetector()
         self.stats = StreamStats()
@@ -144,6 +166,34 @@ class RealTimeStreamEngine:
     def paused(self) -> bool:
         return self._pause_event.is_set() and not self._stop_event.is_set()
 
+    def wake(self):
+        """Toque ou digitacao: volta a cadencia normal e captura ja."""
+        self._identicos = 0
+        self._ultima_atividade = time.monotonic()
+        self._wake.set()
+
+    def set_cadence(self, fps: float, idle_fps: float | None) -> None:
+        """Troca de perfil com o espelho ligado; vale a partir da proxima espera."""
+        self.frame_interval = 1.0 / fps
+        self.idle_interval = 1.0 / idle_fps if idle_fps else None
+        self._wake.set()
+
+    @property
+    def idle(self) -> bool:
+        return (
+            self.idle_interval is not None
+            and self._identicos >= self.idle_after
+            and time.monotonic() - self._ultima_atividade >= self.idle_grace_s
+        )
+
+    def _espera(self, elapsed: float) -> float:
+        intervalo = self.frame_interval
+        if self.idle and self.idle_interval is not None:
+            intervalo = max(intervalo, self.idle_interval)
+        if elapsed >= intervalo:
+            return max(MIN_REST_S, elapsed * REST_RATIO)
+        return intervalo - elapsed
+
     def reset_diff(self):
         self.diff_detector.reset()
 
@@ -186,6 +236,11 @@ class RealTimeStreamEngine:
                         self.on_frame_callback(img)
                     else:
                         self.stats.frames_skipped += 1
+                    if has_changed:
+                        self._identicos = 0
+                        self._ultima_atividade = time.monotonic()
+                    else:
+                        self._identicos += 1
 
                     if is_settled and not self._stop_event.is_set():
                         self.on_screen_settled_callback()
@@ -193,5 +248,5 @@ class RealTimeStreamEngine:
                 logger.exception("Falha ao processar quadro do espelho.")
 
             elapsed = time.time() - loop_start
-            self._wake.wait(max(0.01, self.frame_interval - elapsed))
+            self._wake.wait(self._espera(elapsed))
             self._wake.clear()

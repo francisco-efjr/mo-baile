@@ -234,5 +234,98 @@ class TestRealTimeStreamEngine(unittest.TestCase):
             motor.stop()
 
 
+class TestCadenciaAdaptativa(unittest.TestCase):
+    """PERF-2: tela parada espaca a captura; toque ou mudanca voltam ao normal."""
+
+    def contador(self, cor="black"):
+        estado = {"n": 0, "cor": cor}
+
+        def captura():
+            estado["n"] += 1
+            return tela(estado["cor"])
+
+        return estado, captura
+
+    def taxa(self, estado, segundos):
+        antes = estado["n"]
+        time.sleep(segundos)
+        return (estado["n"] - antes) / segundos
+
+    def test_tela_parada_baixa_a_cadencia_depois_de_n_quadros_iguais(self):
+        estado, captura = self.contador()
+        motor = RealTimeStreamEngine(captura, lambda _f: None, lambda: None, fps=50,
+                                     idle_fps=4, idle_after=3, idle_grace_s=0)
+        motor.start()
+        try:
+            time.sleep(0.3)
+            self.assertTrue(motor.idle)
+            self.assertLessEqual(self.taxa(estado, 1.0), 6, "parada, a captura cai para ~4 por segundo")
+        finally:
+            motor.stop()
+
+    def test_toque_volta_a_cadencia_normal_na_hora(self):
+        estado, captura = self.contador()
+        motor = RealTimeStreamEngine(captura, lambda _f: None, lambda: None, fps=50,
+                                     idle_fps=1, idle_after=3, idle_grace_s=0.3)
+        motor.start()
+        try:
+            time.sleep(0.6)
+            self.assertTrue(motor.idle)
+            antes = estado["n"]
+            motor.wake()
+            time.sleep(0.05)
+            self.assertGreater(estado["n"], antes, "o toque acorda a captura sem esperar o intervalo ocioso")
+            self.assertFalse(motor.idle)
+            self.assertGreaterEqual(self.taxa(estado, 0.2), 20, "depois do toque, cadencia normal")
+        finally:
+            motor.stop()
+
+    def test_quadro_diferente_sai_do_modo_ocioso(self):
+        estado, captura = self.contador()
+        quadros = []
+        motor = RealTimeStreamEngine(captura, quadros.append, lambda: None, fps=50,
+                                     idle_fps=2, idle_after=3, idle_grace_s=0)
+        motor.start()
+        try:
+            time.sleep(0.4)
+            self.assertTrue(motor.idle)
+            estado["cor"] = "white"
+            limite = time.monotonic() + 1.5
+            while len(quadros) < 2 and time.monotonic() < limite:
+                time.sleep(0.01)
+            self.assertEqual(len(quadros), 2)
+            self.assertFalse(motor.idle, "tela mudou: volta a cadencia normal")
+        finally:
+            motor.stop()
+
+    def test_sem_idle_fps_a_cadencia_e_a_de_sempre(self):
+        estado, captura = self.contador()
+        motor = RealTimeStreamEngine(captura, lambda _f: None, lambda: None, fps=50)
+        motor.start()
+        try:
+            time.sleep(0.3)
+            self.assertFalse(motor.idle)
+            self.assertGreaterEqual(self.taxa(estado, 0.5), 25)
+        finally:
+            motor.stop()
+
+    def test_captura_mais_lenta_que_o_intervalo_tambem_descansa(self):
+        """O laco antigo esperava 10 ms e capturava de novo: thread sempre ocupada."""
+        estado = {"n": 0}
+
+        def lenta():
+            estado["n"] += 1
+            time.sleep(0.08)
+            return tela("black")
+
+        motor = RealTimeStreamEngine(lenta, lambda _f: None, lambda: None, fps=60)
+        motor.start()
+        try:
+            time.sleep(0.2)
+            self.assertLessEqual(self.taxa(estado, 1.2), 8.5, "80 ms de captura pedem pelo menos 50 ms de descanso")
+        finally:
+            motor.stop()
+
+
 if __name__ == "__main__":
     unittest.main()
