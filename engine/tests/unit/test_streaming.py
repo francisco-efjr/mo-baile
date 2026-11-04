@@ -276,7 +276,8 @@ class TestCadenciaAdaptativa(unittest.TestCase):
             time.sleep(0.05)
             self.assertGreater(estado["n"], antes, "o toque acorda a captura sem esperar o intervalo ocioso")
             self.assertFalse(motor.idle)
-            self.assertGreaterEqual(self.taxa(estado, 0.2), 20, "depois do toque, cadencia normal")
+            # Ocioso aqui seria ~1 por segundo; o piso folgado aguenta o runner lento do CI.
+            self.assertGreaterEqual(self.taxa(estado, 0.5), 8, "depois do toque, cadencia normal")
         finally:
             motor.stop()
 
@@ -305,7 +306,9 @@ class TestCadenciaAdaptativa(unittest.TestCase):
         try:
             time.sleep(0.3)
             self.assertFalse(motor.idle)
-            self.assertGreaterEqual(self.taxa(estado, 0.5), 25)
+            # 50 fps pedidos; no runner do CI saem ~36. O que importa é nunca cair para a cadência ociosa.
+            self.assertGreaterEqual(self.taxa(estado, 1.0), 10)
+            self.assertFalse(motor.idle)
         finally:
             motor.stop()
 

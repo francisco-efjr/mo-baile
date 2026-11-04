@@ -5,6 +5,15 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.17.2] - 2026-11-04
+
+### Corrigido
+
+- **Testes da cadência do espelho estáveis no runner do CI.** Os testes exigiam
+  25 capturas em 0,5 s, e o Mac do GitHub fez 18. Isso derrubou a release da
+  3.17.1. Agora eles conferem que a cadência nunca cai para a ociosa, com um
+  piso folgado. O motor não mudou.
+
 ## [3.17.1] - 2026-11-04
 
 ### Corrigido
