@@ -21,8 +21,23 @@ A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/V
   primeiro passo".** O Rodar Automação (⌘R) fecha e abre o app gravado antes
   de começar, para o primeiro passo sair sempre da mesma tela. Só no Android.
 
+- **Aba Page Objects no modelo do PyCharm.** O editor grava os caracteres
+  exatamente como digitados: sem aspas inteligentes, sem correção, sem soft
+  wrap, Tab com 4 espaços, LF e UTF-8 sem BOM no arquivo. Os caracteres
+  especiais (NBSP, ZWSP, bidi…) aparecem como etiqueta. Usa JetBrains Mono e o
+  esquema de cores do PyCharm (Ajustes › Geral › "Cores do editor" volta à
+  paleta do app). O rodapé imita a status bar do PyCharm. O painel Projeto
+  mostra `pages/`, `locators/` e `flows/` e abre arquivos em abas, pelos RPCs
+  novos `workspace.tree`, `workspace.read` e `workspace.write`.
+- **Perfis de desempenho e modo leve.** Ajustes › Desempenho: Completo,
+  Equilibrado, Leve e Automático, que escolhe pelo estado do Mac. O espelho
+  pausa com a janela oculta (`stream.pause`/`stream.resume`) e reduz a captura
+  com a tela parada. Há badge e comando do modo leve.
+
 ### Mudado
 
+- **Relatório HTML exportado com o nome do projeto:**
+  `relatorio_<projeto>_<plataforma>_<dd-mm-aaaa>.html`.
 - **`launchApp` espera o app ficar em primeiro plano** (até 10 s) antes de
   ler a tela. O `monkey` volta antes de a activity abrir. No emulador, o
   launcher ainda estava em foco 0,4 s depois. Um pedido de permissão por cima
