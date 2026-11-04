@@ -1,4 +1,4 @@
-# Como testar a 3.17.0
+# Como testar a 3.17.1 (3.17.0 + correções da revisão de desempenho)
 
 ## Pré-requisitos
 
@@ -10,8 +10,8 @@
 ## Testes automatizados
 
 ```bash
-make check        # lint, segurança, motor (871), UI Tk, QA (5 cenários), fixtures
-make test-swift   # 478 testes, 29 pulados, 0 falhas
+make check        # lint, segurança, motor (896), UI Tk, QA (5 cenários), fixtures
+make test-swift   # 479 testes, 29 pulados, 0 falhas
 ```
 
 Bancada do espelho, sem o app aberto:

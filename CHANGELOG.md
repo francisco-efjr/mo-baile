@@ -5,6 +5,32 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.17.1] - 2026-11-04
+
+### Corrigido
+
+Correções da revisão independente dos perfis de desempenho, que ficaram de
+fora da 3.17.0:
+
+- **O perfil nunca encolhe o histórico de rede e analytics.** No Equilibrado e
+  no Leve, a 3.17.0 cortava os eventos já capturados (analytics 5.000 → 2.000).
+  Com isso, o Relatório com `source: "session"` acusava "não disparado" um
+  evento que tinha disparado. Agora o teto é o mesmo em todos os perfis. O
+  Leve só encurta o corpo das capturas novas. Quando o teto estoura, o motor
+  avisa uma vez e marca `perf.status.history_full`.
+- **O modo leve visual não fica preso com o motor vivo.** Qualquer resposta
+  do motor tira o freio local.
+- **O espelho não fica pausado com a janela à vista.** Isso acontecia quando
+  um flow terminava no instante em que a janela voltava. Um `stream.resume`
+  que falha agora é repetido com recuo.
+- **O espelho que acabou de iniciar já usa o perfil escolhido**, mesmo
+  quando o perfil muda durante o `stream.start`.
+- **Sensores do Mac:**
+  - os observadores e a fonte de pressão de memória são liberados ao fechar;
+  - a pressão de memória e a visibilidade da janela partem do estado atual;
+  - a política de animação passou a ser injetável, o que evita testes
+    instáveis.
+
 ## [3.17.0] - 2026-11-04
 
 ### Adicionado

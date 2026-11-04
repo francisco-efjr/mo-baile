@@ -1,9 +1,15 @@
-# Rodada 03–04/11/2026: Page Objects no modelo do PyCharm, perfis de desempenho e nome do relatório (3.17.0)
+# Rodada 03–04/11/2026: Page Objects no modelo do PyCharm, perfis de desempenho e nome do relatório (3.17.0 e 3.17.1)
 
 Rodada orquestrada pelo protocolo brain-of-agent (modo melhoria, §3.1).
 Branch: `melhoria/2026-11-03-pycharm-desempenho`, criada a partir de
-`melhoria/2026-10-28-automacao-sync` (3.16.0). Foi commitada com a tag
-`v3.17.0` e não foi enviada (sem push).
+`melhoria/2026-10-28-automacao-sync` (3.16.0).
+
+Uma sessão paralela, a da fase 2 da automação, juntou esta linha à branch
+`melhoria/2026-11-04-automacao-fase2` antes das correções R1–R6 da revisão de
+desempenho e publicou a 3.17.0 (tag `v3.17.0`). Esta branch juntou de volta a
+fase 2 e publica as correções como **3.17.1**, com a tag `v3.17.1`, sem push.
+Ela contém tudo: a fase 2 da automação, Page Objects, desempenho com R1–R6 e
+REL-1.
 
 ## Resumo
 
@@ -37,10 +43,10 @@ Lacuna do registro de conhecimento: não há tag de desempenho para desktop. A
 
 ## Linha de base × depois
 
-| Suíte | Antes (3.16.0) | Depois (3.17.0) |
+| Suíte | Antes (3.16.0) | Depois (3.17.1) |
 |---|---|---|
-| Motor (pytest) | 793 | 871 |
-| Swift (`make test-swift`) | 408 (27 pulados) | 478 (29 pulados) |
+| Motor (pytest) | 793 | 896 (inclui os testes da fase 2 da automação) |
+| Swift (`make test-swift`) | 408 (27 pulados) | 479 (29 pulados) |
 | UI Tk / QA de regressão | 20 / 11 | 20 / 11 |
 | `make qa` (5 cenários) | ok | ok (relatório com 2 checagens novas do REL-1) |
 | Lint, segurança, fixtures | ok | ok |
@@ -103,8 +109,9 @@ desenvolvedores.
 - **D-7:** um Mac de 8 GB começa no Equilibrado quando o modo é Automático.
 - **D-8:** a cadência ociosa vale também no Completo. Uma mudança de tela
   sem toque aparece até 0,5 s depois.
-- **Versão:** 3.17.0 (minor). A interface mudou só numa aba, então não
-  considerei redesenho do app inteiro.
+- **Versão:** 3.17.0 (minor), porque a interface mudou só numa aba e não
+  considerei redesenho do app inteiro. As correções da revisão saem na
+  3.17.1.
 
 ## Decisões pendentes do dono
 
