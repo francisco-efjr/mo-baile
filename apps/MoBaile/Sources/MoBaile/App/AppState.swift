@@ -150,6 +150,9 @@ class AppState {
         workspaceTab == .report || (isDeviceConnected && workspaceTab != .pageObjects)
     }
 
+    // --- Desempenho (PERF-4): perfil que o motor escolheu ---
+    var perf = PerfState()
+
     // --- Metrics ---
     var fps: Int = 0
     var settleMs: Int = 0

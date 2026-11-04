@@ -329,12 +329,16 @@ extension ThemeTokens {
 /// crossfade de 180 ms troca de seção. Com Reduzir movimento, tudo vira
 /// crossfade curto.
 enum Motion {
+    /// Perfil leve (PERF-4): as molas viram o crossfade de Reduzir movimento.
+    /// Escrito só pela `EngineSession`, na main thread; lido na hora da ação.
+    nonisolated(unsafe) static var perfReduced = false
+
     static func smooth(reduceMotion: Bool = false) -> Animation {
-        reduceMotion ? .linear(duration: 0.18) : .spring(duration: 0.5, bounce: 0)
+        reduceMotion || perfReduced ? .linear(duration: 0.18) : .spring(duration: 0.5, bounce: 0)
     }
 
     static func snappy(reduceMotion: Bool = false) -> Animation {
-        reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.35, bounce: 0.15)
+        reduceMotion || perfReduced ? .linear(duration: 0.15) : .spring(duration: 0.35, bounce: 0.15)
     }
 
     static let crossfade = Animation.linear(duration: 0.18)

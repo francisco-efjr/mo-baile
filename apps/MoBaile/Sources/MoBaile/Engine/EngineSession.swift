@@ -160,6 +160,8 @@ final class EngineSession {
     private var pauseTask: Task<Void, Never>?
     /// Uma `stream.settled` chegou com a janela oculta: relê ao voltar.
     private var hierarchyStale = false
+    /// Sinais do Mac para o perfil de desempenho (PERF-4).
+    private let perfSensors = PerfSensors()
     private var progressSequence = 0
 
     convenience init(
@@ -233,6 +235,7 @@ final class EngineSession {
             applyDaemonStatus(from: info)
             state.statusMessage = "Motor \(info.version) conectado"
             await applyStreamPause()
+            await syncPerf()
             await refreshDevices()
             await startWatchingDevices()
             await refreshEnvironment()
@@ -529,6 +532,7 @@ final class EngineSession {
     private func restore(_ snapshot: RestoreSnapshot) async {
         guard let client else { return }
         await applyStreamPause()
+        await syncPerf()
         if let device = snapshot.device {
             let sessao = try? await client.call(
                 "session.select_device",
@@ -864,7 +868,9 @@ final class EngineSession {
     func startStream() async {
         guard let client, state.selectedDevice != nil else { return }
         do {
-            try await client.callIgnoringResult("stream.start", params: ["fps": .double(6.0), "max_width": .int(900)])
+            // Cadência, largura e qualidade vêm do perfil de desempenho do motor
+            // (PERF-3): o completo repete os 6 fps e 900 px de antes.
+            try await client.callIgnoringResult("stream.start")
             state.streamActive = true
         } catch {
             report(error)
@@ -919,6 +925,51 @@ final class EngineSession {
             // Motor sem o método ou fora do ar: tenta de novo na próxima mudança.
             streamPauseSent = !pausar
         }
+    }
+
+    // MARK: - Perfil de desempenho (PERF-4)
+
+    /// Manda a preferência e os sinais ao motor e passa a observar o Mac.
+    private func syncPerf() async {
+        perfSensors.start { [weak self] in
+            Task { await self?.sendPerfSignals() }
+        }
+        await setPerfPreference(state.perf.preference)
+        await sendPerfSignals()
+    }
+
+    /// Sinais do Mac para o motor. Sem resposta dele, o freio local liga a
+    /// parte visual do leve até a próxima resposta.
+    func sendPerfSignals() async {
+        guard let client else { return }
+        do {
+            let status: EngineDTO.PerfStatus = try await client.call("perf.signals", params: perfSensors.current.params)
+            state.perf.semMotor = false
+            applyPerf(status)
+        } catch {
+            state.perf.semMotor = true
+            Motion.perfReduced = state.perf.reducesMotion
+        }
+    }
+
+    /// Ajustes › Desempenho e a paleta. A escolha fica guardada e vale na hora.
+    func setPerfPreference(_ preferencia: PerfPreference) async {
+        state.perf.preference = preferencia
+        preferencia.store()
+        guard let client else { return }
+        if let status = try? await client.call(
+            "perf.set_preference", params: ["preference": .string(preferencia.rawValue)], as: EngineDTO.PerfStatus.self
+        ) {
+            applyPerf(status)
+        }
+    }
+
+    private func applyPerf(_ status: EngineDTO.PerfStatus) {
+        state.perf.profile = status.profile
+        state.perf.reason = status.reason
+        state.perf.vidro = status.knobs.vidro
+        state.perf.animacoes = status.knobs.animacoes
+        Motion.perfReduced = state.perf.reducesMotion
     }
 
     // MARK: - Scrcpy (Espelho Nativo 60 FPS)
@@ -1805,6 +1856,10 @@ final class EngineSession {
             } else {
                 hierarchyStale = true
             }
+
+        case "perf.profile":
+            guard let status = decodeParams(notification, as: EngineDTO.PerfStatus.self) else { return }
+            applyPerf(status)
 
         case "proxy.event":
             guard let event = decodeParams(notification, as: EngineDTO.NetworkEventPayload.self) else { return }
