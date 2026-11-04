@@ -158,6 +158,11 @@ final class EngineSession {
     /// O que este motor sabe do pedido de pausa; zera a cada motor novo.
     private var streamPauseSent = false
     private var pauseTask: Task<Void, Never>?
+    /// `stream.resume` que falhou com a janela à vista é repetido nestes
+    /// intervalos (R4); sem isso a moldura ficava parada até a janela sumir e
+    /// voltar. Interno para o teste encurtar.
+    var resumeRetryDelays: [UInt64] = [500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000]
+    private var resumeRetryTask: Task<Void, Never>?
     /// Uma `stream.settled` chegou com a janela oculta: relê ao voltar.
     private var hierarchyStale = false
     /// Sinais do Mac para o perfil de desempenho (PERF-4).
@@ -897,6 +902,8 @@ final class EngineSession {
         windowVisible = visible
         pauseTask?.cancel()
         pauseTask = nil
+        resumeRetryTask?.cancel()
+        resumeRetryTask = nil
         guard !visible else {
             await applyStreamPause()
             if hierarchyStale {
@@ -915,16 +922,30 @@ final class EngineSession {
         await pauseTask?.value
     }
 
-    /// Manda ao motor o pedido que corresponde à janela, só quando muda.
+    /// Manda ao motor o pedido que corresponde à janela, só quando muda. A
+    /// retomada que falha com a janela visível é repetida com recuo curto.
     private func applyStreamPause() async {
-        guard let client else { return }
-        let pausar = !windowVisible
-        guard pausar != streamPauseSent else { return }
-        streamPauseSent = pausar
-        if (try? await client.callIgnoringResult(pausar ? "stream.pause" : "stream.resume")) == nil {
-            // Motor sem o método ou fora do ar: tenta de novo na próxima mudança.
-            streamPauseSent = !pausar
+        if await sendStreamPauseIfNeeded() || !windowVisible { return }
+        resumeRetryTask?.cancel()
+        resumeRetryTask = Task { [weak self] in
+            for atraso in self?.resumeRetryDelays ?? [] {
+                try? await Task.sleep(nanoseconds: atraso)
+                guard !Task.isCancelled, let self, self.windowVisible else { return }
+                if await self.sendStreamPauseIfNeeded() { return }
+            }
         }
+    }
+
+    /// Verdadeiro quando o motor já sabe o pedido atual (ou não há motor).
+    private func sendStreamPauseIfNeeded() async -> Bool {
+        guard let client else { return true }
+        let pausar = !windowVisible
+        guard pausar != streamPauseSent else { return true }
+        streamPauseSent = pausar
+        if (try? await client.callIgnoringResult(pausar ? "stream.pause" : "stream.resume")) != nil { return true }
+        // Motor sem o método, fora do ar ou com a fila presa.
+        streamPauseSent = !pausar
+        return false
     }
 
     // MARK: - Perfil de desempenho (PERF-4)

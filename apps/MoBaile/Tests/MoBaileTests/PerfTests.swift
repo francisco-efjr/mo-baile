@@ -26,6 +26,29 @@ final class PerfTests: XCTestCase {
         XCTAssertEqual(chamadas.last, "stream.resume", "\(chamadas)")
     }
 
+    /// R4: retomada que falha é repetida enquanto a janela estiver à vista.
+    func testRetomadaQueFalhaERepetidaSoComAJanelaVisivel() async throws {
+        let motor = FakeEngine(
+            respostas: try resultadosDasFixtures(),
+            erros: ["stream.resume": .timeout(method: "stream.resume", seconds: 15)]
+        )
+        let sessao = EngineSession(state: AppState(), client: motor)
+        sessao.resumeRetryDelays = [10_000_000, 10_000_000, 10_000_000]
+
+        await sessao.setWindowVisible(false, pauseDelayNanoseconds: 0)
+        await sessao.setWindowVisible(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        var chamadas = await motor.chamadas
+        XCTAssertEqual(chamadas.filter { $0 == "stream.resume" }.count, 4, "1 + 3 novas tentativas: \(chamadas)")
+
+        // Oculta de novo: as tentativas param.
+        await sessao.setWindowVisible(false, pauseDelayNanoseconds: 0)
+        let antes = chamadas.count
+        try await Task.sleep(nanoseconds: 100_000_000)
+        chamadas = await motor.chamadas
+        XCTAssertFalse(chamadas.dropFirst(antes).contains("stream.resume"), "\(chamadas)")
+    }
+
     func testAlternarRapidoNaoPausa() async throws {
         let (_, motor, sessao) = try sessao()
 
