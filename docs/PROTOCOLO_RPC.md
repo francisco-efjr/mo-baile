@@ -304,9 +304,10 @@ escolhe entre eles. A política mora no motor (`services/perf.py`); o front mand
 os sinais do Mac e aplica a parte visual (`knobs.glass`, `knobs.animations`). O
 motor aplica a dele no que estiver ligado: cadência, largura e qualidade do
 espelho que o chamador não fixou no `stream.start`, intervalo do vigia de
-aparelhos sem `poll_interval` pedido, e o teto dos históricos de rede e
-analytics. O leve reduz apresentação e cadência, nunca captura: todo
-`proxy.event` e `analytics.event` continua saindo.
+aparelhos sem `poll_interval` pedido, e quanto do corpo de cada requisição
+nova o proxy guarda. O leve reduz apresentação e cadência, nunca captura: todo
+`proxy.event` e `analytics.event` continua saindo, e o histórico já capturado
+de rede (2.000) e analytics (5.000) tem o mesmo teto em todos os perfis.
 
 Regras: o sinal do sistema piora o perfil na hora; a melhora espera 60 s com o
 alvo melhor e sobe um degrau por vez (`reason: "recuperando"` no degrau do
@@ -317,7 +318,7 @@ meio); a escolha manual vale na hora e ganha do automático, exceto com
 |---|---|---|
 | `perf.signals` | qualquer subconjunto de `thermal` (`nominal`, `fair`, `serious`, `critical`), `low_power` (bool), `memory_pressure` (`normal`, `warning`, `critical`), `physical_memory_gb` (número), `arch` (`arm64`, `x86_64`), `translated` (bool, Rosetta). Campo ausente fica como estava | o status. Prazo de 5 s: sem resposta, o front aplica sozinho a parte visual do leve |
 | `perf.set_preference` | `preference`: `auto`, `completo`, `equilibrado` ou `leve` | o status |
-| `perf.status` | — | `{profile, reason, preference, knobs, signals, improving}`. `reason`: `manual`, `sinais_normais`, `recuperando`, `thermal_fair`, `thermal_serious`, `thermal_critical`, `low_power`, `memory_warning`, `memory_critical` ou `hardware_modesto` (até 8 GB, Intel ou Python sob Rosetta). `knobs`: `stream_fps`, `stream_idle_fps`, `stream_max_width`, `stream_quality`, `stream_capture_jpeg`, `poll_interval`, `proxy_history`, `analytics_history`, `glass`, `animations` |
+| `perf.status` | — | `{profile, reason, preference, knobs, signals, history_full, improving}`. `history_full` (`{proxy, analytics}`) diz se o histórico já passou do teto e está descartando o mais antigo (o motor também avisa no log); `analytics: true` significa que uma auditoria da sessão não vê o começo. `reason`: `manual`, `sinais_normais`, `recuperando`, `thermal_fair`, `thermal_serious`, `thermal_critical`, `low_power`, `memory_warning`, `memory_critical` ou `hardware_modesto` (até 8 GB, Intel ou Python sob Rosetta). `knobs`: `stream_fps`, `stream_idle_fps`, `stream_max_width`, `stream_quality`, `stream_capture_jpeg`, `poll_interval`, `proxy_body_capture_kb` (256, 128 ou 64; só vale para capturas novas), `glass`, `animations` |
 
 Entrada inválida é `invalid_input`. Sem o front mandar nada, o motor fica em
 `completo` com os valores de antes (6 fps, 900 px, JPEG 80, vigia a 1,5 s).

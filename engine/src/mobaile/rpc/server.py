@@ -283,10 +283,17 @@ class EngineServer:
         # O front pediu a pausa do espelho (janela oculta, PERF-1). Vale tambem
         # para o espelho que ligar depois, ate o front pedir a retomada.
         self._pausa_pedida = False
+        # Pedido do front, decisao e `pause()`/`resume()` sob a mesma trava: o
+        # fim de um flow (thread do flow) e a retomada pedida (fila rapida)
+        # nao podem se cruzar e deixar o espelho pausado com a janela a vista
+        # (R3). As duas acoes so mexem em Event: a trava e curta.
+        self._pausa_lock = threading.Lock()
         # Perfil de desempenho (PERF-3). `_stream_cfg` e o que o espelho ligado
         # le a cada quadro; `explicit` sao os campos que o chamador fixou no
         # `stream.start` e que o perfil nao mexe.
-        self.perf = PerfGovernor()
+        self.perf = PerfGovernor(historico_cheio=lambda: {
+            "proxy": self.proxy.history_full, "analytics": self.analytics.history_full,
+        })
         self._perf_timer: threading.Timer | None = None
         self._perf_timer_lock = threading.Lock()
         self._stream_cfg: dict[str, Any] | None = None
@@ -1207,6 +1214,11 @@ class EngineServer:
             idle_fps=idle_fps,
         )
         self._stream.start()
+        # O temporizador da histerese pode ter trocado o perfil entre a leitura
+        # dos knobs acima e a publicacao de `_stream`; nessa janela ele nao via
+        # espelho nenhum. Reaplicar agora fecha o buraco (R5); depois daqui,
+        # quem trocar o perfil ja encontra este espelho.
+        self._aplicar_knobs()
         self._aplicar_pausa()
         return {
             "started": True, "fps": fps, "max_width": max_width, "format": fmt, "quality": quality,
@@ -1237,31 +1249,33 @@ class EngineServer:
             return "passive"
         return None
 
-    def _aplicar_pausa(self) -> dict[str, Any]:
+    def _aplicar_pausa(self, pedida: bool | None = None) -> dict[str, Any]:
         """Pausa ou retoma o espelho conforme o pedido do front e quem o usa.
 
-        Chamado no pedido do front e sempre que um flow ou a escuta passiva
-        comeca ou termina: a pausa nunca vale durante automacao ou gravacao.
+        Chamado no pedido do front (`pedida`) e sempre que um flow ou a escuta
+        passiva comeca ou termina: a pausa nunca vale durante automacao ou
+        gravacao.
         """
-        stream = self._stream
-        mantido = self._espelho_mantido_por() if self._pausa_pedida else None
-        pausar = self._pausa_pedida and mantido is None
-        if stream is not None:
-            if pausar:
-                stream.pause()
-            else:
-                stream.resume()
+        with self._pausa_lock:
+            if pedida is not None:
+                self._pausa_pedida = pedida
+            stream = self._stream
+            mantido = self._espelho_mantido_por() if self._pausa_pedida else None
+            pausar = self._pausa_pedida and mantido is None
+            if stream is not None:
+                if pausar:
+                    stream.pause()
+                else:
+                    stream.resume()
         return {"running": stream is not None, "paused": stream is not None and pausar, "kept_for": mantido}
 
     def stream_pause(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Janela oculta: para de capturar sem desligar o espelho (PERF-1)."""
-        self._pausa_pedida = True
-        return self._aplicar_pausa()
+        return self._aplicar_pausa(pedida=True)
 
     def stream_resume(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Janela visivel de novo: volta a capturar e reenvia o quadro atual."""
-        self._pausa_pedida = False
-        return self._aplicar_pausa()
+        return self._aplicar_pausa(pedida=False)
 
     # ------------------------------------------------------------- desempenho
 
@@ -1331,8 +1345,8 @@ class EngineServer:
         watcher = self._watcher
         if watcher is not None and not self._watch_interval_explicit:
             watcher.poll_interval = knobs.poll_interval
-        self.proxy.set_history_limit(knobs.proxy_history)
-        self.analytics.set_history_limit(knobs.analytics_history)
+        # D-6: o historico nunca encolhe pelo perfil; so o corpo das novas.
+        self.proxy.set_body_capture_limit(knobs.proxy_body_capture_kb * 1024)
 
     def stream_stats(self, _params: dict[str, Any]) -> dict[str, Any]:
         if not self._stream:

@@ -9,7 +9,10 @@ final class PerfTests: XCTestCase {
     private func sessao() throws -> (AppState, FakeEngine, EngineSession) {
         let estado = AppState()
         let motor = FakeEngine(respostas: try resultadosDasFixtures())
-        return (estado, motor, EngineSession(state: estado, client: motor))
+        let sessao = EngineSession(state: estado, client: motor)
+        sessao.motionPolicy = MotionPolicy()
+        sessao.motionPolicy = MotionPolicy()
+        return (estado, motor, sessao)
     }
 
     // MARK: - PERF-1: janela oculta
@@ -24,6 +27,29 @@ final class PerfTests: XCTestCase {
         await sessao.setWindowVisible(true)
         chamadas = await motor.chamadas
         XCTAssertEqual(chamadas.last, "stream.resume", "\(chamadas)")
+    }
+
+    /// R4: retomada que falha é repetida enquanto a janela estiver à vista.
+    func testRetomadaQueFalhaERepetidaSoComAJanelaVisivel() async throws {
+        let motor = FakeEngine(
+            respostas: try resultadosDasFixtures(),
+            erros: ["stream.resume": .timeout(method: "stream.resume", seconds: 15)]
+        )
+        let sessao = EngineSession(state: AppState(), client: motor)
+        sessao.resumeRetryDelays = [10_000_000, 10_000_000, 10_000_000]
+
+        await sessao.setWindowVisible(false, pauseDelayNanoseconds: 0)
+        await sessao.setWindowVisible(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        var chamadas = await motor.chamadas
+        XCTAssertEqual(chamadas.filter { $0 == "stream.resume" }.count, 4, "1 + 3 novas tentativas: \(chamadas)")
+
+        // Oculta de novo: as tentativas param.
+        await sessao.setWindowVisible(false, pauseDelayNanoseconds: 0)
+        let antes = chamadas.count
+        try await Task.sleep(nanoseconds: 100_000_000)
+        chamadas = await motor.chamadas
+        XCTAssertFalse(chamadas.dropFirst(antes).contains("stream.resume"), "\(chamadas)")
     }
 
     func testAlternarRapidoNaoPausa() async throws {
@@ -57,13 +83,14 @@ final class PerfTests: XCTestCase {
     // MARK: - PERF-4: sinais do Mac e perfil do motor
 
     override func tearDown() {
-        Motion.perfReduced = false
         UserDefaults.standard.removeObject(forKey: PerfPreference.storageKey)
         super.tearDown()
     }
 
     func testSinaisVaoAoMotorEOPerfilVoltaParaOEstado() async throws {
         let (estado, motor, sessao) = try sessao()
+        let politica = MotionPolicy()
+        sessao.motionPolicy = politica
 
         await sessao.sendPerfSignals()
 
@@ -76,7 +103,8 @@ final class PerfTests: XCTestCase {
         XCTAssertEqual(estado.perf.profile, "leve")
         XCTAssertEqual(estado.perf.reasonText, "Mac quente")
         XCTAssertTrue(estado.perf.reducesGlass)
-        XCTAssertTrue(Motion.perfReduced, "no leve as molas viram crossfade")
+        XCTAssertTrue(politica.reduced, "no leve as molas viram crossfade")
+        XCTAssertEqual(Motion.smooth(policy: politica), .linear(duration: 0.18))
     }
 
     func testMotorSemRespostaLigaOFreioLocalVisual() async throws {
@@ -86,6 +114,7 @@ final class PerfTests: XCTestCase {
             erros: ["perf.signals": .timeout(method: "perf.signals", seconds: 5)]
         )
         let sessao = EngineSession(state: estado, client: motor)
+        sessao.motionPolicy = MotionPolicy()
 
         await sessao.sendPerfSignals()
 
@@ -93,6 +122,35 @@ final class PerfTests: XCTestCase {
         XCTAssertTrue(estado.perf.reducesGlass)
         XCTAssertEqual(estado.perf.badge, "leve")
         XCTAssertEqual(estado.perf.profile, "completo", "o Swift não decide perfil: só a parte visual")
+    }
+
+    /// R2: o freio local não fica preso com o motor vivo.
+    func testRespostaDoMotorTiraOFreioLocal() async throws {
+        let estado = AppState()
+        let motor = FakeEngine(
+            respostas: try resultadosDasFixtures(),
+            erros: ["perf.signals": .timeout(method: "perf.signals", seconds: 5)]
+        )
+        let sessao = EngineSession(state: estado, client: motor)
+        sessao.motionPolicy = MotionPolicy()
+        await sessao.sendPerfSignals()
+        XCTAssertTrue(estado.perf.semMotor)
+
+        // Escolher em Ajustes: a resposta do `perf.set_preference` basta.
+        await sessao.setPerfPreference(.completo)
+        XCTAssertFalse(estado.perf.semMotor)
+
+        await sessao.sendPerfSignals()
+        XCTAssertTrue(estado.perf.semMotor)
+        // A notificação `perf.profile` também prova que o motor está vivo.
+        await sessao.handle(EngineNotification(method: "perf.profile", payload: try avisoDePerfil()))
+        XCTAssertFalse(estado.perf.semMotor)
+    }
+
+    private func avisoDePerfil() throws -> Data {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "engine_payloads", withExtension: "json"))
+        let raiz = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        return try JSONSerialization.data(withJSONObject: try XCTUnwrap(raiz["notif_perf.profile"]))
     }
 
     func testNotificacaoDePerfilAtualizaOEstado() async throws {
@@ -123,6 +181,7 @@ final class PerfTests: XCTestCase {
         estado.selectedDevice = "emulator-5554"
         let motor = FakeEngine(respostas: try resultadosDasFixtures())
         let sessao = EngineSession(state: estado, client: motor)
+        sessao.motionPolicy = MotionPolicy()
 
         await sessao.startStream()
 
@@ -138,6 +197,16 @@ final class PerfTests: XCTestCase {
         XCTAssertEqual(perf.summary, "modo equilibrado: Economia de Energia ligada")
         perf.reason = "manual"
         XCTAssertFalse(perf.isAutomatic)
+    }
+
+    /// R6: o sensor deixa de observar ao parar e ao ser liberado.
+    func testSensoresParamDeObservar() {
+        let sensores = PerfSensors()
+        sensores.start {}
+        XCTAssertTrue(sensores.isObserving)
+        sensores.stop()
+        XCTAssertFalse(sensores.isObserving)
+        XCTAssertTrue(["normal", "warning", "critical"].contains(PerfSensors.currentMemoryPressure()))
     }
 
     func testSinaisDoMacTemNomesDoContrato() {

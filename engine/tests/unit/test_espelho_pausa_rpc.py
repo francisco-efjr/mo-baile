@@ -104,3 +104,42 @@ class TestEspelhoAcordaNoToque(FluxoBase):
         self.ok("stream.start", {"fps": 30, "max_width": 30, "idle_fps": 0})
         self.assertIsNone(self.server._stream.idle_interval)
         self.ok("stream.stop")
+
+
+class TestPausaSemCorrida(FluxoBase):
+    """R3: fim de flow e retomada ao mesmo tempo nao deixam o espelho pausado."""
+
+    def test_retomada_que_chega_durante_a_pausa_do_fim_do_flow_vence(self):
+        import threading
+
+        dentro, solta = threading.Event(), threading.Event()
+        ordem: list[str] = []
+
+        class EspelhoLento:
+            def pause(self):
+                dentro.set()
+                solta.wait(2)
+                ordem.append("pause")
+
+            def resume(self):
+                ordem.append("resume")
+
+            def stop(self):
+                pass
+
+        self.server._stream = EspelhoLento()
+        self.server._pausa_pedida = True
+        self.server._flow_running = True
+        # Thread do flow terminando com a janela oculta: decide pausar.
+        fim = threading.Thread(target=self.server._release_flow)
+        fim.start()
+        self.assertTrue(dentro.wait(2))
+        # A pessoa volta a janela nesse instante.
+        retomada = threading.Thread(target=lambda: self.ok("stream.resume"))
+        retomada.start()
+        time.sleep(0.1)
+        solta.set()
+        fim.join(2)
+        retomada.join(2)
+        self.server._stream = None
+        self.assertEqual(ordem[-1], "resume", f"espelho ficou pausado com a janela visivel: {ordem}")

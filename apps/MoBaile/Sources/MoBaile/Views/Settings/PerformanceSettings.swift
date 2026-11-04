@@ -38,8 +38,9 @@ struct PerformanceSettings: View {
             }
             .accessibilityElement(children: .combine)
 
-            Text("O modo leve diminui a cadência do espelho e o que fica na memória, e tira vidro e animações. "
-                 + "Gravar, rodar flows e capturar rede e analytics continuam iguais.")
+            Text("O modo leve diminui a cadência e o tamanho do espelho, guarda menos do corpo das requisições "
+                 + "novas e tira vidro e animações. Gravar, rodar flows e o histórico de rede e analytics "
+                 + "continuam iguais.")
                 .font(DSFont.subheadline)
                 .foregroundStyle(theme.labelSecondary)
                 .frame(maxWidth: 440, alignment: .leading)

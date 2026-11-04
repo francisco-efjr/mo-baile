@@ -145,7 +145,7 @@ class TestSinais(unittest.TestCase):
         self.assertTrue(completo.glass and completo.animations)
         self.assertFalse(leve.glass or leve.animations)
         for nome in ("stream_fps", "stream_idle_fps", "stream_max_width", "stream_quality",
-                     "proxy_history", "analytics_history"):
+                     "proxy_body_capture_kb"):
             with self.subTest(knob=nome):
                 self.assertGreater(getattr(completo, nome), getattr(leve, nome))
         self.assertLess(completo.poll_interval, leve.poll_interval)

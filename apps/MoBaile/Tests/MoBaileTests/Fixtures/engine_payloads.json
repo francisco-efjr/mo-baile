@@ -702,8 +702,7 @@
         "stream_quality": 80,
         "stream_capture_jpeg": false,
         "poll_interval": 1.5,
-        "proxy_history": 2000,
-        "analytics_history": 5000,
+        "proxy_body_capture_kb": 256,
         "glass": true,
         "animations": true
       },
@@ -714,6 +713,10 @@
         "physical_memory_gb": null,
         "arch": null,
         "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
       },
       "improving": false
     }
@@ -732,8 +735,7 @@
         "stream_quality": 60,
         "stream_capture_jpeg": true,
         "poll_interval": 5.0,
-        "proxy_history": 500,
-        "analytics_history": 2000,
+        "proxy_body_capture_kb": 64,
         "glass": false,
         "animations": false
       },
@@ -744,6 +746,10 @@
         "physical_memory_gb": 16,
         "arch": "arm64",
         "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
       },
       "improving": false
     }
@@ -762,8 +768,7 @@
         "stream_quality": 60,
         "stream_capture_jpeg": true,
         "poll_interval": 5.0,
-        "proxy_history": 500,
-        "analytics_history": 2000,
+        "proxy_body_capture_kb": 64,
         "glass": false,
         "animations": false
       },
@@ -774,6 +779,10 @@
         "physical_memory_gb": 16,
         "arch": "arm64",
         "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
       },
       "improving": false
     }
@@ -792,8 +801,7 @@
         "stream_quality": 60,
         "stream_capture_jpeg": true,
         "poll_interval": 5.0,
-        "proxy_history": 500,
-        "analytics_history": 2000,
+        "proxy_body_capture_kb": 64,
         "glass": false,
         "animations": false
       },
@@ -804,6 +812,10 @@
         "physical_memory_gb": 16,
         "arch": "arm64",
         "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
       },
       "improving": false
     }
