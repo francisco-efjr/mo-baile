@@ -5,6 +5,29 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.17.0] - 2026-11-04
+
+### Adicionado
+
+- **Âncora por passo gravado.** A gravação guarda, em cada passo, um elemento
+  estável da tela, o mais perto do alvo e fora dele: um resource-id único ou
+  um texto curto, único e sem número. A reprodução espera a âncora antes de
+  agir, por até 5 s, e cobre a tela intermediária em que o seletor do passo já
+  aparece. Campo editável, senha, e-mail, indicador e elemento de outro
+  pacote nunca viram âncora. No YAML exportado, só a âncora por id entra, como
+  `extendedWaitUntil` opcional. Depois de duas âncoras que não aparecem, as
+  outras daquele flow deixam de ser esperadas.
+- **Ajustes › Geral › Ao rodar automação: "Abrir o app do zero antes do
+  primeiro passo".** O Rodar Automação (⌘R) fecha e abre o app gravado antes
+  de começar, para o primeiro passo sair sempre da mesma tela. Só no Android.
+
+### Mudado
+
+- **`launchApp` espera o app ficar em primeiro plano** (até 10 s) antes de
+  ler a tela. O `monkey` volta antes de a activity abrir. No emulador, o
+  launcher ainda estava em foco 0,4 s depois. Um pedido de permissão por cima
+  do app conta como app aberto.
+
 ## [3.16.0] - 2026-10-28
 
 ### Mudado
