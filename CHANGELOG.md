@@ -5,6 +5,53 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.17.0] - 2026-11-04
+
+### Adicionado
+
+- **Aba Page Objects no modelo do PyCharm.** Faixa de tool windows à esquerda
+  (Projeto e Hierarquia), painel Projeto com a árvore de `pages/`,
+  `locators/` e `flows/`, abas de arquivo e editor vazio com as dicas de
+  atalho. RPC novos `workspace.tree`, `workspace.read` e `workspace.write`,
+  com as travas de caminho, gravação atômica e aviso de conflito quando o
+  arquivo mudou no disco. ⌘S salva a aba que está à frente.
+- **Editor com a mesma leitura de caracteres do PyCharm.** Nenhuma
+  substituição automática do macOS (aspas, travessão, correção, texto,
+  predição); CR e CRLF viram LF; gravação em UTF-8 sem BOM, sem normalizar
+  Unicode e sem forçar a quebra final; NBSP, ZWSP, bidi e BOM aparecem
+  marcados, mas a cópia e o arquivo levam o caractere real. Sem quebra
+  automática de linha.
+- **JetBrains Mono 13 e esquema de cores do PyCharm** no editor (fonte
+  embutida, licença SIL OFL 1.1 em `assets/fonts/OFL.txt`), linha atual
+  realçada e rodapé com linha:coluna, LF, UTF-8, 4 espaços, o Python do motor
+  e "salvo às hh:mm".
+- **Perfis de desempenho Completo, Equilibrado e Leve, com Automático.** O
+  motor decide com histerese a partir dos sinais do Mac (temperatura,
+  Economia de Energia, memória, Rosetta); o manual sempre ganha. Ajustes ›
+  Desempenho, selo do perfil na barra de status e "Ativar Modo Leve" na
+  paleta (⇧⌘P). No Leve o vidro fica sólido e as molas viram transição
+  simples. RPC novos `perf.signals`, `perf.set_preference`, `perf.status`,
+  `perf.profile`, `stream.pause` e `stream.resume`.
+- **`tools/bench_stream.py`**, bancada do espelho por perfil.
+
+### Mudado
+
+- **O espelho para quando ninguém está vendo.** Com a janela oculta ele pausa
+  (menos durante flow e escuta passiva); com a tela parada, a captura fica
+  mais espaçada e um toque ou digitação a acorda na hora. Na bancada
+  sintética: 19,9% → 6,8% de um núcleo no Completo, 1,2% no Leve e 0,1% com
+  a janela oculta.
+- **O HTML exportado do Relatório se chama
+  `relatorio_<projeto da spec>_<ios|android>_<dd-mm-aaaa>.html`** (antes
+  `relatorio_auditoria.html`). O Markdown e o TSV mantêm o nome.
+
+### Corrigido
+
+- O laço do espelho não descansava quando a captura era mais lenta que o
+  intervalo pedido.
+- As filas de eventos de rede e analytics que só o app Tk lê não enchem mais
+  no app nativo.
+
 ## [3.16.0] - 2026-10-28
 
 ### Mudado
