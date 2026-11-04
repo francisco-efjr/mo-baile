@@ -987,6 +987,30 @@ class SincroniaTest(unittest.TestCase):
         self.assertGreaterEqual(relogio.t, 10)
         self.assertTrue(any("nao ficou em primeiro plano" in linha for linha in linhas), linhas)
 
+    def test_launch_app_com_pedido_de_permissao_por_cima_nao_espera(self):
+        # R2-04: o permissioncontroller por cima do app quer dizer que ele abriu.
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        aparelho.foreground_app = lambda: "com.google.android.permissioncontroller"
+        r, linhas, relogio = runner(aparelho)
+        self.assertTrue(r.run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertLess(relogio.t, 2)
+        self.assertFalse(any("nao ficou em primeiro plano" in linha for linha in linhas), linhas)
+
+    def test_launch_app_respeita_o_cancelamento_na_espera(self):
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        consultas = []
+        aparelho.foreground_app = lambda: consultas.append(1) or "com.android.launcher3"
+        r, _, _ = runner(aparelho, cancelado=lambda: len(consultas) >= 3)
+        resultado = r.run(parse_flow("appId: br.app\n---\n- launchApp\n"))
+        self.assertEqual(resultado.message, "Flow cancelado.")
+        self.assertEqual(len(consultas), 3)
+
+    def test_abrir_app_usa_o_pacote_da_maior_parte_dos_passos(self):
+        # R2-06: a gravacao comecou tocando o icone no launcher.
+        launcher = replace(PASSOS_G55[0], package="com.android.launcher3")
+        flow = flow_from_steps([launcher, *PASSOS_G55], abrir_app=True)
+        self.assertEqual(flow.on_start[0].app_id, "br.app")
+
     def test_flow_gravado_pode_comecar_abrindo_o_app(self):
         flow = flow_from_steps(PASSOS_G55, abrir_app=True)
         self.assertEqual([(s.command, s.app_id) for s in flow.on_start], [("launchApp", "br.app")])
@@ -1134,7 +1158,7 @@ class AncoraTest(unittest.TestCase):
         resultado = r.run(flow_from_steps(passos))
         self.assertTrue(resultado.success, resultado.message)
         self.assertLess(relogio.t, 7)
-        self.assertTrue(any("opcional, seguindo" in linha for linha in linhas), linhas)
+        self.assertTrue(any("a ancora do passo nao apareceu" in linha for linha in linhas), linhas)
 
     def test_ancora_vai_para_o_yaml_e_volta_pelo_leitor(self):
         passos = [replace(PASSOS_G55[0], anchor={"id": "br.app:id/titulo"})]
@@ -1153,6 +1177,47 @@ class AncoraTest(unittest.TestCase):
         self.assertNotIn("extendedWaitUntil", yaml)
         flow = flow_from_steps([digitar, seguinte])
         self.assertNotIn("assertVisible", [s.command for s in flow.steps[1].steps])
+
+    def test_ancora_por_texto_nao_vai_para_o_yaml(self):
+        # R2-01: o texto da tela pode ser dado pessoal, e quem o escolheu foi o motor.
+        passos = [replace(PASSOS_G55[0], anchor={"text": "Resultados para tenis"})]
+        yaml, _ = export_steps(passos, app_id="br.app")
+        self.assertNotIn("Resultados", yaml)
+        self.assertIn("assertVisible", [s.command for s in flow_from_steps(passos).steps[0].steps])
+
+    def test_ancora_que_contem_texto_digitado_fica_de_fora(self):
+        digitar = replace(PASSOS_G55[0], action_type="input", input_text="tenis")
+        seguinte = replace(PASSOS_G55[1], anchor={"text": "Resultados para tenis"})
+        flow = flow_from_steps([digitar, seguinte])
+        self.assertNotIn("assertVisible", [s.command for s in flow.steps[1].steps])
+
+    def test_nunca_email_nem_tecla_nem_rotulo_do_ios_com_numero(self):
+        email = tela(no(bounds="[100,400][980,460]", texto="ana.souza@empresa.com"),
+                     no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True))
+        self.assertIsNone(self.ancora(email, 540, 2075))
+        ios = ('<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="390" height="844">'
+               '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="R$ 59,90" label="R$ 59,90" '
+               'x="20" y="300" width="200" height="30"/>'
+               '<XCUIElementTypeKey type="XCUIElementTypeKey" name="Pagar" label="Pagar" x="20" y="700" width="30" height="40"/>'
+               '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Comprar" label="Comprar" '
+               'x="20" y="600" width="350" height="50"/></XCUIElementTypeApplication>')
+        self.assertIsNone(self.ancora(ios, 195, 625))
+
+    def test_ancora_de_outro_pacote_fica_de_fora(self):
+        xml = tela(no(bounds="[100,400][980,460]", rid="com.teclado:id/sugestao"),
+                   no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True))
+        xml = xml.replace('package="br.app" bounds="[100,400][980,460]"', 'package="com.teclado" bounds="[100,400][980,460]"')
+        self.assertIsNone(self.ancora(xml, 540, 2075))
+
+    def test_falha_da_ancora_nao_repete_o_texto_e_o_disjuntor_desliga_as_outras(self):
+        # R2-03 e R2-09.
+        passos = [replace(p, anchor={"text": "Ola, Ana"}) for p in (PASSOS_G55[0], PASSOS_G55[0], PASSOS_G55[0])]
+        r, linhas, relogio = runner(AparelhoRoteirizado([ANTERIOR]))
+        self.assertTrue(r.run(flow_from_steps(passos)).success)
+        self.assertFalse(any("Ana" in linha for linha in linhas), linhas)
+        self.assertEqual(sum("a ancora do passo nao apareceu" in linha for linha in linhas), 2, linhas)
+        self.assertTrue(any("nao serao esperadas" in linha for linha in linhas), linhas)
+        self.assertLess(relogio.t, 12, "a terceira ancora ainda foi esperada")
 
     def test_passo_sem_ancora_continua_como_antes(self):
         self.assertIsNone(PASSOS_G55[0].anchor)

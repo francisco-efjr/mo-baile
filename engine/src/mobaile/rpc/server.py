@@ -1597,8 +1597,8 @@ class EngineServer:
         # tela, em vez de aplicar uma estrategia fixa a todos os elementos.
         alternativas: list[dict] = []
         valor_escolhido: str | None = None
+        na_tela = UIHierarchyParser.parse_xml(xml)
         if strategy_raw == "auto":
-            na_tela = UIHierarchyParser.parse_xml(xml)
             alternativas = self.codegen.rank_locators(element, na_tela)
             escolhido = alternativas[0]["strategy"]
             # O passo grava o valor do candidato escolhido. Reconstruir pela
@@ -1611,7 +1611,7 @@ class EngineServer:
         except ValueError as exc:
             raise InvalidInputError(f"Estrategia invalida: {strategy_raw!r}") from exc
         # A ancora sai da mesma arvore em que o toque foi resolvido (SYNC-8).
-        ancora = maestro_flow.choose_anchor(UIHierarchyParser.parse_xml(xml), element)
+        ancora = maestro_flow.choose_anchor(na_tela, element)
         var_name, object_code, action_code = self.codegen.generate_entry(
             element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido, anchor=ancora
         )
@@ -1966,6 +1966,8 @@ class EngineServer:
             if not ok:
                 raise EngineError(motivo)
             self._check_cancelled()
+            if abrir_app and flow is None:
+                ao_sair("Abrir o app do zero nao vale no runner de coordenadas; rodando sem abrir o app.")
             if flow is not None:
                 ler, backend = self._leitor_do_flow(device or "")
                 execucao = maestro_flow.FlowThread(

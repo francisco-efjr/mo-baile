@@ -79,6 +79,11 @@ LAUNCH_FOREGROUND_TIMEOUT_S = 10.0
 # Espera pela ancora de um passo gravado. Opcional: ancora que nao aparece
 # (conteudo que mudou) custa este tempo e um aviso, nunca a falha do flow.
 ANCHOR_TIMEOUT_S = 5.0
+ANCHOR_BREAKER = 2
+# Pacotes do sistema que abrem por cima do app logo depois de abri-lo (pedido
+# de permissao): o app abriu, e nao ha por que esperar mais.
+_POR_CIMA_DO_APP = frozenset({"com.google.android.permissioncontroller", "com.android.permissioncontroller",
+                              "com.google.android.packageinstaller", "com.android.packageinstaller"})
 # Rastro das telas lidas: quantas telas diferentes por flow e quantas execucoes guardar.
 TRACE_MAX_SCREENS = 60
 TRACE_KEEP_RUNS = 5
@@ -178,6 +183,9 @@ class Step:
     # Toque por ponto vindo de uma gravacao: a classe do elemento que estava sob
     # o ponto. O runner so toca quando a mesma classe estiver la (ou no prazo).
     expect_class: str | None = None
+    # Espera pela ancora de um passo gravado: a falha nao repete o seletor no
+    # log (o texto da tela pode ser dado pessoal) e conta para o disjuntor.
+    anchor: bool = False
     visible: bool = True
     when: dict[str, Any] | None = None
     max_retries: int = 1
@@ -789,6 +797,9 @@ class FlowRunner:
         # chegaram: numa falha, interessa a tela do passo que falhou. Vai para
         # disco so pela `salvar_rastro`.
         self.rastro: deque[tuple[float, str]] = deque(maxlen=TRACE_MAX_SCREENS)
+        # Ancoras que nao apareceram neste flow: na segunda, as outras deixam
+        # de ser esperadas (conteudo dinamico custaria 5 s em todo passo).
+        self._ancoras_perdidas = 0
         # Indicadores que ja estouraram `LOADING_TIMEOUT_S`: um ProgressBar que
         # nunca some nao cobra a espera de novo a cada passo.
         self._indicadores_vencidos: set[tuple[str, str, tuple[int, int, int, int]]] = set()
@@ -838,6 +849,7 @@ class FlowRunner:
         self._ultima_acao = None
         self.rastro.clear()
         self._indicadores_vencidos = set()
+        self._ancoras_perdidas = 0
         self._inicio = self._clock()
         nome = flow.name or (flow.path.name if flow.path else "flow")
         self.log(f"Flow {nome}: {len(flow.steps)} comandos, app {flow.app_id or '(nenhum)'}")
@@ -897,10 +909,19 @@ class FlowRunner:
 
     def _passo(self, passo: Step, posicao: str) -> None:
         self._checar()
+        if passo.anchor and self._ancoras_perdidas >= ANCHOR_BREAKER:
+            return
         self.log(f"▶ [{posicao}] {passo.describe()}")
         try:
             getattr(self, f"_r_{passo.command}")(passo)
         except FlowFailed as exc:
+            if passo.anchor:
+                self._ancoras_perdidas += 1
+                desliga = self._ancoras_perdidas == ANCHOR_BREAKER
+                self.log("  a ancora do passo nao apareceu; seguindo"
+                         + ("; as proximas ancoras deste flow nao serao esperadas" if desliga else ""))
+                self._ultima_acao = self._clock()
+                return
             if passo.optional:
                 self.log(f"  opcional, seguindo: {exc}")
                 # O tempo gasto procurando o opcional nao sai do prazo do passo seguinte.
@@ -1316,9 +1337,10 @@ class FlowRunner:
         inicio = self._clock()
         while True:
             em_foco = consultar()
-            if em_foco == app:
+            if em_foco == app or em_foco in _POR_CIMA_DO_APP:
                 if self._clock() > inicio:
-                    self._motivo(f"o app abriu em {_segundos(self._clock() - inicio)}")
+                    # No onFlowStart nao ha linha `sincronia:`: vai direto para o log.
+                    self.log(f"  o app abriu em {_segundos(self._clock() - inicio)}")
                 return
             if self._clock() - inicio >= LAUNCH_FOREGROUND_TIMEOUT_S:
                 self.log(f"  aviso: {app} nao ficou em primeiro plano em {LAUNCH_FOREGROUND_TIMEOUT_S:.0f} s "
@@ -1563,13 +1585,21 @@ def _ancora_valida(passo: AutomationStep, digitados: set[str]) -> dict[str, str]
     if not passo.anchor or len(passo.anchor) != 1:
         return None
     chave, valor = next(iter(passo.anchor.items()))
-    if chave not in ("id", "text") or not isinstance(valor, str) or not valor or valor in digitados:
+    if chave not in ("id", "text") or not isinstance(valor, str) or not valor:
+        return None
+    if any(d in valor for d in digitados):
         return None
     return {chave: _literal_regex(valor)}
 
 
 _ID_DE_SISTEMA = re.compile(r"(android|com\.android\.systemui):id/")
-_EDITAVEL = re.compile(r"EditText|TextField|SearchField|AutoComplete", re.IGNORECASE)
+_EDITAVEL = re.compile(r"EditText|TextField|SearchField|AutoComplete|XCUIElementTypeTextView|Keyboard|"
+                       r"XCUIElementTypeKey\b", re.IGNORECASE)
+
+
+def _rotulo_estavel(texto: str) -> bool:
+    """Curto, sem numero (preco, hora, contagem) e sem cara de e-mail."""
+    return 2 <= len(texto) <= 40 and not re.search(r"\d|@", texto)
 
 
 def choose_anchor(elementos: list[UIElement], alvo: UIElement | None) -> dict[str, str] | None:
@@ -1608,13 +1638,25 @@ def choose_anchor(elementos: list[UIElement], alvo: UIElement | None) -> dict[st
         if alvo.package and e.package and e.package != alvo.package:
             continue
         distancia = abs(e.center[0] - cx) + abs(e.center[1] - cy)
-        if e.resource_id and ids[e.resource_id] == 1 and not _ID_DE_SISTEMA.match(e.resource_id):
+        # No iOS o `name` sem identifier e o proprio rotulo: vale a regra do texto.
+        id_e_rotulo = e.platform == "ios" and e.resource_id in (e.text, e.content_desc)
+        if (e.resource_id and ids[e.resource_id] == 1 and not _ID_DE_SISTEMA.match(e.resource_id)
+                and (not id_e_rotulo or _rotulo_estavel(e.resource_id))):
             candidatos.append((0, distancia, {"id": e.resource_id}))
             continue
         rotulo = (e.text or e.content_desc or "").strip()
-        if 2 <= len(rotulo) <= 40 and not re.search(r"\d", rotulo) and rotulos.get(rotulo) == 1:
+        if _rotulo_estavel(rotulo) and rotulos.get(rotulo) == 1:
             candidatos.append((1, distancia, {"text": rotulo}))
     return min(candidatos, key=lambda c: (c[0], c[1]))[2] if candidatos else None
+
+
+def _pacote_dos_passos(passos: list[AutomationStep]) -> str:
+    """O pacote da maior parte dos passos: a gravacao pode comecar no launcher."""
+    contagem: dict[str, int] = {}
+    for p in passos:
+        if p.package and p.package not in _POR_CIMA_DO_APP and p.package != "com.android.systemui":
+            contagem[p.package] = contagem.get(p.package, 0) + 1
+    return max(contagem, key=lambda k: contagem[k]) if contagem else ""
 
 
 def _seletor_yaml(sel: dict[str, str]) -> str:
@@ -1653,8 +1695,11 @@ def export_steps(
     for passo in passos:
         rotulo = mascarar(passo.element_name or passo.var_name)
         linhas.append(f"# passo {passo.step_num}: {rotulo}".replace("\n", " "))
+        # So a ancora por id vai para o arquivo: um texto da tela pode ser dado
+        # pessoal (e-mail, nome, o resultado de uma busca), e o motor, nao a
+        # pessoa, o escolheu. O texto fica so na reproducao, em memoria.
         ancora = _ancora_valida(passo, digitados)
-        if ancora:
+        if ancora and list(ancora) == ["id"] and mascarar(ancora["id"]) == ancora["id"]:
             linhas += ["- extendedWaitUntil:", f"    visible: {_seletor_yaml(ancora)}",
                        f"    timeout: {int(ANCHOR_TIMEOUT_S * 1000)}", "    optional: true"]
         # A coordenada nunca carrega texto digitado, e mascara-la a quebraria.
@@ -1706,7 +1751,7 @@ def flow_from_steps(passos: list[AutomationStep], *, abrir_app: bool = False) ->
     digitados = set(_formas_do_digitado(passos))
     inicio: tuple[Step, ...] = ()
     if abrir_app:
-        app = next((p.package for p in passos if p.package), "")
+        app = _pacote_dos_passos(passos)
         if not app:
             raise InvalidInputError("Os passos gravados nao dizem o pacote do app; rode sem abrir o app.")
         inicio = (Step("launchApp", app_id=app, label=f"abrir {app} do zero",
@@ -1723,7 +1768,7 @@ def flow_from_steps(passos: list[AutomationStep], *, abrir_app: bool = False) ->
                           source=f"passo {passo.step_num}")]
         ancora = _ancora_valida(passo, digitados)
         if ancora:
-            subpassos.insert(0, Step("assertVisible", selector=Selector(**ancora), optional=True,
+            subpassos.insert(0, Step("assertVisible", selector=Selector(**ancora), optional=True, anchor=True,
                                      timeout_s=ANCHOR_TIMEOUT_S, label=f"esperar a tela do passo {passo.step_num}",
                                      source=f"passo {passo.step_num}"))
         if passo.action_type == "input":

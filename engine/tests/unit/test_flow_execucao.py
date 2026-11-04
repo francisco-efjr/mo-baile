@@ -138,6 +138,16 @@ class TestAbrirAppAntes(FluxoBase):
         self.assertLess(abrir, tocar, "o toque saiu antes de abrir o app")
         self.assertEqual([(n["index"], n["total"]) for n in self.notificacoes("flow.step")], [(1, 1)],
                          "abrir o app nao conta passo")
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        # O aparelho falso mostra o launcher na primeira consulta depois do monkey.
+        self.assertTrue(any("o app abriu em" in linha for linha in linhas), linhas)
+
+    def test_launch_app_no_runner_de_coordenadas_avisa_que_nao_vale(self):
+        self.gravar_android((540, 480, "id"))
+        self.ok("flow.run", {"launch_app": True, "runner": "coordinates"})
+        self.esperar_fim()
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        self.assertTrue(any("nao vale no runner de coordenadas" in linha for linha in linhas), linhas)
 
     def test_sem_launch_app_nada_e_aberto(self):
         self.gravar_android((540, 480, "id"))
@@ -172,6 +182,7 @@ class TestAncoraNaGravacao(FluxoBase):
         self.assertTrue(fim["success"], fim)
         linhas = [n["line"] for n in self.notificacoes("flow.log")]
         self.assertTrue(any("esperar a tela do passo 1" in linha for linha in linhas), linhas)
+        self.assertFalse(any("ancora do passo nao apareceu" in linha for linha in linhas), linhas)
 
 
 class TestDigitacaoIOS(FluxoBase):
