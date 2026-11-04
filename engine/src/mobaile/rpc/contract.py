@@ -120,6 +120,15 @@ METHODS: dict[str, dict[str, Any]] = {
     "stream.start": _spec(),
     "stream.stop": _spec(),
     "stream.stats": _spec(),
+    # Janela oculta (PERF-1): para de capturar sem desligar; nao vale durante
+    # flow nem escuta passiva (`kept_for`).
+    "stream.pause": _spec(),
+    "stream.resume": _spec(),
+    # Perfis de desempenho (PERF-3). `signals` com prazo curto: sem resposta,
+    # o front aplica sozinho a parte visual do modo leve (freio local).
+    "perf.signals": _spec(timeout_s=5),
+    "perf.set_preference": _spec(),
+    "perf.status": _spec(),
     "scrcpy.start": _spec(),
     "scrcpy.stop": _spec(),
     "scrcpy.status": _spec(),
@@ -144,6 +153,11 @@ METHODS: dict[str, dict[str, Any]] = {
     "codegen.steps": _spec(),
     "codegen.reset": _spec(),
     "codegen.save": _spec(),
+    # Arvore Projeto da aba Page Objects: arquivo pequeno (ate 1 MB) em disco
+    # local, como o `codegen.save`.
+    "workspace.tree": _spec(),
+    "workspace.read": _spec(),
+    "workspace.write": _spec(),
     "flow.run": _spec(LANE_SERVICES, 30),
     "flow.stop": _spec(LANE_SERVICES, 60),
     "flow.status": _spec(LANE_SERVICES),
@@ -187,6 +201,7 @@ NOTIFICATIONS: tuple[str, ...] = (
     "flow.log",
     "flow.step",
     "flow.finished",
+    "perf.profile",
     PROGRESS,
 )
 

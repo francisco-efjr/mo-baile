@@ -23,6 +23,7 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
     static let palette: CommandID = "app.palette"
     static let settings: CommandID = "app.settings"
     static let restartEngine: CommandID = "app.restartEngine"
+    static let perfLight: CommandID = "app.perfLight"
 
     static func area(_ area: WorkspaceTab) -> CommandID { CommandID(rawValue: "area.\(area.rawValue)") }
 
@@ -33,6 +34,7 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
     static let zen: CommandID = "view.zen"
     static let appearance: CommandID = "view.appearance"
     static let search: CommandID = "view.search"
+    static let projectTree: CommandID = "view.projectTree"
 
     static func selectDevice(_ id: String) -> CommandID { CommandID(rawValue: "device.select:\(id)") }
     static func switchPlatform(_ platform: Platform) -> CommandID { CommandID(rawValue: "device.platform.\(platform.rawValue)") }
@@ -172,6 +174,10 @@ struct CommandContext: Equatable, Sendable {
     var inspectorSuppressed = false
     var mirrorVisible = true
     var workspaceVisible = true
+    var projectTreeVisible = true
+    /// Aba de arquivo da árvore à frente em Page Objects (R-05): o ⌘S salva ela.
+    var openFileTab: String? = nil
+    var openFileDirty = false
     var zenMode = false
     var usesToolbarSearch = false
     var paletteActive = false
@@ -184,6 +190,8 @@ struct CommandContext: Equatable, Sendable {
     var hasReportSpec = false
     var canRunReport = false
     var hasReport = false
+    /// Modo leve fixado em Ajustes › Desempenho (PERF-5).
+    var perfLightPinned = false
 
     struct DeviceOption: Equatable, Sendable {
         let id: String
@@ -226,6 +234,12 @@ extension CommandContext {
         c.inspectorSuppressed = appState.inspectorSuppressed
         c.mirrorVisible = appState.mirrorVisible
         c.workspaceVisible = appState.workspaceVisible
+        c.projectTreeVisible = appState.projectTreeVisible
+        if appState.workspaceTab == .pageObjects, let id = appState.arquivoAtivo,
+           let aberto = appState.arquivosAbertos.first(where: { $0.id == id }) {
+            c.openFileTab = id
+            c.openFileDirty = aberto.sujo && !aberto.arquivo.readOnly
+        }
         c.zenMode = appState.zenMode
         c.usesToolbarSearch = appState.usesToolbarSearch
         c.paletteActive = theme?.palette != nil
@@ -238,6 +252,7 @@ extension CommandContext {
         c.hasReportSpec = appState.reportSpec != nil
         c.canRunReport = appState.canRunReport
         c.hasReport = appState.report != nil
+        c.perfLightPinned = appState.perf.preference == .leve
         return c
     }
 }
@@ -296,6 +311,12 @@ enum CommandRegistry {
                 id: .workspace, title: c.workspaceVisible ? "Ocultar Workspace" : "Mostrar Workspace",
                 category: .view, symbol: "rectangle.split.2x1", keywords: ["código", "editor", "painel", "alternar"],
                 shortcut: .option("2")
+            ),
+            // Tool window Project do PyCharm (⌘1 lá). Aqui o ⌘1 já é a área
+            // Page Objects (D-2), então a ação fica só na paleta.
+            AppCommand(
+                id: .projectTree, title: c.projectTreeVisible ? "Ocultar Projeto" : "Mostrar Projeto",
+                category: .view, symbol: "folder", keywords: ["árvore", "arquivos", "pycharm", "pasta", "alternar"]
             ),
             AppCommand(
                 id: .allPanels, title: "Mostrar Todos os Painéis", category: .view, symbol: "rectangle.3.group",
@@ -437,10 +458,15 @@ enum CommandRegistry {
                 keywords: ["maestro", "yaml", "flow", "exportar", "fluxo", "passos"],
                 disabledReason: motor ?? (c.stepCount == 0 ? Motivo.semPassos : nil)
             ),
+            // ⌘S contextual (R-05): com uma aba de arquivo da árvore à frente,
+            // salva a aba; com o Page Object da sessão, o `codegen.save` de antes.
             AppCommand(
-                id: .save, title: "Salvar Page Object", category: .automation, symbol: "square.and.arrow.down",
+                id: .save, title: c.openFileTab.map { "Salvar \($0)" } ?? "Salvar Page Object",
+                category: .automation, symbol: "square.and.arrow.down",
                 keywords: ["código", "gerar", "pages", "locators", "arquivo", "exportar"], shortcut: .cmd("s"),
-                disabledReason: motor ?? (c.hasCode ? nil : Motivo.semCodigo)
+                disabledReason: motor ?? (c.openFileTab != nil
+                    ? (c.openFileDirty ? nil : "Nada a salvar nesta aba")
+                    : (c.hasCode ? nil : Motivo.semCodigo))
             ),
             AppCommand(
                 id: .copyActions, title: "Copiar Código das Ações", category: .automation, symbol: "doc.on.doc",
@@ -512,6 +538,12 @@ enum CommandRegistry {
                 id: .settings, title: "Ajustes…", category: .app, symbol: "gearshape",
                 keywords: ["preferências", "configurações", "paletas", "conexões", "portas"],
                 shortcut: .cmd(",")
+            ),
+            AppCommand(
+                id: .perfLight, title: c.perfLightPinned ? "Voltar ao Desempenho Automático" : "Ativar Modo Leve",
+                category: .app, symbol: c.perfLightPinned ? "gauge.with.dots.needle.67percent" : "leaf",
+                keywords: ["desempenho", "performance", "lite", "leve", "economia", "bateria", "lento", "travando",
+                           "automático", "alternar"]
             ),
             AppCommand(
                 id: .restartEngine, title: "Reiniciar Motor", category: .app, symbol: "arrow.triangle.2.circlepath",

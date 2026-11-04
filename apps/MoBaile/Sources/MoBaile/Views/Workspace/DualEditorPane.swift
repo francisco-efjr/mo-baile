@@ -18,6 +18,16 @@ struct PageObjectsView: View {
     @Environment(ThemeManager.self) private var themeManager
 
     @State private var arquivo: EditorFile = .pages
+    /// Árvore Projeto e arquivos abertos dela, em abas (PO-5).
+    @State private var projeto = ProjetoModelo()
+    /// Aba suja esperando "Salvar / Descartar / Cancelar" para fechar (R-02).
+    @State private var fechando: String?
+    @SceneStorage("larguraProjeto") private var larguraProjeto = 220.0
+    /// Abaixo disto a árvore não aparece: o editor ficaria estreito demais.
+    static let larguraMinimaComArvore: CGFloat = 640
+    /// Posição do cursor no último editor que mexeu (rodapé, PO-4). Só o
+    /// rodapé lê: mover o cursor não reavalia esta view (R-06).
+    @State private var cursor = CursorDoEditor()
 
     var body: some View {
         @Bindable var state = appState
@@ -33,7 +43,98 @@ struct PageObjectsView: View {
                 }
             }
 
-            if vazio {
+            GeometryReader { geo in
+                // Coluna estreita (espelho e inspector abertos): a árvore sai
+                // de cena e o editor fica com o espaço; a escolha continua.
+                let cabe = geo.size.width >= Self.larguraMinimaComArvore
+                HStack(spacing: 0) {
+                    ToolWindowStripe(semEspaco: appState.projectTreeVisible && !cabe)
+                    if appState.projectTreeVisible && cabe {
+                        ProjectTreeView(
+                            modelo: projeto, arquivoAberto: appState.arquivoAtivo ?? caminhoDoPageObject,
+                            abrir: abrir, ocultar: { appState.projectTreeVisible = false }
+                        )
+                        .frame(width: min(larguraProjeto, geo.size.width * 0.32))
+                        .overlay(alignment: .trailing) { DivisoriaDoProjeto(largura: $larguraProjeto) }
+                    }
+                    VStack(spacing: 0) {
+                        if !appState.arquivosAbertos.isEmpty { abas }
+                        editor
+                    }
+                }
+            }
+
+            footer
+        }
+        .background(theme.bgContent)
+        // O interpretador do rodapé vem do `setup.check`, que o Início já pede.
+        .task {
+            await projetoRecarregar()
+            if session.setup == nil { await session.refreshSetup() }
+        }
+        // Salvar o Page Object cria ou muda arquivos da árvore.
+        .onChange(of: appState.codigoSalvo) { Task { await projetoRecarregar() } }
+        .confirmationDialog(
+            "Salvar as alterações em \(fechando ?? "")?", isPresented: fechandoBinding, presenting: fechando
+        ) { id in
+            Button("Salvar") {
+                Task { if await appState.salvarArquivo(id, sessao: session) { appState.fecharArquivo(id) } }
+            }
+            Button("Descartar Alterações", role: .destructive) { appState.fecharArquivo(id) }
+            Button("Cancelar", role: .cancel) {}
+        } message: { _ in
+            Text("Se não salvar, o que você mudou nesta aba se perde.")
+        }
+        .alert(
+            "\(appState.conflitoDeArquivo ?? "") mudou no disco", isPresented: conflitoBinding,
+            presenting: appState.conflitoDeArquivo
+        ) { id in
+            Button("Recarregar do Disco") { Task { await appState.recarregarArquivo(id, sessao: session) } }
+            Button("Sobrescrever", role: .destructive) {
+                Task { await appState.salvarArquivo(id, sessao: session, sobrescrever: true) }
+            }
+            Button("Cancelar", role: .cancel) { appState.conflitoDeArquivo = nil }
+        } message: { _ in
+            Text("Outro programa gravou o arquivo depois que ele foi aberto aqui. Recarregar descarta o que você mudou nesta aba; sobrescrever apaga a versão do disco.")
+        }
+    }
+
+    private var fechandoBinding: Binding<Bool> {
+        Binding(get: { fechando != nil }, set: { if !$0 { fechando = nil } })
+    }
+
+    private var conflitoBinding: Binding<Bool> {
+        Binding(get: { appState.conflitoDeArquivo != nil }, set: { if !$0 { appState.conflitoDeArquivo = nil } })
+    }
+
+    @ViewBuilder
+    private var editor: some View {
+        @Bindable var state = appState
+        let theme = themeManager.current
+        ZStack {
+            if appState.arquivoAtivo == nil {
+                editorDoPageObject
+            }
+            // Um editor por aba, todos vivos e só o da frente visível: cada
+            // arquivo guarda o próprio desfazer, cursor e rolagem (R-03).
+            ForEach($state.arquivosAbertos) { $aberto in
+                let ligado = appState.arquivoAtivo == aberto.id
+                ArquivoAbertoPane(aberto: $aberto, cursor: cursor)
+                    .id(aberto.id)
+                    .opacity(ligado ? 1 : 0)
+                    .allowsHitTesting(ligado)
+                    .accessibilityHidden(!ligado)
+            }
+        }
+        .background(theme.bgContent)
+    }
+
+    @ViewBuilder
+    private var editorDoPageObject: some View {
+        @Bindable var state = appState
+        let theme = themeManager.current
+        if vazio {
+            VStack(spacing: 0) {
                 EmptyState(
                     icon: "chevron.left.forwardslash.chevron.right",
                     title: "Nenhum passo gravado",
@@ -43,23 +144,100 @@ struct PageObjectsView: View {
                         appState.statusMessage = "Clique em um elemento no espelho: ele vira um passo"
                     }
                 )
-            } else {
-                HStack(spacing: 0) {
-                    if appState.splitEditors || arquivo == .pages {
-                        CodeEditorPane(file: .pages, text: $state.actionsCode)
-                    }
-                    if appState.splitEditors {
-                        Rectangle().fill(theme.separator).frame(width: 1)
-                    }
-                    if appState.splitEditors || arquivo == .locators {
-                        CodeEditorPane(file: .locators, text: $state.locatorsCode)
-                    }
+                .frame(maxHeight: 260)
+                DicasDoEditorVazio()
+                Spacer(minLength: 0)
+            }
+        } else {
+            HStack(spacing: 0) {
+                if appState.splitEditors || arquivo == .pages {
+                    CodeEditorPane(file: .pages, text: $state.actionsCode, cursor: cursor)
+                }
+                if appState.splitEditors {
+                    Rectangle().fill(theme.separator).frame(width: 1)
+                }
+                if appState.splitEditors || arquivo == .locators {
+                    CodeEditorPane(file: .locators, text: $state.locatorsCode, cursor: cursor)
                 }
             }
-
-            footer
         }
+    }
+
+    /// Abas como as do PyCharm: o Page Object da sessão e os arquivos abertos
+    /// da árvore, cada um com ×.
+    private var abas: some View {
+        let theme = themeManager.current
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                aba(titulo: "Page Object", id: nil, sujo: false, fechar: nil)
+                ForEach(appState.arquivosAbertos) { aberto in
+                    aba(titulo: aberto.arquivo.path, id: aberto.id, sujo: aberto.sujo) { pedirParaFechar(aberto.id) }
+                }
+            }
+        }
+        .frame(height: 28)
         .background(theme.bgContent)
+        .overlay(alignment: .bottom) { Rectangle().fill(theme.separator).frame(height: 1) }
+    }
+
+    private func aba(titulo: String, id: String?, sujo: Bool, fechar: (() -> Void)?) -> some View {
+        let theme = themeManager.current
+        let ligada = appState.arquivoAtivo == id
+        return HStack(spacing: 4) {
+            // "•" antes do nome: alteração não salva, como o asterisco do PyCharm.
+            Button(sujo ? "• \(titulo)" : titulo) { appState.arquivoAtivo = id }
+                .accessibilityLabel(titulo)
+                .accessibilityValue(sujo ? "não salvo" : "")
+                .buttonStyle(.plain)
+                .font(DSFont.mono(11.5))
+                .foregroundStyle(ligada ? theme.labelPrimary : theme.labelSecondary)
+                .accessibilityAddTraits(ligada ? .isSelected : [])
+            if let fechar {
+                Button(action: fechar) { Image(systemName: "xmark").font(.system(size: 8, weight: .semibold)) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(theme.labelTertiary)
+                    .help("Fechar \(titulo)")
+                    .accessibilityLabel("Fechar \(titulo)")
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxHeight: .infinity)
+        .overlay(alignment: .bottom) { if ligada { Rectangle().fill(theme.accentText).frame(height: 2) } }
+    }
+
+    /// `pages/<chave>.py` e `locators/<chave>.py` da sessão vão para o editor
+    /// do Page Object; o resto abre numa aba, lido pelo motor.
+    private func abrir(_ caminho: String) {
+        let chave = session.engineInfo?.pageObjectsKey ?? "feature"
+        if let proprio = EditorFile.allCases.first(where: { caminho == "\($0.rawValue)/\(chave).py" }) {
+            arquivo = proprio
+            appState.arquivoAtivo = nil
+            return
+        }
+        Task { await appState.abrirArquivo(caminho, sessao: session) }
+    }
+
+    /// × numa aba suja pergunta antes (R-02); limpa fecha direto.
+    private func pedirParaFechar(_ id: String) {
+        guard let indice = appState.indiceDoArquivo(id), appState.arquivosAbertos[indice].sujo else {
+            appState.fecharArquivo(id)
+            return
+        }
+        fechando = id
+    }
+
+    private func projetoRecarregar() async {
+        guard session.isConnected else { return }
+        do {
+            projeto.receber(try await session.workspaceTree())
+        } catch is CancellationError {
+        } catch {
+            projeto.erro = error.localizedDescription
+        }
+    }
+
+    private var caminhoDoPageObject: String {
+        "\(arquivo.rawValue)/\(session.engineInfo?.pageObjectsKey ?? "feature").py"
     }
 
     private func barra(compacta: Bool) -> some View {
@@ -128,12 +306,30 @@ struct PageObjectsView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 8)
-            StatusIndicator(status: .ok, label: "Código sincronizado", mono: false)
+            // Status do editor como no PyCharm, no lugar do "Código
+            // sincronizado" fixo, que dizia "sincronizado" mesmo sem salvar.
+            ViewThatFits(in: .horizontal) {
+                statusDoEditor(compacto: false)
+                statusDoEditor(compacto: true)
+            }
         }
         .padding(.horizontal, 12)
         .frame(height: DesignMetrics.Heights.codeFooter)
         .background(theme.bgContent)
         .overlay(alignment: .top) { Rectangle().fill(theme.separator).frame(height: 1) }
+    }
+
+    private func statusDoEditor(compacto: Bool) -> some View {
+        let aberto = appState.arquivosAbertos.first { $0.id == appState.arquivoAtivo }
+        return EditorStatusBar(
+            cursor: cursor,
+            python: session.setup?.python.version, pythonPath: session.setup?.python.path,
+            salvamento: aberto.map(\.salvamento) ?? EditorStatus.salvamento(
+                acoes: appState.actionsCode, locators: appState.locatorsCode, salvo: appState.codigoSalvo
+            ),
+            caminho: aberto?.arquivo.path ?? appState.codigoSalvo?.caminho, compacto: compacto,
+            separador: aberto?.arquivo.lineSeparator ?? "LF", codificacao: aberto?.arquivo.encoding ?? "UTF-8"
+        )
     }
 
     private var rodape: String {
@@ -153,6 +349,7 @@ struct CodeEditorPane: View {
 
     let file: EditorFile
     @Binding var text: String
+    var cursor: CursorDoEditor? = nil
 
     var body: some View {
         let theme = themeManager.current
@@ -214,7 +411,8 @@ struct CodeEditorPane: View {
             CodeEditorView(
                 text: $text,
                 accessibilityLabel: file == .pages ? "Código das ações (pages)" : "Código dos localizadores (locators)",
-                highlight: appState.selectedStep?.varName
+                highlight: appState.selectedStep?.varName,
+                cursor: cursor
             )
         }
         .frame(maxWidth: .infinity)
@@ -226,12 +424,7 @@ struct CodeEditorPane: View {
         "\(session.engineInfo?.pageObjectsKey ?? "feature").py"
     }
 
-    private var contagemDeLinhas: String {
-        guard !text.isEmpty else { return "0 linhas" }
-        let linhas = text.split(separator: "\n", omittingEmptySubsequences: false)
-        let total = (linhas.last?.isEmpty == true && linhas.count > 1) ? (linhas.count - 1) : linhas.count
-        return total == 1 ? "1 linha" : "\(total) linhas"
-    }
+    private var contagemDeLinhas: String { EditorText.rotuloDeLinhas(text) }
 }
 
 /// Mantido com o nome antigo para os testes que desenham os editores.

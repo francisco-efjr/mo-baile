@@ -41,6 +41,7 @@ Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 | `flow.log` | Uma linha de saída da execução do fluxo |
 | `flow.step` | Começou um passo de nível superior do fluxo: `{index, total}`, com `index` a partir de 1. Vale para `flow.run` (cada passo gravado) e `flow.maestro_run` (cada comando de topo do YAML; `onFlowStart`, `onFlowComplete` e os subpassos de `runFlow`/`retry` não contam). Sem `run_id`: a trava de execução já impede duas ao mesmo tempo (3.12.0) |
 | `flow.finished` | A execução do fluxo terminou, com `success`, `message` e `cancelled`. `cancelled` é `true` quando a execução parou por `flow.stop` (ou encerramento do motor); nesse caso `success` é sempre `false`, então quem não lê `cancelled` continua sem contar a parada como aprovada. `cancelled` existe desde a 3.12.0: front que fala com motor anterior trata a ausência como `false` |
+| `perf.profile` | O perfil de desempenho efetivo mudou. Mesmo formato de `perf.status`. Ver "Perfis de desempenho" |
 | `$/progress` | Andamento de um método longo. Ver "Progresso" |
 
 ## Erros
@@ -65,6 +66,7 @@ a interface usa para decidir entre exibir diálogo e apenas registrar.
 | `adapter_error` | Falha ao conversar com ferramenta externa |
 | `engine_error` | Falha prevista sem categoria mais específica |
 | `incompatible_protocol` | O front e o motor falam versões diferentes do contrato. Ver "Versão do protocolo e handshake" |
+| `file_changed` | O arquivo mudou no disco depois do `workspace.read` (outro editor gravou, ou ele sumiu). Ver "Árvore Projeto" |
 | `request_cancelled` | O cliente cancelou a requisição. Vem com o código `-32800`, e não `-32000`. Ver "Cancelamento" |
 
 ## Versão do protocolo e handshake
@@ -108,7 +110,7 @@ serial por domínio**. Uma chamada lenta numa fila não atrasa as outras filas.
 | Fila | Para quê | Métodos |
 |---|---|---|
 | `inline` | responde na própria thread de leitura, sempre em milissegundos | `engine.hello`, `engine.shutdown`, `$/cancelRequest` |
-| `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
+| `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `perf.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
 | `capture` | leitura de tela e árvore, que pode levar segundos, e a escuta passiva | `hierarchy.dump`, `screen.capture`, `screen.size`, `passive.start`, `passive.stop` |
 | `services` | serviços de fundo que o motor liga e desliga | `proxy.*`, `analytics.*` (menos `analytics.ios_devices`), `flow.*`, `recording.start`, `recording.stop` |
 | `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `setup.check`, `home.summary`, `analytics.ios_devices` |
@@ -234,9 +236,11 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
+| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95), `idle_fps` (cadência com a tela parada; `0` desliga). O que não vier sai do perfil de desempenho (completo: 6 fps, 900 px, 80, 2) e acompanha as trocas de perfil com o espelho ligado | confirma o início; devolve `fps`, `max_width`, `format`, `quality`, `idle_fps`, `profile` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
+| `stream.pause` | — | para de capturar sem desligar o espelho (janela oculta, coberta ou minimizada). Vale também para o espelho que ligar depois, até o `stream.resume`. Durante `flow.run`, `flow.maestro_run` ou a escuta passiva o espelho continua, e a pausa passa a valer quando eles terminam. Devolve `{running, paused, kept_for}`: `kept_for` é `flow`, `passive` ou nulo. Idempotente |
+| `stream.resume` | — | volta a capturar e reenvia o quadro atual mesmo se a tela não mudou. Devolve `{running, paused, kept_for}`. Idempotente |
 | `scrcpy.start` | `fps`, `max_size`, `title`, `always_on_top` | inicia janela nativa a 60 FPS com baixíssima latência |
 | `scrcpy.stop` | — | encerra o espelhamento scrcpy |
 | `scrcpy.status` | — | `{available, running}` |
@@ -265,7 +269,17 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object (`NOME = (AppiumBy.X, "valor")`), bloco da ação (`def` + `wait_to_be_visible(..., 15)` + `click(..., 2)` ou `send_keys`). A coordenada não entra no código: fica no passo, em `coords` |
 | `codegen.steps` | — | passos gravados. Desde a 3.6 cada passo traz `recorded_at` (epoch do Mac na gravação; `null` em passo antigo), e `codegen.record`/`passive.step` trazem `step_num` e `recorded_at` do passo criado. Desde a 3.17.0 cada passo traz `anchor`: `{"id": …}` ou `{"text": …}`, um elemento estável e único da tela da gravação, perto do alvo e fora dele (nunca campo editável nem senha), ou `null` |
 | `codegen.reset` | — | limpa a gravação |
-| `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos. `directory` precisa ficar dentro de `~/Documents/Mo baile` (link simbólico e `..` resolvidos); fora dele, `invalid_input` |
+| `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos. `directory` precisa ficar dentro de `~/Documents/Mo baile` (link simbólico e `..` resolvidos); fora dele, `invalid_input`. Grava os bytes do PyCharm: CR e CRLF viram LF, UTF-8 sem BOM, sem normalização Unicode, sem tirar espaço do fim nem forçar quebra final |
+
+### Árvore Projeto (Page Objects)
+
+Desde a PO-5 (rodada 2026-11-03). Só a pasta de trabalho `~/Documents/Mo baile`, e só `pages/`, `locators/` e `flows/`. `path` é relativo à pasta (`pages/tela.py`), sem `..`, sem link simbólico em nenhum nível, com extensão `.py`, `.yaml`, `.yml`, `.json`, `.txt` ou `.md`; fora disso, `invalid_input`.
+
+| Método | Parâmetros | Devolve |
+|---|---|---|
+| `workspace.tree` | — | `{root, name, exists, nodes, truncated}`. Cada nó tem `name`, `path` e `kind` (`dir` ou `file`); pasta traz `children`, pastas primeiro e nomes em ordem alfabética. Ocultos e links simbólicos ficam de fora. `truncated` diz que algo ficou de fora: mais de 2.000 nós ou pasta além de 8 níveis. Pasta que não dá para ler vem com `children: []` e `error` (o motivo do sistema) |
+| `workspace.read` | `path` | `{path, text, encoding, line_separator, bom, read_only, size, mtime_ns}`. `text` vem com LF; o separador original (`LF`, `CRLF` ou `CR`, o primeiro do arquivo) vai em `line_separator`. Arquivo que não é UTF-8 vem com `read_only: true`. `mtime_ns` é a hora de modificação lida, para o `write` detectar conflito. Acima de 1 MB (bytes), `invalid_input` |
+| `workspace.write` | `path`, `text`, `line_separator?` (`LF`), `bom?` (`false`), `expected_mtime_ns?` | grava com o separador e o BOM pedidos (o front devolve os que leu) e devolve `{path, saved, bytes, mtime_ns}`. Com `expected_mtime_ns`, recusa com `file_changed` se o arquivo mudou ou sumiu desde o `read`; sem ele, sobrescreve. A gravação é atômica (temporário na mesma pasta + rename, sem seguir link simbólico) e mantém o modo do arquivo. Recusa com `invalid_input`: texto acima de 1 MB em bytes, arquivo que não é UTF-8, arquivo sem permissão de escrita e qualquer erro de disco (com o motivo do sistema) |
 
 ### Execução de fluxo
 
@@ -282,6 +296,31 @@ O formato e o que fica de fora estão em
 [research/maestro-modelo-de-automacao.md](research/maestro-modelo-de-automacao.md).
 Ler YAML pede o PyYAML no Python do motor; sem ele, os três métodos devolvem
 `invalid_input` explicando o que instalar, e o resto do motor segue igual.
+
+### Perfis de desempenho
+
+Três perfis, `completo`, `equilibrado` e `leve`, mais a preferência `auto`, que
+escolhe entre eles. A política mora no motor (`services/perf.py`); o front manda
+os sinais do Mac e aplica a parte visual (`knobs.glass`, `knobs.animations`). O
+motor aplica a dele no que estiver ligado: cadência, largura e qualidade do
+espelho que o chamador não fixou no `stream.start`, intervalo do vigia de
+aparelhos sem `poll_interval` pedido, e o teto dos históricos de rede e
+analytics. O leve reduz apresentação e cadência, nunca captura: todo
+`proxy.event` e `analytics.event` continua saindo.
+
+Regras: o sinal do sistema piora o perfil na hora; a melhora espera 60 s com o
+alvo melhor e sobe um degrau por vez (`reason: "recuperando"` no degrau do
+meio); a escolha manual vale na hora e ganha do automático, exceto com
+`thermal: "critical"`, que leva ao leve em qualquer preferência.
+
+| Método | Parâmetros | Devolve |
+|---|---|---|
+| `perf.signals` | qualquer subconjunto de `thermal` (`nominal`, `fair`, `serious`, `critical`), `low_power` (bool), `memory_pressure` (`normal`, `warning`, `critical`), `physical_memory_gb` (número), `arch` (`arm64`, `x86_64`), `translated` (bool, Rosetta). Campo ausente fica como estava | o status. Prazo de 5 s: sem resposta, o front aplica sozinho a parte visual do leve |
+| `perf.set_preference` | `preference`: `auto`, `completo`, `equilibrado` ou `leve` | o status |
+| `perf.status` | — | `{profile, reason, preference, knobs, signals, improving}`. `reason`: `manual`, `sinais_normais`, `recuperando`, `thermal_fair`, `thermal_serious`, `thermal_critical`, `low_power`, `memory_warning`, `memory_critical` ou `hardware_modesto` (até 8 GB, Intel ou Python sob Rosetta). `knobs`: `stream_fps`, `stream_idle_fps`, `stream_max_width`, `stream_quality`, `stream_capture_jpeg`, `poll_interval`, `proxy_history`, `analytics_history`, `glass`, `animations` |
+
+Entrada inválida é `invalid_input`. Sem o front mandar nada, o motor fica em
+`completo` com os valores de antes (6 fps, 900 px, JPEG 80, vigia a 1,5 s).
 
 ### Escuta passiva
 
@@ -302,7 +341,7 @@ com `~`; o motor normaliza, confere tipo e tamanho (spec até 5 MB, log até
 |---|---|---|
 | `report.spec` | `path` (spec-modelo `.json`) | resumo da spec: `path`, `projeto`, `versao_especificacao`, `plataforma`, `prints_dir`, `prints_dir_exists`, `fluxos` (lista ordenada de `{key, label}`), `cards`, `variants`, `sections` |
 | `report.audit` | `spec_path`, `source` (`session`: eventos que a escuta de Analytics capturou; `file`: um log), `log_path` (com `file`), `platform` (opcional; sem ele, a da spec) | `spec` (resumo), `platform`, `source`, `log_path`, `log_stats` (`total_lidos`, `da_plataforma`, `duplicados`, `uteis`), `summary` (`total`, `ok`, `divergent`, `missing`, `compliance_rate`, `extras`, `alerts`), `results` (uma por variação: `id`, `card_index`, `section`, `card_title`, `print_path`, `flow`, `flow_label`, `event`, `variation`, `status` = `ok`, `error` ou `missing`, `checks` com `field`, `expected`, `obtained` e `ok`, `expected` (o que a variação espera, já com o fluxo aplicado: lista ordenada de `{key, value}` em texto; na não disparada é a única fonte dos valores), `matched` com `id`, `time`, `event_name` e `params`, `occurrences`, `older_divergent`, `older_divergences`, `ga_screen`, `note`, `divergences`, `block`), `extras` e `alerts` (`event`, `screen`, `flow_name`, `component`, `detail`, `count`), `observations`, `markdown` e `tsv`. Guarda o relatório para `report.export` |
-| `report.export` | `directory` (opcional; sem ele, `~/Documents/Mo baile/Relatórios/<projeto>-<plataforma>-<data>`) | grava `board_auditoria.excalidraw`, `relatorio_auditoria.html`, `relatorio_auditoria.md` e `relatorio_auditoria.tsv` do último `report.audit`. Devolve `directory` e `files` (`kind`, `name`, `path`, `bytes`) |
+| `report.export` | `directory` (opcional; sem ele, `~/Documents/Mo baile/Relatórios/<projeto>-<plataforma>-<data>`) | grava `board_auditoria.excalidraw`, `relatorio_<projeto da spec>_<ios|android>_<dd-mm-aaaa>.html`, `relatorio_auditoria.md` e `relatorio_auditoria.tsv` do último `report.audit`. Devolve `directory` e `files` (`kind`, `name`, `path`, `bytes`) |
 | `report.import` | `prints_dir`, `projeto` (opcional), `platform`, `spec_path` (opcional; sem ele, `~/Documents/Mo baile/Specs/<projeto>.json`) | OCR local (Vision) dos prints dos cards e rascunho da spec, sem sobrescrever arquivo existente. Devolve `spec_path`, `review_path` (`.revisao.md`), `spec` (resumo, ou `null` se o rascunho ainda não valida), `spec_error`, `review` (`print`, `event`, `doubts`) e `doubts_total` |
 | `report.card` | `spec_path`, `card_index` (o `card_index` dos resultados, a partir de 0) | o card como está no JSON, para editar: `card_index`, `cards` (total), `secao`, `titulo`, `evento`, `print`, `params` (lista ordenada de `{key, value}`; `value` é o valor do JSON, texto ou não), `variacoes` (lista de listas de `{key, value}`), `obs` (texto, ou `null`), `obs_por_fluxo` (a `obs` é um objeto por fluxo e não vai para o formulário) e `params_por_fluxo` (chaves dos fluxos com parâmetros próprios) |
 | `report.card_update` | `spec_path`, `card_index`, `card` com os campos do formulário (`secao`, `titulo`, `evento`, `params`, `variacoes`, `obs`, no formato de `report.card`; campo ausente fica como estava) | grava o card na spec e devolve `spec` (resumo relido) e `card` (como `report.card`). Muda só o que o formulário mostra: o print, `por_fluxo`, `params_por_fluxo`, uma `obs` por fluxo e chaves desconhecidas ficam. Texto vazio tira a chave do JSON; evento vazio, parâmetro sem nome ou repetido e expressão regular inválida respondem `invalid_input` sem gravar. A spec inteira é validada antes, e o arquivo é trocado de uma vez |
@@ -319,9 +358,13 @@ com `~`; o motor normaliza, confere tipo e tamanho (spec até 5 MB, log até
 `position`; a interface, `coords`. A tradução acontece em um lugar só,
 `EngineDTO.StepPayload.mappedStrategy`.
 
-**Quadro só é enviado quando a tela muda.** O motor continua capturando na
-cadência pedida, mas descarta quadro idêntico. `stream.stats` mostra a
-proporção descartada.
+**Quadro só é enviado quando a tela muda.** O motor captura na cadência pedida
+e descarta quadro idêntico. `stream.stats` mostra a proporção descartada.
+Desde a trilha de desempenho (PERF-2), depois de 5 capturas iguais seguidas e
+2 s sem toque nem mudança a captura cai para `idle_fps`; `input.tap`,
+`input.text`, o toque da escuta passiva ou um quadro diferente voltam à
+cadência normal na hora. Quando a captura é mais lenta que o intervalo, o laço
+ainda descansa um quarto do tempo dela (no mínimo 50 ms).
 
 **Credencial já chega redigida.** A interface nunca recebe o token. Ver
 `docs/SEGURANCA.md`.
@@ -338,6 +381,7 @@ ou `0` continua valendo o padrão.
 | `max_width` | `screen.capture`, `stream.start` | inteiro, 16 a 16.384 |
 | `fps` | `stream.start` | 0,1 a 120; em `scrcpy.start`, inteiro de 1 a 240 |
 | `quality` | `stream.start` | inteiro, 10 a 95 |
+| `idle_fps` | `stream.start` | 0 a 120; `0` desliga a cadência de tela parada |
 | `max_size` | `scrcpy.start` | inteiro, 16 a 16.384 |
 | `step_num` | `session.correlate` | inteiro, 0 a 1.000.000 |
 | `before_s`, `after_s` | `session.correlate` | 0 a 60 s |

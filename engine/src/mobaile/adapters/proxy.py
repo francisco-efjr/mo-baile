@@ -501,9 +501,13 @@ class MobileNetworkProxy:
     registra não pode tocar em widget nem bloquear.
     """
 
-    def __init__(self, host: str | None = None, port: int | None = None):
+    def __init__(self, host: str | None = None, port: int | None = None, queue_events: bool = True):
         self.host = host or settings.proxy_host
         self.port = port or settings.proxy_port
+        # O motor do app nativo notifica pelo callback e ninguem drena a fila:
+        # ela enchia com os 4.000 primeiros eventos e os segurava para sempre.
+        # Quem nao le passa `queue_events=False` (PERF-3, K7).
+        self._queue_events = queue_events
         self.event_queue: queue.Queue = queue.Queue(maxsize=MAX_HISTORY * 2)
         self._events: deque[NetworkEvent] = deque(maxlen=MAX_HISTORY)
         self._server: ThreadedTCPServer | None = None
@@ -555,13 +559,24 @@ class MobileNetworkProxy:
     def add_event_callback(self, cb: Callable[[NetworkEvent], None]) -> None:
         self._callbacks.append(cb)
 
+    def set_history_limit(self, limite: int) -> None:
+        """Teto do historico pelo perfil de desempenho; ficam os mais novos.
+
+        So o passado em memoria encolhe: cada evento novo continua saindo pelo
+        callback, em qualquer perfil.
+        """
+        with self._lock:
+            if self._events.maxlen != limite:
+                self._events = deque(self._events, maxlen=limite)
+
     def emit_event(self, event: NetworkEvent) -> None:
         with self._lock:
             self._events.append(event)  # deque com maxlen descarta o mais antigo
-        try:
-            self.event_queue.put_nowait(event)
-        except queue.Full:
-            logger.debug("Fila de eventos cheia; consumidor não está drenando.")
+        if self._queue_events:
+            try:
+                self.event_queue.put_nowait(event)
+            except queue.Full:
+                logger.debug("Fila de eventos cheia; consumidor não está drenando.")
         for cb in self._callbacks:
             try:
                 cb(event)

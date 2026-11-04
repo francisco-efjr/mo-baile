@@ -40,6 +40,9 @@ struct StatusBar: View {
                 .accessibilityAddTraits(.updatesFrequently)
                 .help(appState.statusMessage)
 
+            // Perfil de desempenho fora do completo (PERF-5).
+            PerfBadge()
+
             if appState.isDeviceConnected {
                 ViewThatFits(in: .horizontal) {
                     metricasView(metricas)

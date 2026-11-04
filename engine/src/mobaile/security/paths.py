@@ -13,7 +13,10 @@ do usuário. `logs_dir()` é a pasta única dos logs do motor, só do dono.
 
 from __future__ import annotations
 
+import contextlib
+import errno
 import os
+import secrets
 import stat
 import sys
 import tempfile
@@ -104,3 +107,44 @@ def write_executable_script(content: str, filename: str = "flow_runner.py") -> P
         handle.write(content)
     target.chmod(0o600)
     return target
+
+
+def write_file_atomic(target: Path, data: bytes) -> None:
+    """Grava `data` em `target` sem seguir link simbolico nem deixar arquivo pela metade.
+
+    Tudo acontece relativo a pasta aberta com `O_NOFOLLOW | O_DIRECTORY`: o
+    temporario nasce com `O_EXCL | O_NOFOLLOW` (nome novo, nunca um link
+    plantado) e entra no lugar do arquivo com `os.replace`, um rename atomico
+    que troca o nome e nao segue link. Se o motor cair no meio, o arquivo velho
+    continua inteiro. Um link simbolico no lugar do arquivo e recusado, e um
+    arquivo sem permissao de escrita tambem: o rename passaria por cima dele.
+    Mantem o modo do arquivo existente. Levanta `OSError`.
+    """
+    pasta = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        modo = 0o644
+        try:
+            info = os.stat(target.name, dir_fd=pasta, follow_symlinks=False)
+        except FileNotFoundError:
+            info = None
+        if info is not None:
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+                raise OSError(errno.ELOOP, "Nao e um arquivo comum", str(target))
+            if not info.st_mode & stat.S_IWUSR:
+                raise PermissionError(errno.EACCES, "Arquivo protegido contra gravacao", str(target))
+            modo = stat.S_IMODE(info.st_mode)
+        temporario = f".{target.name}.{secrets.token_hex(6)}.tmp"
+        fd = os.open(temporario, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=pasta)
+        try:
+            with os.fdopen(fd, "wb") as saida:
+                saida.write(data)
+                saida.flush()
+                os.fsync(saida.fileno())
+                os.fchmod(saida.fileno(), modo)
+            os.replace(temporario, target.name, src_dir_fd=pasta, dst_dir_fd=pasta)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(temporario, dir_fd=pasta)
+            raise
+    finally:
+        os.close(pasta)

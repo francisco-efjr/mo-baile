@@ -139,6 +139,9 @@ for file in icon.icns icon.png mascot.png splash_bg.png splash_app.mp4; do
     if [ -f "$ASSETS/$file" ]; then cp "$ASSETS/$file" "$CONTENTS/Resources/"; fi
 done
 if [ -f "$ASSETS/icon.icns" ]; then cp "$ASSETS/icon.icns" "$CONTENTS/Resources/AppIcon.icns"; fi
+# JetBrains Mono do editor de Page Objects, com a licenca (SIL OFL 1.1). O front
+# registra as fontes no processo (EditorFont); sem elas, usa SF Mono.
+if [ -d "$ASSETS/fonts" ]; then cp -R "$ASSETS/fonts" "$CONTENTS/Resources/fonts"; fi
 
 echo "==> Compilando a cor de destaque (Assets.car)"
 # O flamingo do design system (#C2456E) vira a cor de destaque do app: seleção
