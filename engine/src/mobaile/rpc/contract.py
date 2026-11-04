@@ -144,6 +144,11 @@ METHODS: dict[str, dict[str, Any]] = {
     "codegen.steps": _spec(),
     "codegen.reset": _spec(),
     "codegen.save": _spec(),
+    # Arvore Projeto da aba Page Objects: arquivo pequeno (ate 1 MB) em disco
+    # local, como o `codegen.save`.
+    "workspace.tree": _spec(),
+    "workspace.read": _spec(),
+    "workspace.write": _spec(),
     "flow.run": _spec(LANE_SERVICES, 30),
     "flow.stop": _spec(LANE_SERVICES, 60),
     "flow.status": _spec(LANE_SERVICES),

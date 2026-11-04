@@ -1206,6 +1206,13 @@ final class EngineSession {
         }
     }
 
+    /// Chamada avulsa para quem guarda o resultado no próprio estado (a árvore
+    /// Projeto, `EngineDTO+Workspace.swift`). Sem motor, `notRunning`.
+    func chamarMotor<R: Decodable & Sendable>(_ metodo: String, params: [String: JSONValue] = [:]) async throws -> R {
+        guard let client else { throw EngineError.notRunning }
+        return try await client.call(metodo, params: params)
+    }
+
     /// Grava os passos como flow do Maestro em `~/Documents/Mo baile/flows/`
     /// e devolve o caminho, para quem chamou revelar no Finder.
     ///

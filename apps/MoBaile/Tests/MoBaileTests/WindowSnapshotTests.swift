@@ -235,6 +235,19 @@ final class WindowSnapshotTests: XCTestCase {
         try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "02-page-objects-escuro", escuro: true, tema: t)
     }
 
+    /// PO-5: faixa de tool windows, painel Projeto com a árvore das fixtures
+    /// do motor e o editor no esquema PyCharm. Espelho e inspector fechados
+    /// para a árvore caber, como quem trabalha só no código.
+    func testJanelaPageObjectsProjetoEscuro() throws {
+        _ = try destino()
+        let (e, _, t) = ambiente()
+        e.mirrorVisible = false
+        e.inspectorVisible = false
+        let s = EngineSession(state: e, client: FakeEngine(respostas: try resultadosDasFixtures()))
+        try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "16-page-objects-projeto-escuro",
+                       escuro: true, tema: t)
+    }
+
     func testJanelaRede() throws {
         let (e, s, t) = ambiente(area: .network)
         try fotografar(janela(e, s, t), tamanho: CGSize(width: 1280, height: 800), nome: "03-rede-claro", tema: t)

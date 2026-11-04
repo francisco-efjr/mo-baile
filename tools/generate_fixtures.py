@@ -209,6 +209,26 @@ def _trocar_caminhos(valor: Any, de: tuple[str, ...], para: str) -> Any:
     return valor
 
 
+def arvore_projeto(call) -> dict:
+    """`workspace.*` (PO-5) numa pasta de trabalho descartavel."""
+    with tempfile.TemporaryDirectory() as tmp:
+        home = pathlib.Path(tmp).resolve()
+        raiz = home / "Documents" / "Mo baile"
+        (raiz / "pages").mkdir(parents=True)
+        (raiz / "flows").mkdir()
+        (raiz / "pages" / "feature.py").write_bytes(b"def tocar(self):\r\n    pass\r\n")
+        (raiz / "flows" / "login.yaml").write_bytes(b"appId: br.app\n")
+        with patch.dict(os.environ, {"HOME": str(home)}):
+            saida = {
+                "workspace.tree": call("workspace.tree"),
+                "workspace.read": call("workspace.read", {"path": "pages/feature.py"}),
+                "workspace.write": call("workspace.write", {
+                    "path": "pages/feature.py", "text": "def tocar(self):\n    pass\n", "line_separator": "CRLF",
+                }),
+            }
+        return _trocar_caminhos(saida, (str(raiz),), "/Users/qa/Documents/Mo baile")
+
+
 def relatorio(server: EngineServer, call) -> dict:
     """`report.*` pelo servidor de verdade, sobre arquivos de verdade."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -307,6 +327,7 @@ def build() -> dict:
             server.home._changelog = lambda: pasta_home / "CHANGELOG.md"
             server.home._version = "9.9.0"
             fixtures["home.summary"] = call("home.summary")
+        fixtures.update(arvore_projeto(call))
         fixtures["simulators.list"] = call("simulators.list")
         fixtures["simulators.boot"] = call("simulators.boot", {"udid": SIMULADORES[0]["udid"]})
         fixtures["emulators.list"] = call("emulators.list")

@@ -35,14 +35,16 @@ struct EditorStatusBar: View {
     let caminho: String?
     /// Coluna estreita: só posição e estado salvo.
     var compacto = false
+    var separador = "LF"
+    var codificacao = "UTF-8"
 
     var body: some View {
         let theme = themeManager.current
         HStack(spacing: 14) {
             item("\(linha):\(coluna)", falado: "Linha \(linha), coluna \(coluna)")
             if !compacto {
-                item("LF", falado: "Separador de linha LF")
-                item("UTF-8", falado: "Codificação UTF-8")
+                item(separador, falado: "Separador de linha \(separador)")
+                item(codificacao, falado: "Codificação \(codificacao)")
                 item("4 espaços", falado: "Recuo de 4 espaços")
                 item(EditorStatus.interpretador(versao: python), falado: "Interpretador \(EditorStatus.interpretador(versao: python))")
                     .help(pythonPath.map { "Python do motor: \($0)" } ?? "Python do motor")
