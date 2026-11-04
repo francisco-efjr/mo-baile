@@ -100,7 +100,11 @@ struct CommandPerformer {
                 if let caminho = await session.exportMaestroFlow() { Exporters.revealInFinder(caminho) }
             }
         case .save:
-            Task { await session.saveCode() }
+            if appState.workspaceTab == .pageObjects, let id = appState.arquivoAtivo {
+                Task { await appState.salvarArquivo(id, sessao: session) }
+            } else {
+                Task { await session.saveCode() }
+            }
         case .copyActions:
             Exporters.copy(appState.actionsCode)
             appState.statusMessage = "Código das ações copiado"

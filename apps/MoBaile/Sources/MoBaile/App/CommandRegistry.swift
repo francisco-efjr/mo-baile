@@ -174,6 +174,9 @@ struct CommandContext: Equatable, Sendable {
     var mirrorVisible = true
     var workspaceVisible = true
     var projectTreeVisible = true
+    /// Aba de arquivo da árvore à frente em Page Objects (R-05): o ⌘S salva ela.
+    var openFileTab: String? = nil
+    var openFileDirty = false
     var zenMode = false
     var usesToolbarSearch = false
     var paletteActive = false
@@ -229,6 +232,11 @@ extension CommandContext {
         c.mirrorVisible = appState.mirrorVisible
         c.workspaceVisible = appState.workspaceVisible
         c.projectTreeVisible = appState.projectTreeVisible
+        if appState.workspaceTab == .pageObjects, let id = appState.arquivoAtivo,
+           let aberto = appState.arquivosAbertos.first(where: { $0.id == id }) {
+            c.openFileTab = id
+            c.openFileDirty = aberto.sujo && !aberto.arquivo.readOnly
+        }
         c.zenMode = appState.zenMode
         c.usesToolbarSearch = appState.usesToolbarSearch
         c.paletteActive = theme?.palette != nil
@@ -446,10 +454,15 @@ enum CommandRegistry {
                 keywords: ["maestro", "yaml", "flow", "exportar", "fluxo", "passos"],
                 disabledReason: motor ?? (c.stepCount == 0 ? Motivo.semPassos : nil)
             ),
+            // ⌘S contextual (R-05): com uma aba de arquivo da árvore à frente,
+            // salva a aba; com o Page Object da sessão, o `codegen.save` de antes.
             AppCommand(
-                id: .save, title: "Salvar Page Object", category: .automation, symbol: "square.and.arrow.down",
+                id: .save, title: c.openFileTab.map { "Salvar \($0)" } ?? "Salvar Page Object",
+                category: .automation, symbol: "square.and.arrow.down",
                 keywords: ["código", "gerar", "pages", "locators", "arquivo", "exportar"], shortcut: .cmd("s"),
-                disabledReason: motor ?? (c.hasCode ? nil : Motivo.semCodigo)
+                disabledReason: motor ?? (c.openFileTab != nil
+                    ? (c.openFileDirty ? nil : "Nada a salvar nesta aba")
+                    : (c.hasCode ? nil : Motivo.semCodigo))
             ),
             AppCommand(
                 id: .copyActions, title: "Copiar Código das Ações", category: .automation, symbol: "doc.on.doc",

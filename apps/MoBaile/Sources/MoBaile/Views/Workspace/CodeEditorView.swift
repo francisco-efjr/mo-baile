@@ -15,7 +15,7 @@ struct CodeEditorView: NSViewRepresentable {
     var python = true
     var editable = true
     /// Linha e coluna do cursor (a partir de 1), para o rodapé.
-    var onCursor: ((Int, Int) -> Void)? = nil
+    var cursor: CursorDoEditor? = nil
     @Environment(ThemeManager.self) var themeManager
     @AppStorage(EditorScheme.chave) private var escolhaDeEsquema = EditorScheme.pycharmID
 
@@ -35,24 +35,31 @@ struct CodeEditorView: NSViewRepresentable {
         textView.setAccessibilityLabel(accessibilityLabel)
         textView.isEditable = editable
 
-        // Texto que chega com CR ou CRLF entra como o PyCharm guardaria: `\n`.
-        let normalizado = EditorText.normalizarQuebras(text)
-        if normalizado != text {
-            DispatchQueue.main.async { self.text = normalizado }
-        }
-
         let esquema = EditorScheme.atual(tema, escolha: escolhaDeEsquema)
         let fonte = EditorFont.fonte()
         let assinatura = "\(escolhaDeEsquema)|\(tema.id)|\(tema.isDark)|\(tema.highContrast)|\(python)|\(fonte.fontName)"
         let esquemaMudou = coordinator.assinatura != assinatura
         textView.esquema = esquema
         textView.python = python
-        textView.font = fonte
+        // Atribuir `font` repinta o armazenamento inteiro: só quando muda (R-06).
+        if textView.font != fonte { textView.font = fonte }
         textView.typingAttributes = EditorFont.atributos(fonte, cor: esquema.texto)
 
-        coordinator.aplicando = true
-        let recriou = container.carregar(normalizado)
-        coordinator.aplicando = false
+        // Caminho rápido (R-06): o texto é o que este editor mandou ao estado
+        // na última tecla (mesmo armazenamento, comparação O(1)). Nada a
+        // normalizar nem a recarregar.
+        var recriou = false
+        if text != coordinator.ultimoTexto {
+            // Texto que chega com CR ou CRLF entra como o PyCharm guardaria: `\n`.
+            let normalizado = EditorText.normalizarQuebras(text)
+            if normalizado != text {
+                DispatchQueue.main.async { self.text = normalizado }
+            }
+            coordinator.aplicando = true
+            recriou = container.carregar(normalizado)
+            coordinator.aplicando = false
+            coordinator.ultimoTexto = normalizado
+        }
 
         let destaqueMudou = coordinator.destaque != highlight
         if esquemaMudou || destaqueMudou || (recriou && highlight != nil) {
@@ -75,8 +82,10 @@ struct CodeEditorView: NSViewRepresentable {
         container.gutterView.textColor = esquema.numeroLinha
         container.gutterView.currentLineTextColor = esquema.numeroLinhaAtual
         container.gutterView.font = EditorFont.fonte(tamanho: EditorFont.tamanho - 1)
-        container.gutterView.needsDisplay = true
-        textView.needsDisplay = true
+        if esquemaMudou || recriou {
+            container.gutterView.needsDisplay = true
+            textView.needsDisplay = true
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -102,22 +111,31 @@ struct CodeEditorView: NSViewRepresentable {
         /// Último destaque e esquema aplicados, para recolorir só quando mudam.
         var destaque: String?
         var assinatura: String?
+        /// O último texto que este editor carregou ou mandou ao estado.
+        var ultimoTexto: String?
 
         init(_ parent: CodeEditorView) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
-            guard !aplicando, let textView = notification.object as? NSTextView else { return }
-            parent.text = textView.string
+            guard !aplicando, let textView = notification.object as? CodeTextView else { return }
+            // Cópia nativa uma vez por tecla: o `updateNSView` seguinte
+            // reconhece o mesmo armazenamento sem comparar caractere a caractere.
+            let novo = EditorText.copiaNativa(textView.textStorage?.string ?? textView.string)
+            ultimoTexto = novo
+            parent.text = novo
             if let container = textView.enclosingScrollView?.superview as? IDEEditorContainerView {
-                container.updateGutterWidth(forLineCount: EditorText.linhasDoGutter(textView.string))
+                container.updateGutterWidth(forLineCount: textView.totalDeLinhas)
                 container.gutterView.needsDisplay = true
             }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView, let onCursor = parent.onCursor else { return }
-            let posicao = EditorText.linhaEColuna(em: textView.string as NSString, posicao: textView.selectedRange().location)
-            DispatchQueue.main.async { onCursor(posicao.linha, posicao.coluna) }
+            guard let textView = notification.object as? CodeTextView, let cursor = parent.cursor else { return }
+            let posicao = textView.linhaEColunaDoCursor()
+            DispatchQueue.main.async {
+                if cursor.linha != posicao.linha { cursor.linha = posicao.linha }
+                if cursor.coluna != posicao.coluna { cursor.coluna = posicao.coluna }
+            }
         }
     }
 }

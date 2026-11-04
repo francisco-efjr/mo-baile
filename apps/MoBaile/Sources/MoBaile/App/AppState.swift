@@ -34,6 +34,13 @@ class AppState {
     /// Painel Projeto (árvore da pasta de trabalho) na aba Page Objects, como
     /// a tool window Project do PyCharm (PO-5).
     var projectTreeVisible: Bool = true
+    /// Arquivos da árvore abertos em abas e a aba à frente (`nil` é o Page
+    /// Object da sessão). Aqui, e não na view, para sobreviver à troca de
+    /// área (R-01). Ações em `ArquivoAbertoPane.swift`.
+    var arquivosAbertos: [ArquivoAberto] = []
+    var arquivoAtivo: String? = nil
+    /// Aba cuja gravação esbarrou em conflito com o disco (R-04).
+    var conflitoDeArquivo: String? = nil
     /// Modal com a tabela ordenada dos passos gravados.
     var showingStructure: Bool = false
     /// Modal com a execucao visual do fluxo gravado.

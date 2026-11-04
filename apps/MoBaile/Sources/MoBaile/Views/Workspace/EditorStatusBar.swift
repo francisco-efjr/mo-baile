@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Posição do cursor para o rodapé. Objeto próprio, lido só pelo rodapé: mover
+/// o cursor não redesenha a aba Page Objects nem os editores (R-06).
+@Observable
+final class CursorDoEditor {
+    var linha = 1
+    var coluna = 1
+}
+
 /// O que estava nos editores no último `codegen.save` que deu certo.
 struct CodigoSalvo: Equatable {
     let acoes: String
@@ -27,8 +35,7 @@ enum EditorStatus {
 /// separador de linha, codificação, recuo, interpretador e estado salvo.
 struct EditorStatusBar: View {
     @Environment(ThemeManager.self) private var themeManager
-    let linha: Int
-    let coluna: Int
+    let cursor: CursorDoEditor
     let python: String?
     let pythonPath: String?
     let salvamento: (texto: String, sujo: Bool)?
@@ -41,7 +48,7 @@ struct EditorStatusBar: View {
     var body: some View {
         let theme = themeManager.current
         HStack(spacing: 14) {
-            item("\(linha):\(coluna)", falado: "Linha \(linha), coluna \(coluna)")
+            item("\(cursor.linha):\(cursor.coluna)", falado: "Linha \(cursor.linha), coluna \(cursor.coluna)")
             if !compacto {
                 item(separador, falado: "Separador de linha \(separador)")
                 item(codificacao, falado: "Codificação \(codificacao)")
