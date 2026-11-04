@@ -1610,8 +1610,10 @@ class EngineServer:
             strategy = LocatorStrategy(strategy_raw)
         except ValueError as exc:
             raise InvalidInputError(f"Estrategia invalida: {strategy_raw!r}") from exc
+        # A ancora sai da mesma arvore em que o toque foi resolvido (SYNC-8).
+        ancora = maestro_flow.choose_anchor(UIHierarchyParser.parse_xml(xml), element)
         var_name, object_code, action_code = self.codegen.generate_entry(
-            element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido
+            element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido, anchor=ancora
         )
         passos = self.codegen.get_steps()
         return {

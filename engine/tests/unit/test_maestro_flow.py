@@ -692,7 +692,7 @@ INTERMEDIARIA_CARREGANDO = tela(no(bounds="[0,80][1080,200]", texto="Detalhe"),
 def detalhe(y=2000, habilitado=True):
     return tela(
         no(bounds="[0,80][1080,200]", texto="Detalhe"),
-        no(bounds="[100,400][980,460]", texto="Total R$ 10"),
+        no(bounds="[100,400][980,460]", texto="Total R$ 10", rid="br.app:id/total"),
         no("android.widget.Button", f"[100,{y}][980,{y + 150}]", rid="br.app:id/btn_confirmar",
            clicavel=True, extra=f'enabled="{str(habilitado).lower()}"',
            filhos=no(bounds=f"[400,{y + 40}][680,{y + 110}]", texto="Confirmar")),
@@ -1068,6 +1068,96 @@ class SincroniaTest(unittest.TestCase):
                     conteudo = arquivo.read_text(encoding="utf-8")
                     self.assertNotIn("a&amp;b&quot;c&lt;d", conteudo)
                     self.assertIn("***", conteudo)
+
+
+
+# ----------------------------------------------------- ancora por passo (SYNC-8)
+
+# A tela intermediaria em que o botao ja existe, mas o conteudo ainda nao: o
+# seletor do passo casa nela, e so a ancora diz que a tela certa nao chegou.
+INTERMEDIARIA_COM_BOTAO = tela(
+    no(bounds="[0,80][1080,200]", texto="Detalhe"),
+    no("android.widget.Button", "[100,2000][980,2150]", rid="br.app:id/btn_confirmar", clicavel=True,
+       filhos=no(bounds="[400,2040][680,2110]", texto="Confirmar")),
+)
+
+
+class AncoraTest(unittest.TestCase):
+    def ancora(self, xml, x, y):
+        from mobaile.services.maestro_flow import choose_anchor
+
+        elementos = UIHierarchyParser.parse_xml(xml)
+        return choose_anchor(elementos, UIHierarchyParser.element_at(elementos, x, y))
+
+    def test_escolhe_o_id_unico_mais_perto_do_alvo_fora_dele(self):
+        # Toque em "Confirmar": o botao e o rotulo sao o proprio alvo; o titulo
+        # "Detalhe" esta mais longe que o total.
+        self.assertEqual(self.ancora(REAL, 540, 2075), {"id": "br.app:id/total"})
+
+    def test_sem_id_cai_no_texto_estavel_e_unico(self):
+        xml = tela(no(bounds="[0,80][1080,200]", texto="Detalhe"),
+                   no(bounds="[100,400][980,460]", texto="Total R$ 10"),
+                   no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True))
+        # "Total R$ 10" tem numero (muda com o pedido); sobra o titulo.
+        self.assertEqual(self.ancora(xml, 540, 2075), {"text": "Detalhe"})
+
+    def test_nunca_campo_editavel_senha_outro_pacote_id_de_sistema_nem_repetido(self):
+        xml = tela(
+            no("android.widget.EditText", "[100,300][980,380]", rid="br.app:id/email", texto="ana@exemplo.com"),
+            no(bounds="[0,0][1080,60]", rid="android:id/statusBarBackground"),
+            no(bounds="[100,500][980,560]", rid="br.app:id/linha"),
+            no(bounds="[100,600][980,660]", rid="br.app:id/linha"),
+            no("android.widget.ProgressBar", "[500,900][580,980]", rid="br.app:id/carregando"),
+            no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True),
+        ).replace('package="br.app" bounds="[0,0][1080,60]"', 'package="com.android.systemui" bounds="[0,0][1080,60]"')
+        self.assertIsNone(self.ancora(xml, 540, 2075))
+
+    def test_ancora_espera_a_tela_certa_quando_o_seletor_ja_casa_na_intermediaria(self):
+        roteiro = [TRANSICAO, INTERMEDIARIA_COM_BOTAO, INTERMEDIARIA_COM_BOTAO, INTERMEDIARIA_COM_BOTAO, REAL]
+        passos = [
+            PASSOS_G55[0],
+            replace(gravado(2, LocatorStrategy.ID, "(AppiumBy.ID, 'br.app:id/btn_confirmar')", (540, 2075),
+                            classe="android.widget.Button"), anchor={"id": "br.app:id/total"}),
+        ]
+        aparelho = AparelhoComCarregamento(roteiro)
+        r, _, _ = runner(aparelho)
+        resultado = r.run(flow_from_steps(passos))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertIs(aparelho.tocado_em[-1], REAL, "tocou o botao na tela intermediaria")
+        sem_ancora = AparelhoComCarregamento(roteiro)
+        runner(sem_ancora)[0].run(flow_from_steps([passos[0], replace(passos[1], anchor=None)]))
+        self.assertIs(sem_ancora.tocado_em[-1], INTERMEDIARIA_COM_BOTAO, "o cenario nao exercita a ancora")
+
+    def test_ancora_que_nao_aparece_segue_no_limite_sem_falhar(self):
+        passos = [replace(PASSOS_G55[0], anchor={"text": "Nunca aparece"})]
+        r, linhas, relogio = runner(AparelhoComCarregamento([REAL]))
+        resultado = r.run(flow_from_steps(passos))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertLess(relogio.t, 7)
+        self.assertTrue(any("opcional, seguindo" in linha for linha in linhas), linhas)
+
+    def test_ancora_vai_para_o_yaml_e_volta_pelo_leitor(self):
+        passos = [replace(PASSOS_G55[0], anchor={"id": "br.app:id/titulo"})]
+        yaml, _ = export_steps(passos, app_id="br.app")
+        self.assertIn("- extendedWaitUntil:", yaml)
+        self.assertIn('visible: {id: "br\\\\.app:id/titulo"}', yaml)
+        self.assertIn("optional: true", yaml)
+        flow = parse_flow(yaml)
+        espera = flow.steps[1]
+        self.assertEqual((espera.command, espera.optional, espera.timeout_s), ("assertVisible", True, 5.0))
+
+    def test_ancora_igual_ao_texto_digitado_fica_de_fora(self):
+        digitar = replace(PASSOS_G55[0], action_type="input", input_text="pizza calabresa")
+        seguinte = replace(PASSOS_G55[1], anchor={"text": "pizza calabresa"})
+        yaml, _ = export_steps([digitar, seguinte], app_id="br.app")
+        self.assertNotIn("extendedWaitUntil", yaml)
+        flow = flow_from_steps([digitar, seguinte])
+        self.assertNotIn("assertVisible", [s.command for s in flow.steps[1].steps])
+
+    def test_passo_sem_ancora_continua_como_antes(self):
+        self.assertIsNone(PASSOS_G55[0].anchor)
+        self.assertIsNone(PASSOS_G55[0].to_dict()["anchor"])
+        self.assertEqual([s.command for s in flow_from_steps(PASSOS_G55).steps[0].steps], ["tapOn"])
 
 
 if __name__ == "__main__":

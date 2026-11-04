@@ -145,6 +145,9 @@ class AutomationStep:
     # Hora da gravacao no relogio do Mac (epoch), o mesmo das requisicoes e
     # dos eventos de analytics: e o que permite correlacionar os tres (F5).
     recorded_at: float = 0.0
+    # Um elemento estavel da tela onde o passo foi gravado (`{"id": ...}` ou
+    # `{"text": ...}`): a reproducao espera por ele antes de agir (SYNC-8).
+    anchor: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         strategy = self.strategy.value if isinstance(self.strategy, LocatorStrategy) else str(self.strategy)
@@ -161,6 +164,7 @@ class AutomationStep:
             "input_text": self.input_text,
             "package": self.package,
             "platform": self.platform,
+            "anchor": dict(self.anchor) if self.anchor else None,
         }
 
 

@@ -76,6 +76,9 @@ ENABLED_TIMEOUT_S = 2.0
 FOCUS_TIMEOUT_S = 3.0
 # Depois do launchApp, quanto esperar o app chegar ao primeiro plano (Android).
 LAUNCH_FOREGROUND_TIMEOUT_S = 10.0
+# Espera pela ancora de um passo gravado. Opcional: ancora que nao aparece
+# (conteudo que mudou) custa este tempo e um aviso, nunca a falha do flow.
+ANCHOR_TIMEOUT_S = 5.0
 # Rastro das telas lidas: quantas telas diferentes por flow e quantas execucoes guardar.
 TRACE_MAX_SCREENS = 60
 TRACE_KEEP_RUNS = 5
@@ -1551,6 +1554,69 @@ def selector_from_step(passo: AutomationStep) -> dict[str, str]:
     return {"point": f"{int(x)},{int(y)}"}
 
 
+def _ancora_valida(passo: AutomationStep, digitados: set[str]) -> dict[str, str] | None:
+    """A ancora do passo como seletor (regex literal), ou `None`.
+
+    Fica de fora a ancora que repete um texto digitado: no YAML ela viraria o
+    valor em claro, e na reproducao seria a mesma coisa que o campo mostra.
+    """
+    if not passo.anchor or len(passo.anchor) != 1:
+        return None
+    chave, valor = next(iter(passo.anchor.items()))
+    if chave not in ("id", "text") or not isinstance(valor, str) or not valor or valor in digitados:
+        return None
+    return {chave: _literal_regex(valor)}
+
+
+_ID_DE_SISTEMA = re.compile(r"(android|com\.android\.systemui):id/")
+_EDITAVEL = re.compile(r"EditText|TextField|SearchField|AutoComplete", re.IGNORECASE)
+
+
+def choose_anchor(elementos: list[UIElement], alvo: UIElement | None) -> dict[str, str] | None:
+    """Um elemento da tela da gravacao que diz "esta e a tela do passo" (SYNC-8).
+
+    O mais perto do alvo, fora o proprio alvo, os pais e os filhos (esses ja
+    estao no localizador do passo): o conteudo perto do alvo chega com ele, e o
+    titulo da toolbar costuma aparecer antes, ainda na tela intermediaria. Vale
+    primeiro o resource-id unico na tela; sem ele, o texto unico, curto e sem
+    numero (preco, hora e contagem mudam a cada execucao). Nunca campo
+    editavel nem senha, que podem ter dado pessoal, nem indicador de
+    carregamento, nem elemento de outro pacote (teclado, barra do sistema).
+    """
+    if alvo is None or not elementos:
+        return None
+    tela = max(elementos, key=lambda e: e.area).bounds
+    ax1, ay1, ax2, ay2 = alvo.bounds
+    cx, cy = alvo.center
+    ids: dict[str, int] = {}
+    rotulos: dict[str, int] = {}
+    for e in elementos:
+        if e.resource_id:
+            ids[e.resource_id] = ids.get(e.resource_id, 0) + 1
+        for r in {e.text.strip(), e.content_desc.strip()} - {""}:
+            rotulos[r] = rotulos.get(r, 0) + 1
+    candidatos = []
+    for e in elementos:
+        x1, y1, x2, y2 = e.bounds
+        if (e.area <= 0 or (x1 <= ax1 and y1 <= ay1 and x2 >= ax2 and y2 >= ay2)
+                or (x1 >= ax1 and y1 >= ay1 and x2 <= ax2 and y2 <= ay2)):
+            continue
+        if not (tela[0] <= e.center[0] <= tela[2] and tela[1] <= e.center[1] <= tela[3]):
+            continue
+        if e.password or _EDITAVEL.search(e.class_name) or _indicador([e]) is not None:
+            continue
+        if alvo.package and e.package and e.package != alvo.package:
+            continue
+        distancia = abs(e.center[0] - cx) + abs(e.center[1] - cy)
+        if e.resource_id and ids[e.resource_id] == 1 and not _ID_DE_SISTEMA.match(e.resource_id):
+            candidatos.append((0, distancia, {"id": e.resource_id}))
+            continue
+        rotulo = (e.text or e.content_desc or "").strip()
+        if 2 <= len(rotulo) <= 40 and not re.search(r"\d", rotulo) and rotulos.get(rotulo) == 1:
+            candidatos.append((1, distancia, {"text": rotulo}))
+    return min(candidatos, key=lambda c: (c[0], c[1]))[2] if candidatos else None
+
+
 def _seletor_yaml(sel: dict[str, str]) -> str:
     if list(sel) == ["text"]:
         return _yaml_str(sel["text"])
@@ -1583,9 +1649,14 @@ def export_steps(
     if launch and app:
         linhas.append("- launchApp")
     variaveis: list[str] = []
+    digitados = set(_formas_do_digitado(passos))
     for passo in passos:
         rotulo = mascarar(passo.element_name or passo.var_name)
         linhas.append(f"# passo {passo.step_num}: {rotulo}".replace("\n", " "))
+        ancora = _ancora_valida(passo, digitados)
+        if ancora:
+            linhas += ["- extendedWaitUntil:", f"    visible: {_seletor_yaml(ancora)}",
+                       f"    timeout: {int(ANCHOR_TIMEOUT_S * 1000)}", "    optional: true"]
         # A coordenada nunca carrega texto digitado, e mascara-la a quebraria.
         seletor = {k: v if k == "point" else mascarar(v) for k, v in selector_from_step(passo).items()}
         linhas.append(f"- tapOn: {_seletor_yaml(seletor)}")
@@ -1632,6 +1703,7 @@ def flow_from_steps(passos: list[AutomationStep], *, abrir_app: bool = False) ->
     """
     if not passos:
         raise InvalidInputError("Nenhum passo gravado para executar.")
+    digitados = set(_formas_do_digitado(passos))
     inicio: tuple[Step, ...] = ()
     if abrir_app:
         app = next((p.package for p in passos if p.package), "")
@@ -1649,6 +1721,11 @@ def flow_from_steps(passos: list[AutomationStep], *, abrir_app: bool = False) ->
             passo.element_name or "") else None
         subpassos = [Step("tapOn", selector=Selector(**seletor), expect_class=classe,
                           source=f"passo {passo.step_num}")]
+        ancora = _ancora_valida(passo, digitados)
+        if ancora:
+            subpassos.insert(0, Step("assertVisible", selector=Selector(**ancora), optional=True,
+                                     timeout_s=ANCHOR_TIMEOUT_S, label=f"esperar a tela do passo {passo.step_num}",
+                                     source=f"passo {passo.step_num}"))
         if passo.action_type == "input":
             subpassos.append(Step("inputText", text=passo.input_text or None, source=f"passo {passo.step_num}"))
         nota = " (coordenada gravada: sem localizador estavel)" if "point" in seletor else ""

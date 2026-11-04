@@ -574,7 +574,8 @@
           ],
           "input_text": null,
           "package": "br.app",
-          "platform": "android"
+          "platform": "android",
+          "anchor": null
         }
       ]
     }

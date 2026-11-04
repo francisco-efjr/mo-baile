@@ -153,6 +153,27 @@ class TestAbrirAppAntes(FluxoBase):
         self.assertIn("launch_app", resposta["error"]["message"])
 
 
+class TestAncoraNaGravacao(FluxoBase):
+    """SYNC-8: a gravacao guarda um elemento estavel da tela, fora o alvo."""
+
+    def test_toque_no_campo_ancora_no_botao_e_toque_no_botao_fica_sem_ancora(self):
+        # A tela do aparelho falso tem so o campo (editavel: nunca vira ancora) e o botao.
+        self.gravar_android((540, 340, "id"), (540, 480, "id"))
+        campo, botao = self.server.codegen.get_steps()
+        self.assertEqual(campo.anchor, {"id": "br.app:id/btn_continuar"})
+        self.assertIsNone(botao.anchor)
+
+    def test_flow_gravado_espera_a_ancora_e_passa(self):
+        self.gravar_android((540, 340, "id"))
+        self.assertTrue(self.server.codegen.set_last_input_text("abc"))
+        self.adb.teclado(True)
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+        self.assertTrue(fim["success"], fim)
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        self.assertTrue(any("esperar a tela do passo 1" in linha for linha in linhas), linhas)
+
+
 class TestDigitacaoIOS(FluxoBase):
     """F3: no iOS o passo de digitacao digitava nada e era dado como sucesso."""
 
