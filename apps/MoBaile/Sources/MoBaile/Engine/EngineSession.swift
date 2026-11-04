@@ -944,7 +944,6 @@ final class EngineSession {
         guard let client else { return }
         do {
             let status: EngineDTO.PerfStatus = try await client.call("perf.signals", params: perfSensors.current.params)
-            state.perf.semMotor = false
             applyPerf(status)
         } catch {
             state.perf.semMotor = true
@@ -964,7 +963,10 @@ final class EngineSession {
         }
     }
 
+    /// Qualquer resposta do motor (sinais, preferência ou `perf.profile`)
+    /// prova que ele está vivo: o freio local sai aqui (R2).
     private func applyPerf(_ status: EngineDTO.PerfStatus) {
+        state.perf.semMotor = false
         state.perf.profile = status.profile
         state.perf.reason = status.reason
         state.perf.vidro = status.knobs.vidro

@@ -95,6 +95,34 @@ final class PerfTests: XCTestCase {
         XCTAssertEqual(estado.perf.profile, "completo", "o Swift não decide perfil: só a parte visual")
     }
 
+    /// R2: o freio local não fica preso com o motor vivo.
+    func testRespostaDoMotorTiraOFreioLocal() async throws {
+        let estado = AppState()
+        let motor = FakeEngine(
+            respostas: try resultadosDasFixtures(),
+            erros: ["perf.signals": .timeout(method: "perf.signals", seconds: 5)]
+        )
+        let sessao = EngineSession(state: estado, client: motor)
+        await sessao.sendPerfSignals()
+        XCTAssertTrue(estado.perf.semMotor)
+
+        // Escolher em Ajustes: a resposta do `perf.set_preference` basta.
+        await sessao.setPerfPreference(.completo)
+        XCTAssertFalse(estado.perf.semMotor)
+
+        await sessao.sendPerfSignals()
+        XCTAssertTrue(estado.perf.semMotor)
+        // A notificação `perf.profile` também prova que o motor está vivo.
+        await sessao.handle(EngineNotification(method: "perf.profile", payload: try avisoDePerfil()))
+        XCTAssertFalse(estado.perf.semMotor)
+    }
+
+    private func avisoDePerfil() throws -> Data {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "engine_payloads", withExtension: "json"))
+        let raiz = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        return try JSONSerialization.data(withJSONObject: try XCTUnwrap(raiz["notif_perf.profile"]))
+    }
+
     func testNotificacaoDePerfilAtualizaOEstado() async throws {
         let (estado, _, sessao) = try sessao()
         let url = try XCTUnwrap(Bundle.module.url(forResource: "engine_payloads", withExtension: "json"))
