@@ -44,6 +44,9 @@ struct CommandPerformer {
             appState.toggleMirror()
         case .workspace:
             withAnimation(Motion.smooth()) { appState.workspaceVisible.toggle() }
+        case .projectTree:
+            appState.workspaceTab = .pageObjects
+            withAnimation(Motion.smooth()) { appState.projectTreeVisible.toggle() }
         case .allPanels:
             withAnimation(Motion.smooth()) { appState.restoreAllPanels() }
         case .zen:

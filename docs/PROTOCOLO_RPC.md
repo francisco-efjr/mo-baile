@@ -265,7 +265,18 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `codegen.record` | `x`, `y`, `strategy` | nome da variável, linha do Page Object (`NOME = (AppiumBy.X, "valor")`), bloco da ação (`def` + `wait_to_be_visible(..., 15)` + `click(..., 2)` ou `send_keys`). A coordenada não entra no código: fica no passo, em `coords` |
 | `codegen.steps` | — | passos gravados. Desde a 3.6 cada passo traz `recorded_at` (epoch do Mac na gravação; `null` em passo antigo), e `codegen.record`/`passive.step` trazem `step_num` e `recorded_at` do passo criado |
 | `codegen.reset` | — | limpa a gravação |
-| `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos. `directory` precisa ficar dentro de `~/Documents/Mo baile` (link simbólico e `..` resolvidos); fora dele, `invalid_input` |
+| `codegen.save` | `key`, `directory`, `actions_code`, `locators_code` | grava `pages/<key>.py` e `locators/<key>.py` e devolve os caminhos. `directory` precisa ficar dentro de `~/Documents/Mo baile` (link simbólico e `..` resolvidos); fora dele, `invalid_input`. Grava os bytes do PyCharm: CR e CRLF viram LF, UTF-8 sem BOM, sem normalização Unicode, sem tirar espaço do fim nem forçar quebra final |
+
+### Árvore Projeto (Page Objects)
+
+Desde a PO-5 (rodada 2026-11-03). Só a pasta de trabalho `~/Documents/Mo baile`, e só `pages/`, `locators/` e `flows/`. `path` é relativo à pasta (`pages/tela.py`), sem `..`, sem link simbólico em nenhum nível, com extensão `.py`, `.yaml`, `.yml`, `.json`, `.txt` ou `.md`; fora disso, `invalid_input`.
+
+| Método | Parâmetros | Devolve |
+|---|---|---|
+| `workspace.tree` | — | `{root, name, exists, nodes, truncated}`. Cada nó tem `name`, `path` e `kind` (`dir` ou `file`); pasta traz `children`, pastas primeiro e nomes em ordem alfabética. Ocultos e links simbólicos ficam de fora; no máximo 2.000 nós (`truncated`) |
+| `workspace.read` | `path` | `{path, text, encoding, line_separator, bom, read_only, size}`. `text` vem com LF; o separador original (`LF`, `CRLF` ou `CR`, o primeiro do arquivo) vai em `line_separator`. Arquivo que não é UTF-8 vem com `read_only: true`. Acima de 1 MB, `invalid_input` |
+| `workspace.write` | `path`, `text`, `line_separator?` (`LF`), `bom?` (`false`) | grava com o separador e o BOM pedidos (o front devolve os que leu) e devolve `{path, saved, bytes}`. Cria a pasta se faltar. Recusa regravar arquivo que não é UTF-8 |
+
 
 ### Execução de fluxo
 

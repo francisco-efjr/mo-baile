@@ -1191,17 +1191,26 @@ final class EngineSession {
     func saveCode() async {
         guard let client else { return }
         do {
+            let (acoes, locators) = (state.actionsCode, state.locatorsCode)
             let resultado: EngineDTO.SaveResult = try await client.call(
                 "codegen.save",
                 params: [
-                    "actions_code": .string(state.actionsCode),
-                    "locators_code": .string(state.locatorsCode),
+                    "actions_code": .string(acoes),
+                    "locators_code": .string(locators),
                 ]
             )
+            state.codigoSalvo = CodigoSalvo(acoes: acoes, locators: locators, em: Date(), caminho: resultado.paths.first)
             state.statusMessage = "Salvo em \(resultado.directory)"
         } catch {
             report(error)
         }
+    }
+
+    /// Chamada avulsa para quem guarda o resultado no próprio estado (a árvore
+    /// Projeto, `EngineDTO+Workspace.swift`). Sem motor, `notRunning`.
+    func chamarMotor<R: Decodable & Sendable>(_ metodo: String, params: [String: JSONValue] = [:]) async throws -> R {
+        guard let client else { throw EngineError.notRunning }
+        return try await client.call(metodo, params: params)
     }
 
     /// Grava os passos como flow do Maestro em `~/Documents/Mo baile/flows/`

@@ -81,7 +81,10 @@
         "stream.stats",
         "stream.stop",
         "wda.start",
-        "wda.status"
+        "wda.status",
+        "workspace.read",
+        "workspace.tree",
+        "workspace.write"
       ],
       "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
     }
@@ -344,6 +347,21 @@
           "progress": false
         },
         "codegen.save": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.tree": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.read": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.write": {
           "lane": "fast",
           "timeout_s": 15,
           "progress": false
@@ -1068,6 +1086,64 @@
           "Tela Ambiente"
         ]
       }
+    }
+  },
+  "workspace.tree": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "root": "/Users/qa/Documents/Mo baile",
+      "name": "Mo baile",
+      "exists": true,
+      "nodes": [
+        {
+          "name": "flows",
+          "path": "flows",
+          "kind": "dir",
+          "children": [
+            {
+              "name": "login.yaml",
+              "path": "flows/login.yaml",
+              "kind": "file"
+            }
+          ]
+        },
+        {
+          "name": "pages",
+          "path": "pages",
+          "kind": "dir",
+          "children": [
+            {
+              "name": "feature.py",
+              "path": "pages/feature.py",
+              "kind": "file"
+            }
+          ]
+        }
+      ],
+      "truncated": false
+    }
+  },
+  "workspace.read": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "pages/feature.py",
+      "text": "def tocar(self):\n    pass\n",
+      "encoding": "UTF-8",
+      "line_separator": "CRLF",
+      "bom": false,
+      "read_only": false,
+      "size": 28
+    }
+  },
+  "workspace.write": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "pages/feature.py",
+      "saved": true,
+      "bytes": 28
     }
   },
   "simulators.list": {

@@ -33,6 +33,7 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
     static let zen: CommandID = "view.zen"
     static let appearance: CommandID = "view.appearance"
     static let search: CommandID = "view.search"
+    static let projectTree: CommandID = "view.projectTree"
 
     static func selectDevice(_ id: String) -> CommandID { CommandID(rawValue: "device.select:\(id)") }
     static func switchPlatform(_ platform: Platform) -> CommandID { CommandID(rawValue: "device.platform.\(platform.rawValue)") }
@@ -172,6 +173,7 @@ struct CommandContext: Equatable, Sendable {
     var inspectorSuppressed = false
     var mirrorVisible = true
     var workspaceVisible = true
+    var projectTreeVisible = true
     var zenMode = false
     var usesToolbarSearch = false
     var paletteActive = false
@@ -226,6 +228,7 @@ extension CommandContext {
         c.inspectorSuppressed = appState.inspectorSuppressed
         c.mirrorVisible = appState.mirrorVisible
         c.workspaceVisible = appState.workspaceVisible
+        c.projectTreeVisible = appState.projectTreeVisible
         c.zenMode = appState.zenMode
         c.usesToolbarSearch = appState.usesToolbarSearch
         c.paletteActive = theme?.palette != nil
@@ -296,6 +299,12 @@ enum CommandRegistry {
                 id: .workspace, title: c.workspaceVisible ? "Ocultar Workspace" : "Mostrar Workspace",
                 category: .view, symbol: "rectangle.split.2x1", keywords: ["código", "editor", "painel", "alternar"],
                 shortcut: .option("2")
+            ),
+            // Tool window Project do PyCharm (⌘1 lá). Aqui o ⌘1 já é a área
+            // Page Objects (D-2), então a ação fica só na paleta.
+            AppCommand(
+                id: .projectTree, title: c.projectTreeVisible ? "Ocultar Projeto" : "Mostrar Projeto",
+                category: .view, symbol: "folder", keywords: ["árvore", "arquivos", "pycharm", "pasta", "alternar"]
             ),
             AppCommand(
                 id: .allPanels, title: "Mostrar Todos os Painéis", category: .view, symbol: "rectangle.3.group",

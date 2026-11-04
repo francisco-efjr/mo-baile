@@ -78,7 +78,7 @@ from mobaile.security import (
     validate_integer,
     validate_number,
 )
-from mobaile.services import flows, maestro_flow
+from mobaile.services import flows, maestro_flow, workspace
 from mobaile.services.codegen import CodeGenerator
 from mobaile.services.devices import DeviceWatcher
 from mobaile.services.diagnostics import DiagnosticsService
@@ -193,6 +193,15 @@ class _Lane:
 def _dentro_de(caminho: pathlib.Path, raiz: pathlib.Path) -> bool:
     """`caminho`, com links simbolicos e `..` resolvidos, fica sob `raiz`?"""
     return caminho.resolve().is_relative_to(raiz.resolve())
+
+
+def _texto_com_lf(texto: str) -> str:
+    """CRLF e CR soltos viram LF, como no documento do PyCharm.
+
+    So esses dois: U+2028 e U+2029 nao sao separador de linha no PyCharm e
+    ficam no texto.
+    """
+    return texto.replace("\r\n", "\n").replace("\r", "\n")
 
 
 class EngineServer:
@@ -338,6 +347,9 @@ class EngineServer:
             "codegen.steps": self.codegen_steps,
             "codegen.reset": self.codegen_reset,
             "codegen.save": self.codegen_save,
+            "workspace.tree": self.workspace_tree,
+            "workspace.read": self.workspace_read,
+            "workspace.write": self.workspace_write,
             "flow.run": self.flow_run,
             "flow.stop": self.flow_stop,
             "flow.status": self.flow_status,
@@ -1685,12 +1697,33 @@ class EngineServer:
             if not _dentro_de(arquivo, raiz):
                 raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
             pasta.mkdir(parents=True, exist_ok=True)
-            arquivo.write_text(conteudo, encoding="utf-8")
+            # Bytes do PyCharm (PO-1): toda quebra de linha vira `\n`, UTF-8
+            # sem BOM, sem normalizacao Unicode, sem tirar espaco do fim nem
+            # forcar quebra final. `newline="\n"` impede a traducao do modo
+            # texto, que em outro sistema trocaria `\n` por `os.linesep`.
+            arquivo.write_text(_texto_com_lf(conteudo), encoding="utf-8", newline="\n")
             escritos.append(str(arquivo))
 
         logger.info("Page Object gravado em %s", destino)
         self._remember("page_object", f"{chave}.py", "Page Object · Python/Appium", escritos[0])
         return {"saved": True, "paths": escritos, "directory": str(destino)}
+
+    # --------------------------------------------- arvore Projeto (PO-5)
+
+    def workspace_tree(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Pastas `pages`, `locators` e `flows` da pasta de trabalho."""
+        return workspace.arvore(workspace.raiz_padrao())
+
+    def workspace_read(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Um arquivo da arvore, com o texto em LF e o separador a parte."""
+        return workspace.ler(workspace.raiz_padrao(), params.get("path"))
+
+    def workspace_write(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Grava com o separador e o BOM que o arquivo tinha (o front devolve)."""
+        return workspace.gravar(
+            workspace.raiz_padrao(), params.get("path"), params.get("text"),
+            params.get("line_separator", "LF"), params.get("bom", False),
+        )
 
     # ------------------------------------------------------- escuta passiva
 

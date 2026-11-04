@@ -125,6 +125,18 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertTrue(rotulos.contains("Copiar localizadores"), "\(rotulos)")
     }
 
+    /// PO-4: o rodapé fala como a status bar do PyCharm, item a item, e não
+    /// diz mais "Código sincronizado" com o código sem salvar.
+    func testRodapeDoEditorFalaPosicaoEEstadoSalvo() throws {
+        let ax = try arvore(PageObjectsView(), largura: 1100, altura: 400)
+        // Texto estático vai para o valor; o VoiceOver lê o valor.
+        let falado = Set(ax.all.flatMap { [$0.label, $0.value] })
+        for rotulo in ["Linha 1, coluna 1", "Separador de linha LF", "Codificação UTF-8", "Recuo de 4 espaços", "não salvo"] {
+            XCTAssertTrue(falado.contains(rotulo), "falta \(rotulo)\n\(ax.dump)")
+        }
+        XCTAssertNil(ax.node(label: "Código sincronizado"), ax.dump)
+    }
+
     /// Defeito: as duas áreas de código eram anunciadas apenas como "área de
     /// texto", sem dizer qual era qual.
     func testAreasDeCodigoTemNome() throws {

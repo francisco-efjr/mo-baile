@@ -31,6 +31,9 @@ class AppState {
 
     /// Mostra os dois editores lado a lado, ou só o de ações.
     var splitEditors: Bool = false
+    /// Painel Projeto (árvore da pasta de trabalho) na aba Page Objects, como
+    /// a tool window Project do PyCharm (PO-5).
+    var projectTreeVisible: Bool = true
     /// Modal com a tabela ordenada dos passos gravados.
     var showingStructure: Bool = false
     /// Modal com a execucao visual do fluxo gravado.
@@ -47,6 +50,9 @@ class AppState {
     var steps: [AutomationStep] = []
     var actionsCode: String = ""
     var locatorsCode: String = ""
+    /// Código do último `codegen.save` que deu certo: o rodapé do editor
+    /// compara para dizer "não salvo" ou "salvo às hh:mm" (PO-4).
+    var codigoSalvo: CodigoSalvo? = nil
     
     // --- Network Traffic ---
     var httpRequests: [NetworkEvent] = []
