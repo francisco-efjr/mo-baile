@@ -124,6 +124,11 @@ METHODS: dict[str, dict[str, Any]] = {
     # flow nem escuta passiva (`kept_for`).
     "stream.pause": _spec(),
     "stream.resume": _spec(),
+    # Perfis de desempenho (PERF-3). `signals` com prazo curto: sem resposta,
+    # o front aplica sozinho a parte visual do modo leve (freio local).
+    "perf.signals": _spec(timeout_s=5),
+    "perf.set_preference": _spec(),
+    "perf.status": _spec(),
     "scrcpy.start": _spec(),
     "scrcpy.stop": _spec(),
     "scrcpy.status": _spec(),
@@ -191,6 +196,7 @@ NOTIFICATIONS: tuple[str, ...] = (
     "flow.log",
     "flow.step",
     "flow.finished",
+    "perf.profile",
     PROGRESS,
 )
 

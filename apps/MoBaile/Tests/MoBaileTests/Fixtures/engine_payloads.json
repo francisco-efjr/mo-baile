@@ -52,6 +52,9 @@
         "passive.start",
         "passive.status",
         "passive.stop",
+        "perf.set_preference",
+        "perf.signals",
+        "perf.status",
         "proxy.clear",
         "proxy.diagnose",
         "proxy.events",
@@ -265,6 +268,21 @@
           "timeout_s": 15,
           "progress": false
         },
+        "perf.signals": {
+          "lane": "fast",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "perf.set_preference": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "perf.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
         "scrcpy.start": {
           "lane": "fast",
           "timeout_s": 15,
@@ -449,6 +467,7 @@
         "flow.log",
         "flow.step",
         "flow.finished",
+        "perf.profile",
         "$/progress"
       ],
       "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
@@ -631,6 +650,144 @@
     "id": 1,
     "result": {
       "running": false
+    }
+  },
+  "stream.pause": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "paused": false,
+      "kept_for": null
+    }
+  },
+  "stream.resume": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "paused": false,
+      "kept_for": null
+    }
+  },
+  "perf.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "completo",
+      "reason": "sinais_normais",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 6.0,
+        "stream_idle_fps": 2.0,
+        "stream_max_width": 900,
+        "stream_quality": 80,
+        "stream_capture_jpeg": false,
+        "poll_interval": 1.5,
+        "proxy_history": 2000,
+        "analytics_history": 5000,
+        "glass": true,
+        "animations": true
+      },
+      "signals": {
+        "thermal": "nominal",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": null,
+        "arch": null,
+        "translated": false
+      },
+      "improving": false
+    }
+  },
+  "perf.signals": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "leve",
+      "reason": "thermal_serious",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_history": 500,
+        "analytics_history": 2000,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "improving": false
+    }
+  },
+  "notif_perf.profile": {
+    "jsonrpc": "2.0",
+    "method": "perf.profile",
+    "params": {
+      "profile": "leve",
+      "reason": "thermal_serious",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_history": 500,
+        "analytics_history": 2000,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "improving": false
+    }
+  },
+  "perf.set_preference": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "leve",
+      "reason": "manual",
+      "preference": "leve",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_history": 500,
+        "analytics_history": 2000,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "improving": false
     }
   },
   "proxy.events": {

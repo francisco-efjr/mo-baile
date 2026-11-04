@@ -41,6 +41,7 @@ Mensagem sem `id`, empurrada pelo motor. A interface não faz polling.
 | `flow.log` | Uma linha de saída da execução do fluxo |
 | `flow.step` | Começou um passo de nível superior do fluxo: `{index, total}`, com `index` a partir de 1. Vale para `flow.run` (cada passo gravado) e `flow.maestro_run` (cada comando de topo do YAML; `onFlowStart`, `onFlowComplete` e os subpassos de `runFlow`/`retry` não contam). Sem `run_id`: a trava de execução já impede duas ao mesmo tempo (3.12.0) |
 | `flow.finished` | A execução do fluxo terminou, com `success`, `message` e `cancelled`. `cancelled` é `true` quando a execução parou por `flow.stop` (ou encerramento do motor); nesse caso `success` é sempre `false`, então quem não lê `cancelled` continua sem contar a parada como aprovada. `cancelled` existe desde a 3.12.0: front que fala com motor anterior trata a ausência como `false` |
+| `perf.profile` | O perfil de desempenho efetivo mudou. Mesmo formato de `perf.status`. Ver "Perfis de desempenho" |
 | `$/progress` | Andamento de um método longo. Ver "Progresso" |
 
 ## Erros
@@ -108,7 +109,7 @@ serial por domínio**. Uma chamada lenta numa fila não atrasa as outras filas.
 | Fila | Para quê | Métodos |
 |---|---|---|
 | `inline` | responde na própria thread de leitura, sempre em milissegundos | `engine.hello`, `engine.shutdown`, `$/cancelRequest` |
-| `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
+| `fast` | interação e estado; nada ali passa de uns 2 s | o padrão: `input.*`, `stream.*`, `perf.*`, `codegen.*`, `session.*`, `devices.watch_*`, `hierarchy.element_at`, `engine.info`, `scrcpy.*`, `recording.status`, `passive.status` |
 | `capture` | leitura de tela e árvore, que pode levar segundos, e a escuta passiva | `hierarchy.dump`, `screen.capture`, `screen.size`, `passive.start`, `passive.stop` |
 | `services` | serviços de fundo que o motor liga e desliga | `proxy.*`, `analytics.*` (menos `analytics.ios_devices`), `flow.*`, `recording.start`, `recording.stop` |
 | `query` | consultas ao ambiente, que levam segundos mas nunca minutos | `devices.list`, `wda.status`, `simulators.list`, `emulators.list`, `diagnostics.check`, `setup.check`, `home.summary`, `analytics.ios_devices` |
@@ -234,7 +235,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80), `idle_fps` (cadência com a tela parada; `0` desliga) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
+| `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95), `idle_fps` (cadência com a tela parada; `0` desliga). O que não vier sai do perfil de desempenho (completo: 6 fps, 900 px, 80, 2) e acompanha as trocas de perfil com o espelho ligado | confirma o início; devolve `fps`, `max_width`, `format`, `quality`, `idle_fps`, `profile` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
 | `stream.pause` | — | para de capturar sem desligar o espelho (janela oculta, coberta ou minimizada). Vale também para o espelho que ligar depois, até o `stream.resume`. Durante `flow.run`, `flow.maestro_run` ou a escuta passiva o espelho continua, e a pausa passa a valer quando eles terminam. Devolve `{running, paused, kept_for}`: `kept_for` é `flow`, `passive` ou nulo. Idempotente |
@@ -284,6 +285,31 @@ O formato e o que fica de fora estão em
 [research/maestro-modelo-de-automacao.md](research/maestro-modelo-de-automacao.md).
 Ler YAML pede o PyYAML no Python do motor; sem ele, os três métodos devolvem
 `invalid_input` explicando o que instalar, e o resto do motor segue igual.
+
+### Perfis de desempenho
+
+Três perfis, `completo`, `equilibrado` e `leve`, mais a preferência `auto`, que
+escolhe entre eles. A política mora no motor (`services/perf.py`); o front manda
+os sinais do Mac e aplica a parte visual (`knobs.glass`, `knobs.animations`). O
+motor aplica a dele no que estiver ligado: cadência, largura e qualidade do
+espelho que o chamador não fixou no `stream.start`, intervalo do vigia de
+aparelhos sem `poll_interval` pedido, e o teto dos históricos de rede e
+analytics. O leve reduz apresentação e cadência, nunca captura: todo
+`proxy.event` e `analytics.event` continua saindo.
+
+Regras: o sinal do sistema piora o perfil na hora; a melhora espera 60 s com o
+alvo melhor e sobe um degrau por vez (`reason: "recuperando"` no degrau do
+meio); a escolha manual vale na hora e ganha do automático, exceto com
+`thermal: "critical"`, que leva ao leve em qualquer preferência.
+
+| Método | Parâmetros | Devolve |
+|---|---|---|
+| `perf.signals` | qualquer subconjunto de `thermal` (`nominal`, `fair`, `serious`, `critical`), `low_power` (bool), `memory_pressure` (`normal`, `warning`, `critical`), `physical_memory_gb` (número), `arch` (`arm64`, `x86_64`), `translated` (bool, Rosetta). Campo ausente fica como estava | o status. Prazo de 5 s: sem resposta, o front aplica sozinho a parte visual do leve |
+| `perf.set_preference` | `preference`: `auto`, `completo`, `equilibrado` ou `leve` | o status |
+| `perf.status` | — | `{profile, reason, preference, knobs, signals, improving}`. `reason`: `manual`, `sinais_normais`, `recuperando`, `thermal_fair`, `thermal_serious`, `thermal_critical`, `low_power`, `memory_warning`, `memory_critical` ou `hardware_modesto` (até 8 GB, Intel ou Python sob Rosetta). `knobs`: `stream_fps`, `stream_idle_fps`, `stream_max_width`, `stream_quality`, `stream_capture_jpeg`, `poll_interval`, `proxy_history`, `analytics_history`, `glass`, `animations` |
+
+Entrada inválida é `invalid_input`. Sem o front mandar nada, o motor fica em
+`completo` com os valores de antes (6 fps, 900 px, JPEG 80, vigia a 1,5 s).
 
 ### Escuta passiva
 
