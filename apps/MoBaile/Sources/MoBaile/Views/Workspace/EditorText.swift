@@ -38,6 +38,35 @@ enum EditorText {
         return total
     }
 
+    /// Quebras de linha (LF; o editor só guarda LF) numa faixa UTF-16. Lê em
+    /// blocos com `getCharacters`, sem uma chamada por caractere (R-06).
+    static func quebras(em texto: NSString, faixa: NSRange) -> Int {
+        var total = 0
+        var bloco = [unichar](repeating: 0, count: 4096)
+        var inicio = faixa.location
+        let fim = NSMaxRange(faixa)
+        while inicio < fim {
+            let tamanho = min(bloco.count, fim - inicio)
+            texto.getCharacters(&bloco, range: NSRange(location: inicio, length: tamanho))
+            for i in 0..<tamanho where bloco[i] == 0x0A { total += 1 }
+            inicio += tamanho
+        }
+        return total
+    }
+
+    /// Cópia nativa (UTF-8 contíguo) do texto do editor. A `String` do
+    /// `NSTextView` é a string viva do armazenamento; copiar pelo
+    /// `CFStringGetBytes` é bem mais rápido que `makeContiguousUTF8` (R-06).
+    static func copiaNativa(_ texto: String) -> String {
+        let ns = texto as NSString
+        guard let dados = ns.data(using: String.Encoding.utf8.rawValue) else {
+            var copia = texto
+            copia.makeContiguousUTF8()
+            return copia
+        }
+        return String(decoding: dados, as: UTF8.self)
+    }
+
     /// Linhas numeradas no gutter: a última, vazia depois de um `\n`, conta.
     static func linhasDoGutter(_ texto: String) -> Int { quebras(texto) + 1 }
 

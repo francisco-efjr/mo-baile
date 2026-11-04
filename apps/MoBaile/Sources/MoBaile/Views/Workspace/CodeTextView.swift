@@ -63,14 +63,13 @@ final class IDEGutterView: NSView {
         separatorColor.setFill()
         NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height).fill()
 
-        guard let tv = textView, let sv = scrollView,
+        guard let tv = textView as? CodeTextView, let sv = scrollView,
               let lm = tv.layoutManager, let tc = tv.textContainer else { return }
 
-        lm.ensureLayout(for: tc)
         let str = tv.string as NSString
         let deslocamento = tv.textContainerOrigin.y - sv.contentView.bounds.origin.y
-        let linhaDoCursor = EditorText.linhaEColuna(em: str, posicao: tv.selectedRange().location).linha
         let semSelecao = tv.selectedRange().length == 0
+        let linhaDoCursor = semSelecao ? tv.linhaEColunaDoCursor().linha : 0
         // Linha de base do texto dentro do fragmento: o número fica na mesma
         // linha de base do código, como no PyCharm (P0-6).
         let fonteDoTexto = tv.font ?? EditorFont.fonte()
@@ -80,7 +79,7 @@ final class IDEGutterView: NSView {
         func numero(_ n: Int, topo: CGFloat, altura: CGFloat) {
             let y = topo + deslocamento
             guard y + altura >= 0, y <= bounds.height else { return }
-            let atual = semSelecao && n == linhaDoCursor
+            let atual = n == linhaDoCursor
             let label = NSAttributedString(string: "\(n)", attributes: [
                 .font: font, .foregroundColor: atual ? currentLineTextColor : textColor,
             ])
@@ -93,16 +92,26 @@ final class IDEGutterView: NSView {
             return
         }
 
-        var lineNum = 1
-        lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { rect, _, _, glyphRange, _ in
-            let charRange = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-            if charRange.location == 0 || str.character(at: charRange.location - 1) == 0x0a {
-                numero(lineNum, topo: rect.minY, altura: rect.height)
-                lineNum += 1
+        // Só os fragmentos visíveis (R-06): o número da primeira linha vem do
+        // contador incremental, e não de percorrer o arquivo do começo.
+        var visivel = sv.contentView.bounds
+        visivel.origin.y -= tv.textContainerOrigin.y
+        visivel.origin.x = 0
+        let glifos = lm.glyphRange(forBoundingRect: visivel, in: tc)
+        if glifos.length > 0 {
+            let primeiro = lm.characterIndexForGlyph(at: glifos.location)
+            var lineNum = tv.numeroDaLinha(em: primeiro, contador: \.contadorDoGutter)
+            lm.enumerateLineFragments(forGlyphRange: glifos) { rect, _, _, glyphRange, _ in
+                let charRange = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+                if charRange.location == 0 || str.character(at: charRange.location - 1) == 0x0a {
+                    numero(lineNum, topo: rect.minY, altura: rect.height)
+                    lineNum += 1
+                }
             }
         }
-        if lm.extraLineFragmentRect.height > 0 {
-            numero(lineNum, topo: lm.extraLineFragmentRect.minY, altura: lm.extraLineFragmentRect.height)
+        let extra = lm.extraLineFragmentRect
+        if extra.height > 0, extra.intersects(visivel) {
+            numero(tv.totalDeLinhas, topo: extra.minY, altura: extra.height)
         }
     }
 }
@@ -134,6 +143,9 @@ final class IDEEditorContainerView: NSView {
 
     private static func montarTextView(_ armazenamento: NSTextStorage, _ layout: NSLayoutManager) -> CodeTextView {
         armazenamento.addLayoutManager(layout)
+        // Layout só do que aparece (R-06): sem isto, abrir ou rolar um arquivo
+        // de 1 MB calcula o layout do arquivo inteiro.
+        layout.allowsNonContiguousLayout = true
         let container = NSTextContainer(size: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
         layout.addTextContainer(container)
         return CodeTextView(frame: .zero, textContainer: container)
@@ -209,18 +221,21 @@ final class IDEEditorContainerView: NSView {
             let fim = atual.length
             textView.breakUndoCoalescing()
             let resto = novo.substring(from: fim)
+            textView.registrarTroca(em: NSRange(location: fim, length: 0), por: resto)
             armazenamento.replaceCharacters(in: NSRange(location: fim, length: 0),
                                             with: NSAttributedString(string: resto, attributes: atributos))
-            textView.recolorir(NSRange(location: fim, length: (resto as NSString).length))
+            textView.recolorir(NSRange(location: fim, length: (resto as NSString).length), mexeuEmAspas: true)
         } else {
             let selecao = textView.selectedRange()
             armazenamento.setAttributedString(NSAttributedString(string: texto, attributes: atributos))
+            textView.recontarLinhas()
+            textView.breakUndoCoalescing()
             textView.historico.removeAllActions()
             textView.setSelectedRange(NSRange(location: min(selecao.location, novo.length), length: 0))
             textView.recolorir(nil)
             recriou = true
         }
-        updateGutterWidth(forLineCount: EditorText.linhasDoGutter(texto))
+        updateGutterWidth(forLineCount: textView.totalDeLinhas)
         gutterView.needsDisplay = true
         return recriou
     }
@@ -293,22 +308,88 @@ class CodeTextView: NSTextView {
     var python = true
     /// Faixa trocada na edição em curso, para recolorir só o parágrafo.
     private var faixaEditada: NSRange?
+    /// A edição em curso pôs ou tirou aspas, `\\` ou `#`: pode abrir ou fechar
+    /// uma docstring e mudar a cor até o fim do arquivo.
+    private var edicaoMexeuEmAspas = false
+
+    // MARK: Contagem incremental (R-06)
+
+    /// Posição e linha já conhecidas: a próxima consulta conta só a diferença.
+    struct ContadorDeLinhas {
+        var posicao = 0
+        var linha = 1
+    }
+    var contadorDoCursor = ContadorDeLinhas()
+    var contadorDoGutter = ContadorDeLinhas()
+    /// Linhas do texto (quebras + 1), mantido a cada troca.
+    private(set) var totalDeLinhas = 1
+
+    /// Uma troca em `faixa` por `novo` vai acontecer: ajusta o total de linhas
+    /// e esquece o que os contadores sabiam depois do ponto trocado.
+    func registrarTroca(em faixa: NSRange, por novo: String) {
+        let texto = string as NSString
+        let removidas = EditorText.quebras(em: texto, faixa: faixa)
+        let inseridas = EditorText.quebras(em: novo as NSString, faixa: NSRange(location: 0, length: (novo as NSString).length))
+        totalDeLinhas = max(1, totalDeLinhas + inseridas - removidas)
+        if faixa.location < contadorDoCursor.posicao { contadorDoCursor = ContadorDeLinhas() }
+        if faixa.location < contadorDoGutter.posicao { contadorDoGutter = ContadorDeLinhas() }
+    }
+
+    func recontarLinhas() {
+        let texto = string as NSString
+        totalDeLinhas = EditorText.quebras(em: texto, faixa: NSRange(location: 0, length: texto.length)) + 1
+        contadorDoCursor = ContadorDeLinhas()
+        contadorDoGutter = ContadorDeLinhas()
+    }
+
+    /// Número da linha (a partir de 1) da posição UTF-16, contando a partir do
+    /// que o contador já sabia.
+    func numeroDaLinha(em posicao: Int, contador caminho: ReferenceWritableKeyPath<CodeTextView, ContadorDeLinhas>) -> Int {
+        let texto = string as NSString
+        let alvo = min(max(posicao, 0), texto.length)
+        var contador = self[keyPath: caminho]
+        if contador.posicao > texto.length { contador = ContadorDeLinhas() }
+        if alvo >= contador.posicao {
+            contador.linha += EditorText.quebras(em: texto, faixa: NSRange(location: contador.posicao, length: alvo - contador.posicao))
+        } else {
+            contador.linha -= EditorText.quebras(em: texto, faixa: NSRange(location: alvo, length: contador.posicao - alvo))
+        }
+        contador.posicao = alvo
+        self[keyPath: caminho] = contador
+        return contador.linha
+    }
+
+    /// Linha e coluna do cursor para o rodapé: a linha pelo contador, a coluna
+    /// só dentro da linha (grafemas, tab até a parada).
+    func linhaEColunaDoCursor() -> (linha: Int, coluna: Int) {
+        let texto = string as NSString
+        let posicao = min(selectedRange().location, texto.length)
+        let linha = numeroDaLinha(em: posicao, contador: \.contadorDoCursor)
+        let inicio = texto.lineRange(for: NSRange(location: posicao, length: 0)).location
+        let trecho = texto.substring(with: NSRange(location: inicio, length: posicao - inicio)) as NSString
+        return (linha, EditorText.linhaEColuna(em: trecho, posicao: trecho.length).coluna)
+    }
 
     override func shouldChangeText(in faixa: NSRange, replacementString texto: String?) -> Bool {
         guard super.shouldChangeText(in: faixa, replacementString: texto) else { return false }
-        faixaEditada = NSRange(location: faixa.location, length: (texto as NSString?)?.length ?? 0)
+        let novo = texto ?? ""
+        faixaEditada = NSRange(location: faixa.location, length: (novo as NSString).length)
+        let removido = (string as NSString).substring(with: faixa)
+        edicaoMexeuEmAspas = PythonHighlighter.mexeEmLiteral(removido) || PythonHighlighter.mexeEmLiteral(novo)
+        registrarTroca(em: faixa, por: novo)
         return true
     }
 
     override func didChangeText() {
-        if let faixa = faixaEditada { recolorir(faixa) }
+        if let faixa = faixaEditada { recolorir(faixa, mexeuEmAspas: edicaoMexeuEmAspas) }
         faixaEditada = nil
+        edicaoMexeuEmAspas = false
         super.didChangeText()
     }
 
-    /// Recolore o parágrafo editado (ou tudo, com `nil`). Muda só atributos
-    /// do armazenamento, sem passar pelo desfazer.
-    func recolorir(_ editada: NSRange?) {
+    /// Recolore a faixa editada (ou tudo, com `nil`). Muda só atributos do
+    /// armazenamento, sem passar pelo desfazer.
+    func recolorir(_ editada: NSRange?, mexeuEmAspas: Bool = false) {
         guard let esquema, let armazenamento = textStorage else { return }
         let texto = armazenamento.string as NSString
         let tudo = NSRange(location: 0, length: texto.length)
@@ -316,7 +397,9 @@ class CodeTextView: NSTextView {
             armazenamento.addAttribute(.foregroundColor, value: esquema.texto, range: tudo)
             return
         }
-        let faixa = editada.map { PythonHighlighter.faixaParaRecolorir(texto, editada: $0) } ?? tudo
+        let faixa = editada.map {
+            PythonHighlighter.faixaParaRecolorir(armazenamento, editada: $0, mexeuEmAspas: mexeuEmAspas)
+        } ?? tudo
         PythonHighlighter.colorir(armazenamento, faixa: faixa, esquema: esquema)
     }
 
@@ -324,14 +407,16 @@ class CodeTextView: NSTextView {
 
     /// Retângulo da linha do cursor, em coordenadas do editor.
     func retanguloDaLinhaAtual() -> NSRect? {
-        guard let lm = layoutManager, let tc = textContainer else { return nil }
+        guard let lm = layoutManager else { return nil }
         let texto = string as NSString
         let cursor = selectedRange().location
         var linha: NSRect
         if texto.length == 0 || (cursor >= texto.length && texto.character(at: texto.length - 1) == 0x0A) {
+            lm.ensureLayout(forCharacterRange: NSRange(location: texto.length, length: 0))
             linha = lm.extraLineFragmentRect
         } else {
-            lm.ensureLayout(for: tc)
+            // Sem `ensureLayout` do contêiner inteiro: o layout não contíguo
+            // calcula só a linha pedida (R-06).
             linha = lm.lineFragmentRect(forGlyphAt: lm.glyphIndexForCharacter(at: min(cursor, texto.length - 1)), effectiveRange: nil)
         }
         if linha.height == 0 { linha.size.height = EditorFont.alturaDaLinha(font ?? EditorFont.fonte()) }
@@ -347,16 +432,23 @@ class CodeTextView: NSTextView {
         linha.fill()
     }
 
+    /// Última linha realçada, para redesenhar só ela e a nova (R-06).
+    private var linhaRealcada: NSRect?
+
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
-        needsDisplay = true
+        if let antiga = linhaRealcada { setNeedsDisplay(antiga) }
+        linhaRealcada = retanguloDaLinhaAtual()
+        if let nova = linhaRealcada { setNeedsDisplay(nova) }
         (enclosingScrollView?.superview as? IDEEditorContainerView)?.gutterView.needsDisplay = true
     }
 
     // ⌘Z e ⇧⌘Z do menu Editar descem pelo responder chain até a janela, que
     // usaria o histórico dela. O editor responde antes, com o próprio.
-    @objc func undo(_ sender: Any?) { historico.undo() }
-    @objc func redo(_ sender: Any?) { historico.redo() }
+    // Depois de desfazer, o total de linhas é recontado: não dá para garantir
+    // que toda troca do desfazer passe por `shouldChangeText`.
+    @objc func undo(_ sender: Any?) { historico.undo(); recontarLinhas() }
+    @objc func redo(_ sender: Any?) { historico.redo(); recontarLinhas() }
 
     override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         switch item.action {
@@ -400,8 +492,7 @@ class CodeTextView: NSTextView {
 
     /// Tab insere espaços até a próxima parada (4 espaços no começo da linha).
     override func insertTab(_ sender: Any?) {
-        let texto = string as NSString
-        let coluna = EditorText.linhaEColuna(em: texto, posicao: selectedRange().location).coluna - 1
+        let coluna = linhaEColunaDoCursor().coluna - 1
         let faltam = EditorText.recuo - coluna % EditorText.recuo
         inserirLiteral(String(repeating: " ", count: faltam))
     }
