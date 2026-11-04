@@ -73,6 +73,7 @@ struct CodeEditorView: NSViewRepresentable {
         container.gutterView.gutterBackgroundColor = bgEditor
         container.gutterView.separatorColor = NSColor(tema.separator)
         container.gutterView.textColor = NSColor(tema.syntaxGutter)
+        container.layoutManager.corDaEtiqueta = NSColor(tema.syntaxGutter)
 
         container.updateGutterWidth(forLineCount: EditorText.linhasDoGutter(text))
         container.gutterView.needsDisplay = true

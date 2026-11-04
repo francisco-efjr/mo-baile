@@ -191,8 +191,51 @@ final class IDEEditorContainerView: NSView {
     }
 }
 
-/// Layout do editor. As etiquetas de caractere especial (PO-2) moram aqui.
-final class CodeLayoutManager: NSLayoutManager {}
+/// Layout do editor. Desenha as etiquetas de caractere especial (PO-2): a
+/// abreviação num retângulo de 1 pt, como o PyCharm. A largura vem do
+/// delegate (`CaracteresEspeciais.swift`); aqui só se pinta.
+final class CodeLayoutManager: NSLayoutManager {
+    var corDaEtiqueta: NSColor = .tertiaryLabelColor
+    var fonteDaEtiqueta: NSFont = .monospacedSystemFont(ofSize: 9, weight: .regular)
+
+    override init() {
+        super.init()
+        delegate = self
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        delegate = self
+    }
+
+    func larguraDaEtiqueta(_ nome: String) -> CGFloat {
+        ceil((nome as NSString).size(withAttributes: [.font: fonteDaEtiqueta]).width) + 6
+    }
+
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        guard let texto = textStorage?.string as NSString? else { return }
+        let caracteres = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        let atributos: [NSAttributedString.Key: Any] = [.font: fonteDaEtiqueta, .foregroundColor: corDaEtiqueta]
+        for indice in caracteres.location..<NSMaxRange(caracteres) {
+            guard let nome = CaracteresEspeciais.abreviacao(em: texto, indice: indice) else { continue }
+            let glifo = glyphIndexForCharacter(at: indice)
+            let linha = lineFragmentRect(forGlyphAt: glifo, effectiveRange: nil)
+            let x = location(forGlyphAt: glifo).x
+            let caixa = NSRect(
+                x: origin.x + linha.minX + x + 1, y: origin.y + linha.minY + 2,
+                width: larguraDaEtiqueta(nome) - 2, height: max(linha.height - 4, 8)
+            )
+            corDaEtiqueta.setStroke()
+            let moldura = NSBezierPath(roundedRect: caixa.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2)
+            moldura.lineWidth = 1
+            moldura.stroke()
+            let rotulo = NSAttributedString(string: nome, attributes: atributos)
+            let tamanho = rotulo.size()
+            rotulo.draw(at: NSPoint(x: caixa.midX - tamanho.width / 2, y: caixa.midY - tamanho.height / 2))
+        }
+    }
+}
 
 /// `NSTextView` do editor de Page Objects: recebe e devolve os caracteres
 /// como o PyCharm (PO-1).
