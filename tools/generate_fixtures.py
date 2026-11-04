@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -213,7 +214,9 @@ def relatorio(server: EngineServer, call) -> dict:
     """`report.*` pelo servidor de verdade, sobre arquivos de verdade."""
     with tempfile.TemporaryDirectory() as tmp:
         pasta = pathlib.Path(tmp).resolve()
-        server.report = ReportService(ocr=_OcrFalso(), documents_dir=pasta / "Mo baile")
+        server.report = ReportService(
+            ocr=_OcrFalso(), documents_dir=pasta / "Mo baile", now=lambda: datetime.datetime(2026, 10, 8, 21, 30, 5)
+        )
         prints = pasta / "prints"
         prints.mkdir()
         # Bytes fixos, e nao `Image.save`: o encoder do Pillow muda entre

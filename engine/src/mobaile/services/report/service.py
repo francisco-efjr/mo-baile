@@ -60,9 +60,13 @@ Progress = Callable[[str, float | None], None]
 CheckCancelled = Callable[[], None]
 
 BOARD_FILE = "board_auditoria.excalidraw"
-HTML_FILE = "relatorio_auditoria.html"
 MARKDOWN_FILE = "relatorio_auditoria.md"
 TSV_FILE = "relatorio_auditoria.tsv"
+
+
+def html_file_name(projeto: str, platform: str, when: datetime.datetime) -> str:
+    """Nome do HTML: relatorio_<projeto da spec>_<ios|android>_<dd-mm-aaaa>.html."""
+    return f"relatorio_{safe_file_stem(projeto, 'spec')}_{platform}_{when.strftime('%d-%m-%Y')}.html"
 # Mais que isso não é um card por print: é a pasta errada.
 MAX_PRINTS = 300
 LOG_SUFFIXES = (".json", ".txt", ".log")
@@ -310,7 +314,7 @@ class ReportService:
         target = prepare_output_dir(directory if directory else self.default_export_dir(report))
         artefatos: list[tuple[str, str, Callable[[], str]]] = [
             ("board", BOARD_FILE, lambda: json.dumps(build_board(report), ensure_ascii=False)),
-            ("html", HTML_FILE, lambda: generate_html(report)),
+            ("html", html_file_name(report.spec.projeto, report.platform, self._now()), lambda: generate_html(report)),
             ("markdown", MARKDOWN_FILE, lambda: generate_markdown(report)),
             ("tsv", TSV_FILE, lambda: generate_tsv(report)),
         ]

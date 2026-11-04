@@ -21,7 +21,7 @@ from mobaile.domain.errors import InvalidInputError
 from mobaile.security import files as seguranca_arquivos
 from mobaile.security import prepare_output_dir, safe_file_stem, unique_path, validate_input_file
 from mobaile.services.report import ReportService
-from mobaile.services.report.service import BOARD_FILE, HTML_FILE, MARKDOWN_FILE, TSV_FILE
+from mobaile.services.report.service import BOARD_FILE, MARKDOWN_FILE, TSV_FILE, html_file_name
 
 AGORA = datetime.datetime(2026, 10, 8, 21, 30, 5)
 
@@ -172,14 +172,25 @@ class TestExportacao(Base):
         exportado = self.service.export()
         pasta = Path(exportado["directory"])
         self.assertEqual(pasta, self.pasta / "Mo baile" / "Relatórios" / "teste-android-20261008-213005")
-        self.assertEqual([f["name"] for f in exportado["files"]], [BOARD_FILE, HTML_FILE, MARKDOWN_FILE, TSV_FILE])
+        html = "relatorio_teste_android_08-10-2026.html"
+        self.assertEqual([f["name"] for f in exportado["files"]], [BOARD_FILE, html, MARKDOWN_FILE, TSV_FILE])
         for arquivo in exportado["files"]:
             caminho = Path(arquivo["path"])
             self.assertTrue(caminho.is_file(), caminho)
             self.assertEqual(caminho.stat().st_size, arquivo["bytes"])
         board = json.loads((pasta / BOARD_FILE).read_text(encoding="utf-8"))
         self.assertEqual(board["type"], "excalidraw")
-        self.assertIn("<!doctype html>", (pasta / HTML_FILE).read_text(encoding="utf-8"))
+        self.assertIn("<!doctype html>", (pasta / html).read_text(encoding="utf-8"))
+
+    def test_nome_do_html_leva_projeto_plataforma_e_data(self):
+        self.auditar(platform="ios")
+        exportado = self.service.export(str(self.pasta / "ios"))
+        self.assertEqual(exportado["files"][1]["name"], "relatorio_teste_ios_08-10-2026.html")
+
+    def test_nome_do_html_com_projeto_acentuado(self):
+        self.assertEqual(html_file_name("Limite de Conta · Crédito", "android", AGORA),
+                         "relatorio_limite-de-conta-credito_android_08-10-2026.html")
+        self.assertEqual(html_file_name("", "ios", AGORA), "relatorio_spec_ios_08-10-2026.html")
 
     def test_pasta_escolhida_e_criada(self):
         self.auditar()

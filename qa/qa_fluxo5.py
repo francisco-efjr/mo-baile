@@ -9,6 +9,7 @@ pasta temporária: nenhum caminho padrão pode escrever na pasta do usuário.
 """
 import json
 import pathlib
+import re
 import tempfile
 
 AQUI = pathlib.Path(__file__).resolve().parent
@@ -68,8 +69,11 @@ try:
     destino = pasta / "exportado"
     exp = m.ok("report.export", {"directory": str(destino)}, timeout=60)
     nomes = sorted(f["name"] for f in exp["files"])
-    check("quatro arquivos exportados", nomes == ["board_auditoria.excalidraw", "relatorio_auditoria.html",
-                                                   "relatorio_auditoria.md", "relatorio_auditoria.tsv"], str(nomes))
+    html = next((n for n in nomes if n.endswith(".html")), "")
+    outros = [n for n in nomes if n != html]
+    check("quatro arquivos exportados", len(nomes) == 4 and outros == ["board_auditoria.excalidraw",
+                                                                     "relatorio_auditoria.md", "relatorio_auditoria.tsv"], str(nomes))
+    check("HTML com projeto, plataforma e data", re.fullmatch(r"relatorio_[a-z0-9-]+_(ios|android)_\d{2}-\d{2}-\d{4}\.html", html), html)
     board = json.loads((destino / "board_auditoria.excalidraw").read_text(encoding="utf-8"))
     ids = [el["id"] for el in board["elements"]]
     check("board é Excalidraw v2 válido", board.get("type") == "excalidraw" and board.get("version") == 2)
@@ -85,8 +89,11 @@ try:
     pasta_hostil.mkdir()
     hostil, _ = gravar(pasta_hostil, spec={**SPEC, "projeto": "<script>alert(1)</script>"})
     m.ok("report.audit", {"spec_path": str(hostil), "source": "file", "log_path": str(log_path)})
-    m.ok("report.export", {"directory": str(pasta / "hostil-saida")}, timeout=60)
-    html = (pasta / "hostil-saida" / "relatorio_auditoria.html").read_text(encoding="utf-8")
+    exp_hostil = m.ok("report.export", {"directory": str(pasta / "hostil-saida")}, timeout=60)
+    html_hostil = next(f for f in exp_hostil["files"] if f["kind"] == "html")
+    check("nome hostil vira nome de arquivo seguro", html_hostil["name"].startswith("relatorio_script-alert-1-script_"),
+          html_hostil["name"])
+    html = pathlib.Path(html_hostil["path"]).read_text(encoding="utf-8")
     check("nome hostil não vira script no HTML", "<script>alert(1)" not in html and "&lt;script&gt;" in html)
 
     # Recusas: sempre tipadas, nunca "Erro interno no motor".
