@@ -277,7 +277,9 @@ class EngineServer:
         # Perfil de desempenho (PERF-3). `_stream_cfg` e o que o espelho ligado
         # le a cada quadro; `explicit` sao os campos que o chamador fixou no
         # `stream.start` e que o perfil nao mexe.
-        self.perf = PerfGovernor()
+        self.perf = PerfGovernor(historico_cheio=lambda: {
+            "proxy": self.proxy.history_full, "analytics": self.analytics.history_full,
+        })
         self._perf_timer: threading.Timer | None = None
         self._perf_timer_lock = threading.Lock()
         self._stream_cfg: dict[str, Any] | None = None
@@ -1319,8 +1321,8 @@ class EngineServer:
         watcher = self._watcher
         if watcher is not None and not self._watch_interval_explicit:
             watcher.poll_interval = knobs.poll_interval
-        self.proxy.set_history_limit(knobs.proxy_history)
-        self.analytics.set_history_limit(knobs.analytics_history)
+        # D-6: o historico nunca encolhe pelo perfil; so o corpo das novas.
+        self.proxy.set_body_capture_limit(knobs.proxy_body_capture_kb * 1024)
 
     def stream_stats(self, _params: dict[str, Any]) -> dict[str, Any]:
         if not self._stream:

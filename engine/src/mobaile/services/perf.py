@@ -6,8 +6,10 @@ e aplica a parte visual do perfil que volta (`perf.profile`). O motor aplica a
 parte dele: cadencia e tamanho do espelho, vigia de aparelhos e historicos.
 
 O modo leve reduz apresentacao e cadencia, nunca captura: nenhum evento de rede
-ou de analytics deixa de ser notificado por causa do perfil. O que encolhe e
-quanto do passado fica na memoria do motor.
+ou de analytics deixa de ser notificado nem sai do historico por causa do perfil
+(D-6: o historico ja capturado e o registro da auditoria do Relatorio). O teto
+do historico e o mesmo em todos os perfis; no leve so encolhe o corpo guardado
+das requisicoes novas.
 
 `resolve` e pura e testada por tabela (`test_perf_governador.py`). Os valores
 de `KNOBS` sao ponto de partida (Suposicao), a calibrar com
@@ -46,8 +48,9 @@ class Knobs:
     # para ~4 ms por quadro (perf-contexto K3). O inspetor continua em PNG.
     stream_capture_jpeg: bool
     poll_interval: float
-    proxy_history: int
-    analytics_history: int
+    # Quanto do corpo de cada requisicao nova o proxy guarda. So vale para o
+    # que for capturado depois da troca; o que ja esta no historico fica.
+    proxy_body_capture_kb: int
     glass: bool
     animations: bool
 
@@ -59,11 +62,11 @@ KNOBS: dict[str, Knobs] = {
     # A cadencia de hoje: o front pedia 6 fps e 900 px fixos. PNG cru de
     # aparelho moderno passa de 1 MB; o espelho e reduzido antes de virar
     # base64 (o que importa e o layout) e o inspetor usa a captura cheia.
-    "completo": Knobs(6.0, 2.0, 900, 80, False, 1.5, 2000, 5000, True, True),
+    "completo": Knobs(6.0, 2.0, 900, 80, False, 1.5, 256, True, True),
     # 720 px q70: 13,6 ms e 119 KB por quadro (medido, bench_knobs).
-    "equilibrado": Knobs(4.0, 1.0, 720, 70, True, 3.0, 1000, 3000, True, True),
+    "equilibrado": Knobs(4.0, 1.0, 720, 70, True, 3.0, 128, True, True),
     # 600 px q60: 11,8 ms e 79 KB por quadro (medido, bench_knobs).
-    "leve": Knobs(2.0, 0.5, 600, 60, True, 5.0, 500, 2000, False, False),
+    "leve": Knobs(2.0, 0.5, 600, 60, True, 5.0, 64, False, False),
 }
 
 
@@ -178,8 +181,11 @@ class PerfGovernor:
     histerese por um temporizador.
     """
 
-    def __init__(self, relogio: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, relogio: Callable[[], float] = time.monotonic,
+                 historico_cheio: Callable[[], dict[str, bool]] | None = None) -> None:
         self._relogio = relogio
+        # Quem ja passou do teto do historico (proxy, analytics), para o status.
+        self.historico_cheio = historico_cheio or (lambda: {"proxy": False, "analytics": False})
         self._lock = threading.Lock()
         self.sinais = Sinais()
         self.preferencia = "auto"
@@ -217,5 +223,6 @@ class PerfGovernor:
             "preference": preferencia,
             "knobs": KNOBS[estado.perfil].to_dict(),
             "signals": asdict(sinais),
+            "history_full": dict(self.historico_cheio()),
             "improving": estado.melhora_desde is not None,
         }
