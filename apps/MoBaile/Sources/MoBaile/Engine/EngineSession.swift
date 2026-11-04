@@ -167,6 +167,9 @@ final class EngineSession {
     private var hierarchyStale = false
     /// Sinais do Mac para o perfil de desempenho (PERF-4).
     private let perfSensors = PerfSensors()
+    /// Onde a parte de animação do perfil é aplicada. Injetável (R6): o teste
+    /// passa a sua e não mexe na compartilhada.
+    @ObservationIgnored var motionPolicy: MotionPolicy = .shared
     private var progressSequence = 0
 
     convenience init(
@@ -205,6 +208,8 @@ final class EngineSession {
         self.makeClient = { throw EngineError.notRunning }
         self.client = client
         self.isConnected = true
+        // Teste: política de animação própria, longe da do app (R6).
+        self.motionPolicy = MotionPolicy()
     }
 
     // MARK: - Ciclo de vida
@@ -968,7 +973,7 @@ final class EngineSession {
             applyPerf(status)
         } catch {
             state.perf.semMotor = true
-            Motion.perfReduced = state.perf.reducesMotion
+            motionPolicy.reduced = state.perf.reducesMotion
         }
     }
 
@@ -992,7 +997,7 @@ final class EngineSession {
         state.perf.reason = status.reason
         state.perf.vidro = status.knobs.vidro
         state.perf.animacoes = status.knobs.animacoes
-        Motion.perfReduced = state.perf.reducesMotion
+        motionPolicy.reduced = state.perf.reducesMotion
     }
 
     // MARK: - Scrcpy (Espelho Nativo 60 FPS)

@@ -19,10 +19,17 @@ final class WindowVisibility {
         self.window = window
         observer = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-        ) { [weak session] notification in
-            guard let janela = notification.object as? NSWindow else { return }
-            let visivel = janela.occlusionState.contains(.visible)
-            Task { @MainActor in await session?.setWindowVisible(visivel) }
+        ) { [weak self, weak session] _ in
+            // O observador é desta janela, na fila principal: lê o estado dela.
+            MainActor.assumeIsolated {
+                guard let janela = self?.window else { return }
+                let visivel = janela.occlusionState.contains(.visible)
+                Task { await session?.setWindowVisible(visivel) }
+            }
         }
+        // Estado de agora, e não só as mudanças: a janela pode já nascer
+        // coberta (R6).
+        let visivel = window.occlusionState.contains(.visible)
+        Task { await session.setWindowVisible(visivel) }
     }
 }
