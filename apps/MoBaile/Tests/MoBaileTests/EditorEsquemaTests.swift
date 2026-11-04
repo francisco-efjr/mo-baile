@@ -27,6 +27,17 @@ final class EditorEsquemaTests: XCTestCase {
         XCTAssertEqual(fonte.pointSize, 13)
     }
 
+    /// R-12: dentro de um `.app`, a fonte vem só de `Resources/fonts`; o
+    /// caminho do repositório esconderia uma fonte faltando no bundle.
+    func testDentroDoAppSoProcuraNosRecursos() {
+        let recursos = URL(fileURLWithPath: "/Applications/Mo baile (nativo).app/Contents/Resources")
+        let noApp = EditorFont.pastas(bundle: URL(fileURLWithPath: "/Applications/Mo baile (nativo).app"), recursos: recursos)
+        XCTAssertEqual(noApp, [recursos.appendingPathComponent("fonts")])
+        let foraDoApp = EditorFont.pastas(bundle: URL(fileURLWithPath: "/tmp/.build/debug"), recursos: nil)
+        XCTAssertEqual(foraDoApp.last?.lastPathComponent, "fonts")
+        XCTAssertTrue(foraDoApp.last?.path.hasSuffix("assets/fonts") ?? false)
+    }
+
     func testAtributosSemLigaduraEComAlturaDeLinha12() throws {
         let fonte = EditorFont.fonte()
         let atributos = EditorFont.atributos(fonte, cor: .white)

@@ -120,6 +120,13 @@ if ! diff -rq -x "__pycache__" "$REPO_ROOT/engine/src" "$ENGINE_SRC" >/dev/null;
     falha "o motor embutido difere de engine/src."
 fi
 
+# Fonte do editor de Page Objects (JetBrains Mono, SIL OFL 1.1). Dentro do app
+# o front so procura em Resources/fonts: sem ela, o editor cai para SF Mono sem
+# avisar (R-12).
+for fonte in JetBrainsMono-Regular.ttf OFL.txt; do
+    [ -f "$APP_DIR/Contents/Resources/fonts/$fonte" ] || falha "falta Resources/fonts/$fonte no app."
+done
+
 # --- Rastreabilidade do build e assinatura (REL-3) ----------------------------
 # Bloco separado da escolha do Python, de proposito. O diff acima prova o motor;
 # isto prova o resto do bundle: o binario Swift saiu do commit atual

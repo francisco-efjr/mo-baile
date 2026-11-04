@@ -219,14 +219,21 @@ def arvore_projeto(call) -> dict:
         (raiz / "flows").mkdir()
         (raiz / "pages" / "feature.py").write_bytes(b"def tocar(self):\r\n    pass\r\n")
         (raiz / "flows" / "login.yaml").write_bytes(b"appId: br.app\n")
+        # mtime fixo na leitura; o da gravacao e o relogio, trocado abaixo.
+        os.utime(raiz / "pages" / "feature.py", ns=(1757030000_000000000, 1757030000_000000000))
         with patch.dict(os.environ, {"HOME": str(home)}):
             saida = {
                 "workspace.tree": call("workspace.tree"),
                 "workspace.read": call("workspace.read", {"path": "pages/feature.py"}),
                 "workspace.write": call("workspace.write", {
                     "path": "pages/feature.py", "text": "def tocar(self):\n    pass\n", "line_separator": "CRLF",
+                    "expected_mtime_ns": 1757030000_000000000,
+                }),
+                "erro_workspace_file_changed": call("workspace.write", {
+                    "path": "pages/feature.py", "text": "x", "expected_mtime_ns": 1,
                 }),
             }
+        saida["workspace.write"]["result"]["mtime_ns"] = 1757030001_000000000
         return _trocar_caminhos(saida, (str(raiz),), "/Users/qa/Documents/Mo baile")
 
 

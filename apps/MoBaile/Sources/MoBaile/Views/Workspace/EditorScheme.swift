@@ -17,11 +17,14 @@ enum EditorFont {
     /// Registra uma vez, na primeira fonte pedida.
     static let registrada: Bool = registrar()
 
-    /// Onde procurar os `.ttf`: no app empacotado, em `Resources/fonts`; no
-    /// repositório (testes e `swift run`), em `assets/fonts`.
-    static func pastas() -> [URL] {
+    /// Onde procurar os `.ttf`: no app empacotado, só em `Resources/fonts`;
+    /// fora de um `.app` (testes e `swift run`), em `assets/fonts` do
+    /// repositório. Dentro do app o caminho do repositório não vale: ele
+    /// esconderia uma fonte que faltou no empacotamento (R-12).
+    static func pastas(bundle: URL = Bundle.main.bundleURL, recursos: URL? = Bundle.main.resourceURL) -> [URL] {
         var pastas: [URL] = []
-        if let recursos = Bundle.main.resourceURL { pastas.append(recursos.appendingPathComponent("fonts")) }
+        if let recursos { pastas.append(recursos.appendingPathComponent("fonts")) }
+        guard bundle.pathExtension != "app" else { return pastas }
         var raiz = URL(fileURLWithPath: #filePath)
         for _ in 0..<7 { raiz.deleteLastPathComponent() }
         pastas.append(raiz.appendingPathComponent("assets/fonts"))

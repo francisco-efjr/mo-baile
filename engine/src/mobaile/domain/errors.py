@@ -31,6 +31,16 @@ class InvalidInputError(EngineError):
     code = "invalid_input"
 
 
+class FileChangedError(EngineError):
+    """O arquivo mudou no disco desde que o front o leu (outro editor gravou).
+
+    Gravar por cima apagaria o trabalho do outro editor sem aviso; o front
+    oferece recarregar ou sobrescrever.
+    """
+
+    code = "file_changed"
+
+
 class ToolNotFoundError(EngineError):
     """Binário externo obrigatório ausente (adb, scrcpy, xcrun)."""
 

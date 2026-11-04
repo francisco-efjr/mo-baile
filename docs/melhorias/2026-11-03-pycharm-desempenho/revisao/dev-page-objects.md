@@ -134,7 +134,7 @@ Base: `docs/research/pycharm-page-objects.md` e `revisao/spec-page-objects.md`. 
 - **Bytes previstos.** Os bytes da seção 5.3 são previsão (R6). O oráculo PyCharm (passo 8) ainda não rodou.
 - **Contraste do esquema.** Comentário (4,27:1), docstring, `self` e argumento nomeado ficam abaixo de 4,5:1, igual ao PyCharm.
 - **Esquema claro.** Os valores do IntelliJ Light vieram de memória. Não li `expUI_lightScheme.xml`, porque o brief só autorizou ler as fontes em `/Applications`.
-- **Realce com aspas triplas.** Com `"""` no arquivo, cada tecla recolore o texto inteiro. Arquivo grande com docstring pode pesar; não foi medido no Instruments.
+- **Realce com aspas triplas.** Resolvido em parte pelo R-06 (ver "Correções da revisão"). Uma tecla que põe ou tira aspas num arquivo com `"""` ainda recolore até o fim do arquivo: cerca de 0,2 s em 1 MB.
 - **Painel Projeto em 1280 pt.** Com espelho e inspector abertos, o painel não aparece: a área fica abaixo de 640 pt. A faixa avisa "sem espaço".
 - **Integração.** `EngineSession.swift`, `AppState.swift`, `CommandRegistry.swift`, `server.py` e `contract.py` também são tocados pela trilha de desempenho. As mudanças daqui são aditivas e localizadas.
 - **VoiceOver real** e o caminho de arrastar e soltar no editor não foram testados à mão.
@@ -143,8 +143,65 @@ Base: `docs/research/pycharm-page-objects.md` e `revisao/spec-page-objects.md`. 
 
 1. Esquema PyCharm como padrão também no claro (valores Inferidos) ou só no escuro.
 2. Ajuste do número de linha `#4B5059` → `#61666E`.
-3. ⌘S com uma aba de arquivo à frente: hoje continua "Salvar Page Object" (D-2), e o arquivo da aba se salva pelo botão do cabeçalho. Tornar o ⌘S contextual?
+3. ~~⌘S contextual~~: feito no R-05, a pedido do orquestrador. O atalho continua ⌘S e só o alvo muda conforme a aba.
 4. ⌘1 de novo em Page Objects alternar a árvore, como no PyCharm.
 5. Versão: o editor muda de forma visível. Minor ou major?
 
 O que ficou para depois está em `../pendentes/page-objects-proximos-passos.md`.
+
+## Correções da revisão (2026-11-04)
+
+Revisão independente da branch com os achados R-01 a R-14 (relatório entregue ao orquestrador). Cada correção tem teste quando dá para testar sem janela.
+
+### Commits
+
+| Hash | IDs | O que mudou |
+|---|---|---|
+| `366d78a` | R-04 (motor), R-09, R-10, R-11, R-14 | **R-04:** `workspace.read` passa a devolver `mtime_ns`. `workspace.write` com `expected_mtime_ns` recusa com o erro tipado novo `file_changed` (`FileChangedError`) se o arquivo mudou ou sumiu.<br>**R-09:** o limite de 1 MB conta bytes codificados. `st_size` é conferido antes de ler, e a leitura é limitada.<br>**R-10:** `OSError` vira `invalid_input` com o motivo do sistema. Uma pasta sem leitura vem com `error` e não derruba a árvore.<br>**R-11:** `security.paths.write_file_atomic` grava com a pasta aberta em `O_NOFOLLOW`, um temporário `O_EXCL\|O_NOFOLLOW`, `fsync` e `os.replace`. Recusa link simbólico e arquivo sem permissão de escrita, e mantém o modo do arquivo. A leitura também usa `O_NOFOLLOW`.<br>**R-14:** o corte por profundidade marca `truncated`.<br>`PROTOCOLO_RPC.md` e as fixtures foram atualizados. |
+| `dbb9bdf` | R-12 | Dentro de um `.app`, a fonte só é procurada em `Resources/fonts`; o caminho do repositório vale só fora do bundle. `verify_native_app.sh` agora falha se faltar `Resources/fonts/JetBrainsMono-Regular.ttf` ou `OFL.txt`. Só a checagem foi feita: o alvo não rodou.<br>Entrou também a dúvida da revisão sobre o ⌘+: na árvore, ⌘= e ⇧⌘+ expandem tudo. |
+| `a0d2794` | R-06 | Realce gravado em ordem, um trecho por cor. Docstring marcada com um atributo próprio, para recolorir só ela. Layout não contíguo. Gutter só com o que está visível. Contador de linhas incremental. A linha atual redesenha só a antiga e a nova. Cópia nativa da string por `CFStringGetBytes`. |
+| `f979d07` | R-01, R-02, R-03, R-04 (front), R-05, R-06, R-07, R-08, R-13 | **R-01:** as abas ficam em `AppState.arquivosAbertos` e `arquivoAtivo`.<br>**R-02:** o × numa aba suja pergunta "Salvar / Descartar Alterações / Cancelar", e a aba suja mostra "•" antes do nome.<br>**R-03:** cada aba tem o próprio editor; todos ficam vivos e só o da frente aparece.<br>**R-04:** um conflito abre o aviso "Recarregar do Disco / Sobrescrever / Cancelar".<br>**R-05:** ⌘S com uma aba de arquivo à frente salva essa aba ("Salvar <arquivo>"); com o Page Object da sessão, continua o `codegen.save`.<br>**R-06:** o rodapé lê o cursor num objeto próprio (`CursorDoEditor`); o `updateNSView` ganhou um caminho rápido e não reatribui mais a fonte.<br>**R-07:** atualização por id depois do `await`.<br>**R-08:** abrir confere de novo antes de criar a aba.<br>**R-13:** `NSCursor.pop()` no `onDisappear`. |
+
+O último commit junta vários IDs porque as mudanças dividem os mesmos arquivos (`DualEditorPane`, `ArquivoAbertoPane`, `CodeEditorView`). Separar exigiria `git add -p`, que não está disponível aqui. `make check` e `make test-swift` rodaram verdes na árvore final antes dos commits `dbb9bdf`, `a0d2794` e `f979d07`, mas não em cada um isoladamente.
+
+### R-06: medição (Medido)
+
+- **Bench:** `EditorBenchTests` roda com `MOBAILE_BENCH=1` e imprime `BENCH`.
+- **Cenário:**
+  - `CodeEditorView` de verdade numa `NSWindow` de 900 × 700, com um pai que guarda o texto e mostra a posição do cursor;
+  - arquivo `.py` sintético de 1.000.159 bytes, com docstring no topo;
+  - 15 teclas no meio do arquivo, 15 movimentos de cursor e 5 aspas;
+  - cada medida inclui uma volta do run loop e o `displayIfNeeded`.
+- **Máquina:** o Mac do dono, numa execução (`swift test`, build debug).
+
+| Métrica (mediana) | Antes (`67eb1ab`) | Depois (`f979d07`) |
+|---|---|---|
+| Carga inicial | 5.356 ms | 736 ms |
+| Tecla comum | 7.075 ms (máx. 7.171) | 12,1 ms (máx. 29,9) |
+| Movimento do cursor | 97,2 ms (máx. 101,5) | 1,7 ms (máx. 8,2) |
+| Tecla de aspa (recolore até o fim) | 6.930 ms | 194 ms |
+
+- **Antes:** o bench foi adaptado à API antiga (`onCursor` com o pai lendo a posição no próprio `body`, como o `PageObjectsView` da `0309c0c`). A versão rodada não foi commitada.
+- **Custo restante da tecla:** cerca de 2,5 ms da cópia da string e o resto do `insertText` e do SwiftUI.
+- **Aspa em arquivo com docstring:** passa de 16 ms porque recolore até o fim, no thread principal.
+
+### Testes, antes × depois das correções
+
+| Suíte | Antes (`67eb1ab`) | Depois (`f979d07`) |
+|---|---|---|
+| `make test-swift` | 450 testes, 28 pulados, 0 falhas | 461 testes, 29 pulados (o bench), 0 falhas |
+| pytest do motor | 811 | 820 |
+| QA, UI legada, lint, segurança, fixtures | verdes | verdes |
+
+Testes novos:
+- `ArquivosAbertosTests`: R-01, R-04, R-05, R-07, R-08, a docstring incremental e o contador de linhas;
+- `TestRevisao` em `test_workspace_rpc.py`: R-04, R-09, R-10, R-11 (inclui o link simbólico plantado contra `write_file_atomic`) e R-14;
+- `EditorEsquemaTests.testDentroDoAppSoProcuraNosRecursos`: R-12.
+
+### O que não foi corrigido, e por quê
+
+- **R-02 e R-03 sem teste automatizado.** O diálogo e a troca de editor por aba são UI de SwiftUI. Os testes cobrem a lógica por trás: `sujo`, `fecharArquivo` e as abas no `AppState`. Validar à mão: abrir dois arquivos, editar os dois, alternar e conferir o ⌘Z de cada um; fechar uma aba suja.
+- **Desfazer depois de trocar de área.** O texto das abas sobrevive (R-01). Já o histórico de ⌘Z e a posição de rolagem se perdem quando a aba Page Objects é recriada, porque moram no `NSTextView`. Guardar isso fora da view seria uma mudança maior.
+- **Aspa num arquivo grande com docstring (cerca de 0,2 s).** Ficou porque recolorir em segundo plano, por blocos visíveis, é uma mudança de arquitetura do realce.
+- **Dúvida da revisão sobre `breakUndoCoalescing`.** Aplicado de forma preventiva antes de zerar o histórico na recriação do texto. O comportamento interno do AppKit não foi verificado.
+- **Estado "Lendo a pasta…" no recarregamento.** O desvio menor da revisão (o recarregamento pelo `PageObjectsView` não liga `carregando`) ficou como está: a árvore antiga continua visível até chegar a nova.

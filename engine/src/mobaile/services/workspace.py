@@ -6,7 +6,8 @@ onde o motor ja grava: `pages` e `locators` (`codegen.save`) e `flows`
 
 Travas (SEC-5, as mesmas do `codegen.save`): caminho relativo sem `..`,
 nenhum link simbolico em nenhum nivel, extensao de texto conhecida, arquivo
-de ate 1 MB.
+de ate 1 MB em bytes. Leitura com `O_NOFOLLOW` e gravacao atomica
+(`security.paths.write_file_atomic`).
 
 Texto como o PyCharm: o documento chega ao front com LF; o separador do
 arquivo (LF, CRLF ou CR) e o BOM vao a parte e voltam na gravacao. Arquivo
@@ -16,10 +17,12 @@ que nao e UTF-8 abre como somente leitura e nao e regravado.
 from __future__ import annotations
 
 import codecs
+import os
 import pathlib
 from typing import Any
 
-from mobaile.domain.errors import InvalidInputError
+from mobaile.domain.errors import FileChangedError, InvalidInputError
+from mobaile.security.paths import write_file_atomic
 
 PASTAS = ("pages", "locators", "flows")
 EXTENSOES = frozenset({".py", ".yaml", ".yml", ".json", ".txt", ".md"})
@@ -34,35 +37,44 @@ def raiz_padrao() -> pathlib.Path:
 
 
 def arvore(raiz: pathlib.Path) -> dict[str, Any]:
-    """Pastas e arquivos, pastas primeiro, em ordem alfabetica sem caixa."""
-    restantes = [LIMITE_NOS]
+    """Pastas e arquivos, pastas primeiro, em ordem alfabetica sem caixa.
+
+    `truncated` diz que algo ficou de fora: limite de nos ou de profundidade.
+    Pasta que nao da para ler vem vazia, com `error` (R-10).
+    """
+    estado = {"restantes": LIMITE_NOS, "cortado": False}
     nos = [
-        _no(raiz / nome, raiz, restantes, 0)
+        _no(raiz / nome, raiz, estado, 0)
         for nome in sorted(PASTAS)
         if (raiz / nome).is_dir() and not (raiz / nome).is_symlink()
     ]
     return {
         "root": str(raiz), "name": raiz.name, "exists": raiz.is_dir(),
-        "nodes": nos, "truncated": restantes[0] < 0,
+        "nodes": nos, "truncated": estado["cortado"],
     }
 
 
-def _no(caminho: pathlib.Path, raiz: pathlib.Path, restantes: list[int], nivel: int) -> dict[str, Any]:
-    restantes[0] -= 1
+def _no(caminho: pathlib.Path, raiz: pathlib.Path, estado: dict[str, Any], nivel: int) -> dict[str, Any]:
+    estado["restantes"] -= 1
     no: dict[str, Any] = {"name": caminho.name, "path": caminho.relative_to(raiz).as_posix()}
     if not caminho.is_dir():
         return {**no, "kind": "file"}
-    filhos = []
-    if nivel < PROFUNDIDADE:
+    filhos: list[dict[str, Any]] = []
+    try:
         entradas = [
             e for e in caminho.iterdir()
             if not e.name.startswith(".") and not e.is_symlink() and (e.is_dir() or e.is_file())
         ]
-        for entrada in sorted(entradas, key=lambda e: (not e.is_dir(), e.name.casefold())):
-            if restantes[0] <= 0:
-                restantes[0] = -1
-                break
-            filhos.append(_no(entrada, raiz, restantes, nivel + 1))
+    except OSError as exc:
+        return {**no, "kind": "dir", "children": filhos, "error": exc.strerror or str(exc)}
+    if entradas and nivel >= PROFUNDIDADE:
+        estado["cortado"] = True
+        return {**no, "kind": "dir", "children": filhos}
+    for entrada in sorted(entradas, key=lambda e: (not e.is_dir(), e.name.casefold())):
+        if estado["restantes"] <= 0:
+            estado["cortado"] = True
+            break
+        filhos.append(_no(entrada, raiz, estado, nivel + 1))
     return {**no, "kind": "dir", "children": filhos}
 
 
@@ -108,34 +120,70 @@ def _separador(texto: str) -> str:
     return "LF"
 
 
+def _erro_de_disco(exc: OSError, relativo: Any) -> InvalidInputError:
+    """Sem permissao, componente que e arquivo, disco cheio: erro de entrada
+    com o motivo do sistema, e nao "Erro interno no motor" (R-10)."""
+    return InvalidInputError(f"Nao deu para usar {relativo}: {exc.strerror or exc}")
+
+
+def _ler_limitado(alvo: pathlib.Path) -> tuple[bytes, os.stat_result]:
+    """Le sem seguir link e sem passar do limite, mesmo se o arquivo crescer."""
+    fd = os.open(alvo, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as entrada:
+        info = os.fstat(entrada.fileno())
+        if info.st_size > LIMITE_BYTES:
+            raise InvalidInputError(f"Arquivo grande demais para o editor ({info.st_size} bytes).")
+        dados = entrada.read(LIMITE_BYTES + 1)
+    if len(dados) > LIMITE_BYTES:
+        raise InvalidInputError("Arquivo grande demais para o editor.")
+    return dados, info
+
+
 def ler(raiz: pathlib.Path, relativo: Any) -> dict[str, Any]:
     alvo = _caminho(raiz, relativo)
-    if not alvo.is_file():
-        raise InvalidInputError(f"Arquivo nao encontrado: {relativo}")
-    tamanho = alvo.stat().st_size
-    if tamanho > LIMITE_BYTES:
-        raise InvalidInputError(f"Arquivo grande demais para o editor ({tamanho} bytes).")
-    texto, bom, utf8 = _decodificar(alvo.read_bytes())
+    try:
+        if not alvo.is_file():
+            raise InvalidInputError(f"Arquivo nao encontrado: {relativo}")
+        dados, info = _ler_limitado(alvo)
+    except OSError as exc:
+        raise _erro_de_disco(exc, relativo) from exc
+    texto, bom, utf8 = _decodificar(dados)
     return {
         "path": relativo, "text": texto.replace("\r\n", "\n").replace("\r", "\n"),
         "encoding": "UTF-8" if utf8 else "desconhecida", "line_separator": _separador(texto),
-        "bom": bom, "read_only": not utf8, "size": tamanho,
+        "bom": bom, "read_only": not utf8, "size": len(dados), "mtime_ns": info.st_mtime_ns,
     }
 
 
-def gravar(raiz: pathlib.Path, relativo: Any, texto: Any, separador: Any = "LF", bom: Any = False) -> dict[str, Any]:
+def gravar(
+    raiz: pathlib.Path, relativo: Any, texto: Any, separador: Any = "LF", bom: Any = False,
+    mtime_esperado: Any = None,
+) -> dict[str, Any]:
+    """Grava atomicamente (R-11). Com `mtime_esperado` (o `mtime_ns` do
+    `read`), recusa com `file_changed` se o arquivo mudou ou sumiu (R-04)."""
     alvo = _caminho(raiz, relativo)
     if separador not in SEPARADORES:
         raise InvalidInputError(f"Separador de linha invalido: {separador!r}")
-    if not isinstance(texto, str) or len(texto) > LIMITE_BYTES:
-        raise InvalidInputError("Texto ausente ou grande demais para gravar.")
-    if alvo.exists():
-        if not alvo.is_file():
-            raise InvalidInputError(f"Nao e um arquivo: {relativo}")
-        if not _decodificar(alvo.read_bytes())[2]:
-            raise InvalidInputError("Arquivo somente leitura: nao e UTF-8.")
+    if not isinstance(texto, str):
+        raise InvalidInputError("Texto ausente.")
     corpo = texto.replace("\r\n", "\n").replace("\r", "\n").replace("\n", SEPARADORES[separador])
     dados = (codecs.BOM_UTF8 if bom is True else b"") + corpo.encode("utf-8")
-    alvo.parent.mkdir(parents=True, exist_ok=True)
-    alvo.write_bytes(dados)
-    return {"path": relativo, "saved": True, "bytes": len(dados)}
+    if len(dados) > LIMITE_BYTES:
+        raise InvalidInputError(f"Texto grande demais para gravar ({len(dados)} bytes).")
+    try:
+        existe = alvo.exists()
+        if mtime_esperado is not None:
+            atual = alvo.stat().st_mtime_ns if existe else None
+            if atual != mtime_esperado:
+                raise FileChangedError(f"O arquivo {relativo} mudou no disco depois de aberto.")
+        if existe:
+            if not alvo.is_file():
+                raise InvalidInputError(f"Nao e um arquivo: {relativo}")
+            if not _decodificar(_ler_limitado(alvo)[0])[2]:
+                raise InvalidInputError("Arquivo somente leitura: nao e UTF-8.")
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        write_file_atomic(alvo, dados)
+        mtime = alvo.stat().st_mtime_ns
+    except OSError as exc:
+        raise _erro_de_disco(exc, relativo) from exc
+    return {"path": relativo, "saved": True, "bytes": len(dados), "mtime_ns": mtime}

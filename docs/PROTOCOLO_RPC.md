@@ -66,6 +66,7 @@ a interface usa para decidir entre exibir diálogo e apenas registrar.
 | `adapter_error` | Falha ao conversar com ferramenta externa |
 | `engine_error` | Falha prevista sem categoria mais específica |
 | `incompatible_protocol` | O front e o motor falam versões diferentes do contrato. Ver "Versão do protocolo e handshake" |
+| `file_changed` | O arquivo mudou no disco depois do `workspace.read` (outro editor gravou, ou ele sumiu). Ver "Árvore Projeto" |
 | `request_cancelled` | O cliente cancelou a requisição. Vem com o código `-32800`, e não `-32000`. Ver "Cancelamento" |
 
 ## Versão do protocolo e handshake
@@ -276,10 +277,9 @@ Desde a PO-5 (rodada 2026-11-03). Só a pasta de trabalho `~/Documents/Mo baile`
 
 | Método | Parâmetros | Devolve |
 |---|---|---|
-| `workspace.tree` | — | `{root, name, exists, nodes, truncated}`. Cada nó tem `name`, `path` e `kind` (`dir` ou `file`); pasta traz `children`, pastas primeiro e nomes em ordem alfabética. Ocultos e links simbólicos ficam de fora; no máximo 2.000 nós (`truncated`) |
-| `workspace.read` | `path` | `{path, text, encoding, line_separator, bom, read_only, size}`. `text` vem com LF; o separador original (`LF`, `CRLF` ou `CR`, o primeiro do arquivo) vai em `line_separator`. Arquivo que não é UTF-8 vem com `read_only: true`. Acima de 1 MB, `invalid_input` |
-| `workspace.write` | `path`, `text`, `line_separator?` (`LF`), `bom?` (`false`) | grava com o separador e o BOM pedidos (o front devolve os que leu) e devolve `{path, saved, bytes}`. Cria a pasta se faltar. Recusa regravar arquivo que não é UTF-8 |
-
+| `workspace.tree` | — | `{root, name, exists, nodes, truncated}`. Cada nó tem `name`, `path` e `kind` (`dir` ou `file`); pasta traz `children`, pastas primeiro e nomes em ordem alfabética. Ocultos e links simbólicos ficam de fora. `truncated` diz que algo ficou de fora: mais de 2.000 nós ou pasta além de 8 níveis. Pasta que não dá para ler vem com `children: []` e `error` (o motivo do sistema) |
+| `workspace.read` | `path` | `{path, text, encoding, line_separator, bom, read_only, size, mtime_ns}`. `text` vem com LF; o separador original (`LF`, `CRLF` ou `CR`, o primeiro do arquivo) vai em `line_separator`. Arquivo que não é UTF-8 vem com `read_only: true`. `mtime_ns` é a hora de modificação lida, para o `write` detectar conflito. Acima de 1 MB (bytes), `invalid_input` |
+| `workspace.write` | `path`, `text`, `line_separator?` (`LF`), `bom?` (`false`), `expected_mtime_ns?` | grava com o separador e o BOM pedidos (o front devolve os que leu) e devolve `{path, saved, bytes, mtime_ns}`. Com `expected_mtime_ns`, recusa com `file_changed` se o arquivo mudou ou sumiu desde o `read`; sem ele, sobrescreve. A gravação é atômica (temporário na mesma pasta + rename, sem seguir link simbólico) e mantém o modo do arquivo. Recusa com `invalid_input`: texto acima de 1 MB em bytes, arquivo que não é UTF-8, arquivo sem permissão de escrita e qualquer erro de disco (com o motivo do sistema) |
 
 ### Execução de fluxo
 

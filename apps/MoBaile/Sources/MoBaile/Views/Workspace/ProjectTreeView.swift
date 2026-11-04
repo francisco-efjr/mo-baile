@@ -287,8 +287,10 @@ struct ProjectTreeView: View {
             break
         }
         // ⌘+ e ⌘- expandem e recolhem tudo, como no PyCharm.
-        if tecla.modifiers == .command, tecla.characters == "+" || tecla.characters == "=" { modelo.expandirTudo(); return .handled }
-        if tecla.modifiers == .command, tecla.characters == "-" { modelo.recolherTudo(); return .handled }
+        // No teclado americano o "+" vem com ⇧: ⌘= e ⇧⌘+ valem as duas.
+        let comandos = tecla.modifiers.subtracting(.shift) == .command
+        if comandos, tecla.characters == "+" || tecla.characters == "=" { modelo.expandirTudo(); return .handled }
+        if comandos, tecla.characters == "-" || tecla.characters == "_" { modelo.recolherTudo(); return .handled }
         guard tecla.modifiers.isDisjoint(with: [.command, .control, .option]),
               let escalar = tecla.characters.unicodeScalars.first,
               tecla.characters.unicodeScalars.count == 1,

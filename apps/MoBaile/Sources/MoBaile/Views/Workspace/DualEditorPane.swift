@@ -20,15 +20,14 @@ struct PageObjectsView: View {
     @State private var arquivo: EditorFile = .pages
     /// Árvore Projeto e arquivos abertos dela, em abas (PO-5).
     @State private var projeto = ProjetoModelo()
-    @State private var abertos: [ArquivoAberto] = []
-    /// Aba do arquivo aberto à frente; `nil` é o Page Object da sessão.
-    @State private var ativo: String?
+    /// Aba suja esperando "Salvar / Descartar / Cancelar" para fechar (R-02).
+    @State private var fechando: String?
     @SceneStorage("larguraProjeto") private var larguraProjeto = 220.0
     /// Abaixo disto a árvore não aparece: o editor ficaria estreito demais.
     static let larguraMinimaComArvore: CGFloat = 640
-    /// Posição do cursor no último editor que mexeu (rodapé, PO-4).
-    @State private var linha = 1
-    @State private var coluna = 1
+    /// Posição do cursor no último editor que mexeu (rodapé, PO-4). Só o
+    /// rodapé lê: mover o cursor não reavalia esta view (R-06).
+    @State private var cursor = CursorDoEditor()
 
     var body: some View {
         @Bindable var state = appState
@@ -52,14 +51,14 @@ struct PageObjectsView: View {
                     ToolWindowStripe(semEspaco: appState.projectTreeVisible && !cabe)
                     if appState.projectTreeVisible && cabe {
                         ProjectTreeView(
-                            modelo: projeto, arquivoAberto: ativo ?? caminhoDoPageObject,
+                            modelo: projeto, arquivoAberto: appState.arquivoAtivo ?? caminhoDoPageObject,
                             abrir: abrir, ocultar: { appState.projectTreeVisible = false }
                         )
                         .frame(width: min(larguraProjeto, geo.size.width * 0.32))
                         .overlay(alignment: .trailing) { DivisoriaDoProjeto(largura: $larguraProjeto) }
                     }
                     VStack(spacing: 0) {
-                        if !abertos.isEmpty { abas }
+                        if !appState.arquivosAbertos.isEmpty { abas }
                         editor
                     }
                 }
@@ -75,17 +74,66 @@ struct PageObjectsView: View {
         }
         // Salvar o Page Object cria ou muda arquivos da árvore.
         .onChange(of: appState.codigoSalvo) { Task { await projetoRecarregar() } }
+        .confirmationDialog(
+            "Salvar as alterações em \(fechando ?? "")?", isPresented: fechandoBinding, presenting: fechando
+        ) { id in
+            Button("Salvar") {
+                Task { if await appState.salvarArquivo(id, sessao: session) { appState.fecharArquivo(id) } }
+            }
+            Button("Descartar Alterações", role: .destructive) { appState.fecharArquivo(id) }
+            Button("Cancelar", role: .cancel) {}
+        } message: { _ in
+            Text("Se não salvar, o que você mudou nesta aba se perde.")
+        }
+        .alert(
+            "\(appState.conflitoDeArquivo ?? "") mudou no disco", isPresented: conflitoBinding,
+            presenting: appState.conflitoDeArquivo
+        ) { id in
+            Button("Recarregar do Disco") { Task { await appState.recarregarArquivo(id, sessao: session) } }
+            Button("Sobrescrever", role: .destructive) {
+                Task { await appState.salvarArquivo(id, sessao: session, sobrescrever: true) }
+            }
+            Button("Cancelar", role: .cancel) { appState.conflitoDeArquivo = nil }
+        } message: { _ in
+            Text("Outro programa gravou o arquivo depois que ele foi aberto aqui. Recarregar descarta o que você mudou nesta aba; sobrescrever apaga a versão do disco.")
+        }
+    }
+
+    private var fechandoBinding: Binding<Bool> {
+        Binding(get: { fechando != nil }, set: { if !$0 { fechando = nil } })
+    }
+
+    private var conflitoBinding: Binding<Bool> {
+        Binding(get: { appState.conflitoDeArquivo != nil }, set: { if !$0 { appState.conflitoDeArquivo = nil } })
     }
 
     @ViewBuilder
     private var editor: some View {
         @Bindable var state = appState
         let theme = themeManager.current
-        if let indice = abertos.firstIndex(where: { $0.id == ativo }) {
-            ArquivoAbertoPane(aberto: $abertos[indice], onCursor: moverCursor) {
-                Task { await projetoRecarregar() }
+        ZStack {
+            if appState.arquivoAtivo == nil {
+                editorDoPageObject
             }
-        } else if vazio {
+            // Um editor por aba, todos vivos e só o da frente visível: cada
+            // arquivo guarda o próprio desfazer, cursor e rolagem (R-03).
+            ForEach($state.arquivosAbertos) { $aberto in
+                let ligado = appState.arquivoAtivo == aberto.id
+                ArquivoAbertoPane(aberto: $aberto, cursor: cursor)
+                    .id(aberto.id)
+                    .opacity(ligado ? 1 : 0)
+                    .allowsHitTesting(ligado)
+                    .accessibilityHidden(!ligado)
+            }
+        }
+        .background(theme.bgContent)
+    }
+
+    @ViewBuilder
+    private var editorDoPageObject: some View {
+        @Bindable var state = appState
+        let theme = themeManager.current
+        if vazio {
             VStack(spacing: 0) {
                 EmptyState(
                     icon: "chevron.left.forwardslash.chevron.right",
@@ -103,13 +151,13 @@ struct PageObjectsView: View {
         } else {
             HStack(spacing: 0) {
                 if appState.splitEditors || arquivo == .pages {
-                    CodeEditorPane(file: .pages, text: $state.actionsCode, onCursor: moverCursor)
+                    CodeEditorPane(file: .pages, text: $state.actionsCode, cursor: cursor)
                 }
                 if appState.splitEditors {
                     Rectangle().fill(theme.separator).frame(width: 1)
                 }
                 if appState.splitEditors || arquivo == .locators {
-                    CodeEditorPane(file: .locators, text: $state.locatorsCode, onCursor: moverCursor)
+                    CodeEditorPane(file: .locators, text: $state.locatorsCode, cursor: cursor)
                 }
             }
         }
@@ -121,9 +169,9 @@ struct PageObjectsView: View {
         let theme = themeManager.current
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
-                aba(titulo: "Page Object", id: nil, fechar: nil)
-                ForEach(abertos) { aberto in
-                    aba(titulo: aberto.arquivo.path, id: aberto.id) { fechar(aberto.id) }
+                aba(titulo: "Page Object", id: nil, sujo: false, fechar: nil)
+                ForEach(appState.arquivosAbertos) { aberto in
+                    aba(titulo: aberto.arquivo.path, id: aberto.id, sujo: aberto.sujo) { pedirParaFechar(aberto.id) }
                 }
             }
         }
@@ -132,11 +180,14 @@ struct PageObjectsView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(theme.separator).frame(height: 1) }
     }
 
-    private func aba(titulo: String, id: String?, fechar: (() -> Void)?) -> some View {
+    private func aba(titulo: String, id: String?, sujo: Bool, fechar: (() -> Void)?) -> some View {
         let theme = themeManager.current
-        let ligada = ativo == id
+        let ligada = appState.arquivoAtivo == id
         return HStack(spacing: 4) {
-            Button(titulo) { ativo = id }
+            // "•" antes do nome: alteração não salva, como o asterisco do PyCharm.
+            Button(sujo ? "• \(titulo)" : titulo) { appState.arquivoAtivo = id }
+                .accessibilityLabel(titulo)
+                .accessibilityValue(sujo ? "não salvo" : "")
                 .buttonStyle(.plain)
                 .font(DSFont.mono(11.5))
                 .foregroundStyle(ligada ? theme.labelPrimary : theme.labelSecondary)
@@ -160,24 +211,19 @@ struct PageObjectsView: View {
         let chave = session.engineInfo?.pageObjectsKey ?? "feature"
         if let proprio = EditorFile.allCases.first(where: { caminho == "\($0.rawValue)/\(chave).py" }) {
             arquivo = proprio
-            ativo = nil
+            appState.arquivoAtivo = nil
             return
         }
-        if abertos.contains(where: { $0.id == caminho }) { ativo = caminho; return }
-        Task {
-            do {
-                let lido = try await session.readWorkspaceFile(caminho)
-                abertos.append(ArquivoAberto(arquivo: lido, texto: lido.text))
-                ativo = caminho
-            } catch {
-                appState.statusMessage = "Não deu para abrir \(caminho): \(error.localizedDescription)"
-            }
-        }
+        Task { await appState.abrirArquivo(caminho, sessao: session) }
     }
 
-    private func fechar(_ id: String) {
-        abertos.removeAll { $0.id == id }
-        if ativo == id { ativo = abertos.last?.id }
+    /// × numa aba suja pergunta antes (R-02); limpa fecha direto.
+    private func pedirParaFechar(_ id: String) {
+        guard let indice = appState.indiceDoArquivo(id), appState.arquivosAbertos[indice].sujo else {
+            appState.fecharArquivo(id)
+            return
+        }
+        fechando = id
     }
 
     private func projetoRecarregar() async {
@@ -274,9 +320,9 @@ struct PageObjectsView: View {
     }
 
     private func statusDoEditor(compacto: Bool) -> some View {
-        let aberto = abertos.first { $0.id == ativo }
+        let aberto = appState.arquivosAbertos.first { $0.id == appState.arquivoAtivo }
         return EditorStatusBar(
-            linha: linha, coluna: coluna,
+            cursor: cursor,
             python: session.setup?.python.version, pythonPath: session.setup?.python.path,
             salvamento: aberto.map(\.salvamento) ?? EditorStatus.salvamento(
                 acoes: appState.actionsCode, locators: appState.locatorsCode, salvo: appState.codigoSalvo
@@ -284,11 +330,6 @@ struct PageObjectsView: View {
             caminho: aberto?.arquivo.path ?? appState.codigoSalvo?.caminho, compacto: compacto,
             separador: aberto?.arquivo.lineSeparator ?? "LF", codificacao: aberto?.arquivo.encoding ?? "UTF-8"
         )
-    }
-
-    private func moverCursor(_ novaLinha: Int, _ novaColuna: Int) {
-        linha = novaLinha
-        coluna = novaColuna
     }
 
     private var rodape: String {
@@ -308,7 +349,7 @@ struct CodeEditorPane: View {
 
     let file: EditorFile
     @Binding var text: String
-    var onCursor: ((Int, Int) -> Void)? = nil
+    var cursor: CursorDoEditor? = nil
 
     var body: some View {
         let theme = themeManager.current
@@ -371,7 +412,7 @@ struct CodeEditorPane: View {
                 text: $text,
                 accessibilityLabel: file == .pages ? "Código das ações (pages)" : "Código dos localizadores (locators)",
                 highlight: appState.selectedStep?.varName,
-                onCursor: onCursor
+                cursor: cursor
             )
         }
         .frame(maxWidth: .infinity)

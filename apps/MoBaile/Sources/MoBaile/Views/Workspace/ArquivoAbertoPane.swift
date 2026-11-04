@@ -20,6 +20,78 @@ struct ArquivoAberto: Identifiable, Equatable {
     }
 }
 
+/// O que fazer com as abas da árvore Projeto. Fica no `AppState` (R-01): a
+/// aba Page Objects é recriada ao trocar de área, e as abas não podem sumir
+/// com ela. Toda atualização depois de um `await` procura a aba pelo id, e não
+/// pelo índice: ela pode ter sido fechada no meio (R-07).
+extension AppState {
+    func indiceDoArquivo(_ id: String) -> Int? { arquivosAbertos.firstIndex { $0.id == id } }
+
+    /// Abre (ou traz para a frente) um arquivo lido pelo motor. Confere de
+    /// novo depois do `await`: dois ↩ rápidos não abrem duas abas (R-08).
+    @MainActor
+    func abrirArquivo(_ caminho: String, sessao: EngineSession) async {
+        if indiceDoArquivo(caminho) != nil { arquivoAtivo = caminho; return }
+        do {
+            let lido = try await sessao.readWorkspaceFile(caminho)
+            if indiceDoArquivo(caminho) == nil {
+                arquivosAbertos.append(ArquivoAberto(arquivo: lido, texto: lido.text))
+            }
+            arquivoAtivo = caminho
+        } catch {
+            statusMessage = "Não deu para abrir \(caminho): \(error.localizedDescription)"
+        }
+    }
+
+    /// Grava a aba. Sem `sobrescrever`, manda o `mtime_ns` lido e, se outro
+    /// editor gravou no meio, marca o conflito para a aba perguntar (R-04).
+    @MainActor
+    @discardableResult
+    func salvarArquivo(_ id: String, sessao: EngineSession, sobrescrever: Bool = false) async -> Bool {
+        guard let indice = indiceDoArquivo(id), !arquivosAbertos[indice].arquivo.readOnly else { return false }
+        let arquivo = arquivosAbertos[indice].arquivo
+        let texto = arquivosAbertos[indice].texto
+        do {
+            let gravado = try await sessao.writeWorkspaceFile(arquivo, text: texto, sobrescrever: sobrescrever)
+            if let i = indiceDoArquivo(id) {
+                arquivosAbertos[i].arquivo.text = texto
+                arquivosAbertos[i].arquivo.mtimeNs = gravado.mtimeNs
+                arquivosAbertos[i].salvoEm = Date()
+            }
+            if conflitoDeArquivo == id { conflitoDeArquivo = nil }
+            statusMessage = "Salvo \(id)"
+            return true
+        } catch EngineError.engine(let codigo, _) where codigo == "file_changed" {
+            conflitoDeArquivo = id
+            statusMessage = "\(id) mudou no disco depois de aberto"
+            return false
+        } catch {
+            statusMessage = "Não deu para salvar \(id): \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// Relê do disco e descarta o que estava na aba (conflito: "Recarregar").
+    @MainActor
+    func recarregarArquivo(_ id: String, sessao: EngineSession) async {
+        do {
+            let lido = try await sessao.readWorkspaceFile(id)
+            if let i = indiceDoArquivo(id) {
+                arquivosAbertos[i] = ArquivoAberto(arquivo: lido, texto: lido.text)
+            }
+            if conflitoDeArquivo == id { conflitoDeArquivo = nil }
+        } catch {
+            statusMessage = "Não deu para recarregar \(id): \(error.localizedDescription)"
+        }
+    }
+
+    func fecharArquivo(_ id: String) {
+        arquivosAbertos.removeAll { $0.id == id }
+        if arquivoAtivo == id { arquivoAtivo = arquivosAbertos.last?.id }
+        if conflitoDeArquivo == id { conflitoDeArquivo = nil }
+    }
+}
+
 /// Editor de um arquivo aberto da árvore: cabeçalho com o caminho, cadeado
 /// quando não é UTF-8 e Salvar (grava com o separador e o BOM originais).
 struct ArquivoAbertoPane: View {
@@ -27,8 +99,7 @@ struct ArquivoAbertoPane: View {
     @Environment(EngineSession.self) private var session
     @Environment(ThemeManager.self) private var themeManager
     @Binding var aberto: ArquivoAberto
-    var onCursor: ((Int, Int) -> Void)?
-    let aoSalvar: () -> Void
+    var cursor: CursorDoEditor?
 
     var body: some View {
         let theme = themeManager.current
@@ -51,7 +122,7 @@ struct ArquivoAbertoPane: View {
                     .foregroundStyle(theme.labelSecondary)
                     .accessibilityHidden(true)
                 BarIconButton(icon: "square.and.arrow.down", label: "Salvar \(aberto.arquivo.path)") {
-                    Task { await salvar() }
+                    Task { await appState.salvarArquivo(aberto.id, sessao: session) }
                 }
                 .disabled(aberto.arquivo.readOnly || !aberto.sujo)
             }
@@ -65,25 +136,8 @@ struct ArquivoAbertoPane: View {
                 accessibilityLabel: "Arquivo \(aberto.arquivo.path)",
                 python: aberto.arquivo.path.hasSuffix(".py"),
                 editable: !aberto.arquivo.readOnly,
-                onCursor: onCursor
+                cursor: cursor
             )
-        }
-    }
-
-    private func salvar() async {
-        do {
-            let texto = aberto.texto
-            _ = try await session.writeWorkspaceFile(aberto.arquivo, text: texto)
-            aberto.arquivo = EngineDTO.WorkspaceFile(
-                path: aberto.arquivo.path, text: texto, encoding: aberto.arquivo.encoding,
-                lineSeparator: aberto.arquivo.lineSeparator, bom: aberto.arquivo.bom,
-                readOnly: false, size: aberto.arquivo.size
-            )
-            aberto.salvoEm = Date()
-            appState.statusMessage = "Salvo \(aberto.arquivo.path)"
-            aoSalvar()
-        } catch {
-            appState.statusMessage = "Não deu para salvar: \(error.localizedDescription)"
         }
     }
 }
@@ -132,6 +186,9 @@ struct DivisoriaDoProjeto: View {
     @Environment(ThemeManager.self) private var themeManager
     @Binding var largura: Double
     @State private var inicio: Double?
+    /// O cursor de redimensionar foi empilhado: sai se a divisória sumir com o
+    /// mouse em cima (painel ocultado, coluna estreita), senão fica preso (R-13).
+    @State private var empilhado = false
 
     var body: some View {
         Rectangle()
@@ -139,7 +196,11 @@ struct DivisoriaDoProjeto: View {
             .frame(width: 1)
             .padding(.horizontal, 2)
             .contentShape(Rectangle())
-            .onHover { dentro in if dentro { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            .onHover { dentro in
+                if dentro, !empilhado { NSCursor.resizeLeftRight.push(); empilhado = true }
+                if !dentro, empilhado { NSCursor.pop(); empilhado = false }
+            }
+            .onDisappear { if empilhado { NSCursor.pop(); empilhado = false } }
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { gesto in
