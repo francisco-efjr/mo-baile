@@ -226,12 +226,7 @@ struct CodeEditorPane: View {
         "\(session.engineInfo?.pageObjectsKey ?? "feature").py"
     }
 
-    private var contagemDeLinhas: String {
-        guard !text.isEmpty else { return "0 linhas" }
-        let linhas = text.split(separator: "\n", omittingEmptySubsequences: false)
-        let total = (linhas.last?.isEmpty == true && linhas.count > 1) ? (linhas.count - 1) : linhas.count
-        return total == 1 ? "1 linha" : "\(total) linhas"
-    }
+    private var contagemDeLinhas: String { EditorText.rotuloDeLinhas(text) }
 }
 
 /// Mantido com o nome antigo para os testes que desenham os editores.

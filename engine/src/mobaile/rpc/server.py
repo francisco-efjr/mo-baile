@@ -195,6 +195,15 @@ def _dentro_de(caminho: pathlib.Path, raiz: pathlib.Path) -> bool:
     return caminho.resolve().is_relative_to(raiz.resolve())
 
 
+def _texto_com_lf(texto: str) -> str:
+    """CRLF e CR soltos viram LF, como no documento do PyCharm.
+
+    So esses dois: U+2028 e U+2029 nao sao separador de linha no PyCharm e
+    ficam no texto.
+    """
+    return texto.replace("\r\n", "\n").replace("\r", "\n")
+
+
 class EngineServer:
     """Estado da sessao e tabela de metodos."""
 
@@ -1685,7 +1694,11 @@ class EngineServer:
             if not _dentro_de(arquivo, raiz):
                 raise InvalidInputError(f"O arquivo precisa ficar dentro de {raiz}.")
             pasta.mkdir(parents=True, exist_ok=True)
-            arquivo.write_text(conteudo, encoding="utf-8")
+            # Bytes do PyCharm (PO-1): toda quebra de linha vira `\n`, UTF-8
+            # sem BOM, sem normalizacao Unicode, sem tirar espaco do fim nem
+            # forcar quebra final. `newline="\n"` impede a traducao do modo
+            # texto, que em outro sistema trocaria `\n` por `os.linesep`.
+            arquivo.write_text(_texto_com_lf(conteudo), encoding="utf-8", newline="\n")
             escritos.append(str(arquivo))
 
         logger.info("Page Object gravado em %s", destino)

@@ -18,12 +18,8 @@ struct CodeEditorView: NSViewRepresentable {
         let container = IDEEditorContainerView()
         let textView = container.textView
 
+        // A entrada literal (PO-1) já vem do contêiner.
         textView.delegate = context.coordinator
-        textView.isRichText = false
-        textView.allowsUndo = true
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticSpellingCorrectionEnabled = false
         textView.font = Self.fonte
         textView.backgroundColor = .clear
         textView.setAccessibilityLabel(accessibilityLabel)
@@ -36,19 +32,29 @@ struct CodeEditorView: NSViewRepresentable {
         let tema = themeManager.current
         textView.setAccessibilityLabel(accessibilityLabel)
 
+        // Texto que chega com CR ou CRLF entra como o PyCharm guardaria: `\n`.
+        let normalizado = EditorText.normalizarQuebras(text)
+        if normalizado != text {
+            DispatchQueue.main.async { self.text = normalizado }
+        }
+
         context.coordinator.aplicando = true
         defer { context.coordinator.aplicando = false }
 
         let destaqueMudou = context.coordinator.destaque != highlight || context.coordinator.temaID != tema.id + "\(tema.highContrast)"
-        if textView.string != text || destaqueMudou {
+        if textView.string != normalizado || destaqueMudou {
             // A posição do cursor é preservada: sem isso, cada passo gravado
             // jogava o cursor para o início enquanto alguém editava.
             let selecao = textView.selectedRange()
             let colorido = NSMutableAttributedString(
-                attributedString: PythonHighlighter.destacar(text, tema: tema, fonte: Self.fonte)
+                attributedString: PythonHighlighter.destacar(normalizado, tema: tema, fonte: Self.fonte)
             )
             let primeira = Self.destacarLinhas(contendo: highlight, em: colorido, cor: NSColor(tema.selectionContent))
+            let trocouTexto = textView.string != normalizado
             textView.textStorage?.setAttributedString(colorido)
+            // Troca por fora do editor: o histórico antigo aponta para faixas
+            // que não existem mais.
+            if trocouTexto { textView.historico.removeAllActions() }
             let limite = (textView.string as NSString).length
             textView.setSelectedRange(NSRange(location: min(selecao.location, limite), length: 0))
             if destaqueMudou, let primeira {
@@ -68,8 +74,7 @@ struct CodeEditorView: NSViewRepresentable {
         container.gutterView.separatorColor = NSColor(tema.separator)
         container.gutterView.textColor = NSColor(tema.syntaxGutter)
 
-        let lineCount = text.split(separator: "\n", omittingEmptySubsequences: false).count
-        container.updateGutterWidth(forLineCount: lineCount)
+        container.updateGutterWidth(forLineCount: EditorText.linhasDoGutter(text))
         container.gutterView.needsDisplay = true
     }
 
@@ -102,8 +107,7 @@ struct CodeEditorView: NSViewRepresentable {
             guard !aplicando, let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
             if let container = textView.superview?.superview?.superview as? IDEEditorContainerView {
-                let lineCount = textView.string.split(separator: "\n", omittingEmptySubsequences: false).count
-                container.updateGutterWidth(forLineCount: lineCount)
+                container.updateGutterWidth(forLineCount: EditorText.linhasDoGutter(textView.string))
                 container.gutterView.needsDisplay = true
             }
         }
