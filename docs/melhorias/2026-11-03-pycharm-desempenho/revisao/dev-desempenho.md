@@ -75,7 +75,8 @@ espelho para quando ninguém vê (PERF-1) e espaça a captura com a tela parada
 - Knobs aplicados no motor, também com o espelho já ligado: fps, `idle_fps`,
   largura e qualidade do quadro (K4), plano B do iOS em JPEG (`simctl
   --type=jpeg`, K3, só no Equilibrado e no Leve), intervalo do vigia de
-  aparelhos (K5) e teto dos históricos do proxy e do analytics (K7). O que o
+  aparelhos (K5) e corpo guardado das requisições novas do proxy (K7; depois
+  da revisão, ver R1: o teto do histórico não muda mais com o perfil). O que o
   chamador fixou no `stream.start` (ou `poll_interval` no `devices.watch_start`)
   o perfil não mexe.
 - K7: o motor do app nativo deixa de encher as filas `event_queue` do proxy e
@@ -93,7 +94,8 @@ espelho para quando ninguém vê (PERF-1) e espaça a captura com a tela parada
 | Largura / qualidade JPEG | 900 / 80 | 720 / 70 | 600 / 60 |
 | Plano B do iOS | PNG | JPEG | JPEG |
 | Vigia de aparelhos | 1,5 s | 3 s | 5 s |
-| Histórico proxy / analytics no motor | 2.000 / 5.000 | 1.000 / 3.000 | 500 / 2.000 |
+| Histórico proxy / analytics no motor | 2.000 / 5.000 | 2.000 / 5.000 | 2.000 / 5.000 (D-6) |
+| Corpo guardado por requisição nova | 256 KB | 128 KB | 64 KB |
 | Vidro próprio / molas | sim / sim | sim / sim | não / não |
 
 Todos os valores fora do Completo são **Suposição** de partida. Os de largura e
@@ -241,20 +243,19 @@ Depois de o orquestrador empacotar (`make update-native`):
 - **Atraso de mudança espontânea.** Com a tela parada há 2 s, uma mudança que
   não veio de toque (carregamento que termina, notificação) chega com até
   0,5 s no Completo e até 2 s no Leve. Toque e digitação acordam na hora.
+  Aceito pelo orquestrador no Completo (D-8).
 - **8 GB conta como modesto.** No Automático, um M1 de 8 GB começa no
-  Equilibrado (4 fps em vez de 6). É a regra da pesquisa; o dono pode preferir
-  Completo.
-- **Histórico menor no leve.** O motor guarda 500 requisições e 2.000 eventos
-  de analytics. A interface continua com 1.000 linhas e nenhuma notificação se
-  perde, mas `session.correlate` de um passo antigo pode achar menos
-  requisições.
+  Equilibrado (4 fps em vez de 6). Mantido pelo orquestrador (D-7).
+- **Corpo menor no leve.** Requisições capturadas no Equilibrado e no Leve
+  guardam até 128 e 64 KB de corpo (o resto marcado como truncado, com o
+  tamanho total). O histórico em si não muda com o perfil (D-6, R1).
 - **`STREAM_FPS` e `STREAM_QUALITY` do ambiente** deixaram de ser o padrão do
   `stream.start` sem parâmetros: o padrão agora é o perfil.
 - **MJPEG do WDA continua lendo com o espelho pausado.** A thread do leitor e o
   WDA seguem codificando enquanto a janela está oculta (Não medido: o WDA
   estava fora do ar). Proposta abaixo.
-- **`Motion.perfReduced` é um estático global** escrito só pela sessão, na main
-  thread; as animações o leem na hora da ação.
+- **`MotionPolicy.shared`** continua sendo o ponto único que o app lê na hora
+  da animação; agora é uma instância com trava, injetável na sessão (R6).
 - **Freio local durante a queda do motor.** Se o motor cai, o próximo
   `perf.signals` falha e a parte visual vai ao leve até a reconexão. Visual,
   sem efeito no motor.
@@ -275,8 +276,10 @@ Decisões pendentes:
   tela parada, app + motor + filhos em até 10% de um núcleo. Confirmar.
 - **Valores dos knobs num M1 de 8 GB.** Rodar `tools/bench_stream.py --perfil
   leve` e `--perfil equilibrado` lá (e com `--fonte ios` e o simulador ligado)
-  antes de fixar fps, `idle_fps` e históricos.
-- **Automático em Mac de 8 GB**: equilibrado (hoje) ou completo.
+  antes de fixar fps, `idle_fps` e o corpo guardado.
+- Decididas pelo orquestrador em 04/11: histórico igual em todos os perfis
+  (D-6), Mac de 8 GB começa no Equilibrado (D-7), cadência ociosa aceita no
+  Completo (D-8).
 
 Propostas seguintes, em ordem de ganho:
 
@@ -294,3 +297,32 @@ Propostas seguintes, em ordem de ganho:
 7. Teto de memória do proxy por bytes (F7).
 8. Hierarquia "retrato" no leve (O4) e detecção de Python sob Rosetta no motor
    (O2).
+
+## Correções da revisão
+
+Revisão independente em `scratchpad/revisao-desempenho.md` (mesmo modelo, não
+conta como validação externa). Um commit por achado; `make check` e
+`make test-swift` verdes antes de cada um.
+
+| Achado | Commit | O que mudou | Teste |
+| --- | --- | --- | --- |
+| R1 · histórico cortado pelo perfil (D-6) | `94dac6a` | O teto do histórico (proxy 2.000, analytics 5.000) é o mesmo em todos os perfis. Saíram `proxy_history` e `analytics_history`; entrou `proxy_body_capture_kb` (256, 128, 64), que só vale para requisições novas. Teto estourado: aviso no log, uma vez, e `perf.status.history_full`. Texto de Ajustes › Desempenho reescrito | `test_perf_rpc`: teto igual nos três perfis; 600 requisições e 2.500 eventos ficam no histórico depois de o Mac esquentar; `history_full`; corpo truncado no limite |
+| R2 · freio local preso | `2d9ffd1` | `applyPerf` zera `semMotor`, e ele roda na resposta do `perf.signals`, do `perf.set_preference` e na notificação `perf.profile` | `PerfTests.testRespostaDoMotorTiraOFreioLocal` |
+| R3 · corrida em `_aplicar_pausa` | `3332c34` | Pedido, decisão e `pause()`/`resume()` sob `_pausa_lock` | `TestPausaSemCorrida`: reproduz o fim de flow cruzando com a retomada (falha sem a trava; conferido) |
+| R4 · `stream.resume` que falha | `9c5a245` | Retomada que falha é repetida em 0,5, 1, 2 e 4 s enquanto a janela estiver visível; ocultar cancela | `PerfTests.testRetomadaQueFalhaERepetidaSoComAJanelaVisivel` |
+| R5 · perfil trocado durante o `stream.start` | `011ba4b` | O start reaplica `_aplicar_knobs()` depois de publicar o espelho | `TestPerfilDuranteOStart` |
+| R6 · higiene do Swift | `76b4493` | Observadores e fonte de pressão de memória numa caixa que os desfaz no `deinit`, mais `stop()`; pressão de memória começa no estado atual (`kern.memorystatus_vm_pressure_level`); `WindowVisibility` lê o estado inicial da janela; `Motion.perfReduced` virou `MotionPolicy` injetável (a sessão de teste usa a própria) | `PerfTests.testSensoresParamDeObservar`; teste de sinais confere a política injetada |
+
+Testes depois das correções: motor 837 → 842, Swift 422 → 425 (27 puladas),
+QA de ponta a ponta e fixtures em dia.
+
+Não corrigido, com motivo:
+
+- **Leitor MJPEG do WDA com o espelho pausado** e o restante de "Não
+  verificado" da revisão (acordar o Mac, troca de Space, protetor de tela,
+  `simctl --type=jpeg` no caminho real): pedem o app instalado ou o simulador
+  ligado, e esta rodada não mexe no app do dono. Continuam nas propostas e no
+  roteiro de validação manual.
+- **Repetir o `perf.signals` com recuo** (opcional no R2): com o R2, qualquer
+  resposta do motor já tira o freio, e o próximo evento de sensor manda os
+  sinais de novo. Ficou de fora para não somar outro temporizador.
