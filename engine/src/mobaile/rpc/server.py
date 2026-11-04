@@ -1202,6 +1202,11 @@ class EngineServer:
             idle_fps=idle_fps,
         )
         self._stream.start()
+        # O temporizador da histerese pode ter trocado o perfil entre a leitura
+        # dos knobs acima e a publicacao de `_stream`; nessa janela ele nao via
+        # espelho nenhum. Reaplicar agora fecha o buraco (R5); depois daqui,
+        # quem trocar o perfil ja encontra este espelho.
+        self._aplicar_knobs()
         self._aplicar_pausa()
         return {
             "started": True, "fps": fps, "max_width": max_width, "format": fmt, "quality": quality,

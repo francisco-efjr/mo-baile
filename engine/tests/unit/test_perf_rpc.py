@@ -178,3 +178,22 @@ class TestCorpoCapturado(PerfBase):
         texto, cortado = _decode_body(b"a" * 100, {"Content-Type": "text/plain"}, limite=10)
         self.assertTrue(cortado)
         self.assertIn("100 bytes no total, 10 capturados", texto)
+
+
+class TestPerfilDuranteOStart(PerfBase):
+    def test_perfil_trocado_no_meio_do_stream_start_vale_para_o_espelho_novo(self):
+        """R5: a histerese dispara entre ler os knobs e publicar o espelho."""
+        original = self.server._start_mjpeg_if_available
+
+        def troca_no_meio(*args, **kwargs):
+            # Como o temporizador faria: governador muda e aplica, sem espelho.
+            estado, mudou = self.server.perf.atualizar(preferencia="leve")
+            self.server._perf_aplicar(estado, mudou)
+            return original(*args, **kwargs)
+
+        self.server._start_mjpeg_if_available = troca_no_meio
+        self.ok("stream.start")
+        leve = perf.KNOBS["leve"]
+        self.assertAlmostEqual(self.server._stream.frame_interval, 1 / leve.stream_fps)
+        self.assertEqual(self.server._stream_cfg["max_width"], leve.stream_max_width)
+        self.ok("stream.stop")
