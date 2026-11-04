@@ -119,6 +119,72 @@ class TestPrivacidadeDaEntrada(FluxoBase):
         self.assertNotIn("Exemplo", self.out.getvalue())
 
 
+class TestAbrirAppAntes(FluxoBase):
+    """SYNC-9: `launch_app` abre o app gravado do zero antes do primeiro passo."""
+
+    def test_launch_app_para_e_abre_o_pacote_gravado_antes_dos_passos(self):
+        self.gravar_android((540, 480, "id"))
+        self.adb.limpar_registro()
+
+        self.ok("flow.run", {"launch_app": True})
+        fim = self.esperar_fim()
+
+        self.assertTrue(fim["success"], fim)
+        comandos = [" ".join(c) for c in self.adb.chamadas()]
+        parar = next(i for i, c in enumerate(comandos) if "am force-stop br.app" in c)
+        abrir = next(i for i, c in enumerate(comandos) if "monkey -p br.app" in c)
+        tocar = next(i for i, c in enumerate(comandos) if "input tap" in c)
+        self.assertLess(parar, abrir)
+        self.assertLess(abrir, tocar, "o toque saiu antes de abrir o app")
+        self.assertEqual([(n["index"], n["total"]) for n in self.notificacoes("flow.step")], [(1, 1)],
+                         "abrir o app nao conta passo")
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        # O aparelho falso mostra o launcher na primeira consulta depois do monkey.
+        self.assertTrue(any("o app abriu em" in linha for linha in linhas), linhas)
+
+    def test_launch_app_no_runner_de_coordenadas_avisa_que_nao_vale(self):
+        self.gravar_android((540, 480, "id"))
+        self.ok("flow.run", {"launch_app": True, "runner": "coordinates"})
+        self.esperar_fim()
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        self.assertTrue(any("nao vale no runner de coordenadas" in linha for linha in linhas), linhas)
+
+    def test_sem_launch_app_nada_e_aberto(self):
+        self.gravar_android((540, 480, "id"))
+        self.adb.limpar_registro()
+        self.ok("flow.run")
+        self.esperar_fim()
+        self.assertFalse(any("monkey" in " ".join(c) for c in self.adb.chamadas()))
+
+    def test_launch_app_que_nao_e_booleano_e_recusado(self):
+        self.gravar_android((540, 480, "id"))
+        resposta = self.call("flow.run", {"launch_app": "sim"})
+        self.assertIn("error", resposta)
+        self.assertIn("launch_app", resposta["error"]["message"])
+
+
+class TestAncoraNaGravacao(FluxoBase):
+    """SYNC-8: a gravacao guarda um elemento estavel da tela, fora o alvo."""
+
+    def test_toque_no_campo_ancora_no_botao_e_toque_no_botao_fica_sem_ancora(self):
+        # A tela do aparelho falso tem so o campo (editavel: nunca vira ancora) e o botao.
+        self.gravar_android((540, 340, "id"), (540, 480, "id"))
+        campo, botao = self.server.codegen.get_steps()
+        self.assertEqual(campo.anchor, {"id": "br.app:id/btn_continuar"})
+        self.assertIsNone(botao.anchor)
+
+    def test_flow_gravado_espera_a_ancora_e_passa(self):
+        self.gravar_android((540, 340, "id"))
+        self.assertTrue(self.server.codegen.set_last_input_text("abc"))
+        self.adb.teclado(True)
+        self.ok("flow.run")
+        fim = self.esperar_fim()
+        self.assertTrue(fim["success"], fim)
+        linhas = [n["line"] for n in self.notificacoes("flow.log")]
+        self.assertTrue(any("esperar a tela do passo 1" in linha for linha in linhas), linhas)
+        self.assertFalse(any("ancora do passo nao apareceu" in linha for linha in linhas), linhas)
+
+
 class TestDigitacaoIOS(FluxoBase):
     """F3: no iOS o passo de digitacao digitava nada e era dado como sucesso."""
 

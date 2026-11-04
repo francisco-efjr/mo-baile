@@ -332,6 +332,7 @@ class CodeGenerator:
         strategy: LocatorStrategy | None = None,
         click_coord: tuple[int, int] | None = None,
         locator_value: str | None = None,
+        anchor: dict[str, str] | None = None,
     ) -> tuple[str, str, str]:
         """`locator_value` e o localizador que o ranking escolheu. Sem ele, o
         valor sai da estrategia, que prioriza o resource-id e pode casar com
@@ -387,6 +388,7 @@ class CodeGenerator:
             package=element.package,
             platform=element.platform,
             recorded_at=time.time(),
+            anchor=anchor,
         )
         self.steps.append(step)
 

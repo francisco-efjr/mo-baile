@@ -692,7 +692,7 @@ INTERMEDIARIA_CARREGANDO = tela(no(bounds="[0,80][1080,200]", texto="Detalhe"),
 def detalhe(y=2000, habilitado=True):
     return tela(
         no(bounds="[0,80][1080,200]", texto="Detalhe"),
-        no(bounds="[100,400][980,460]", texto="Total R$ 10"),
+        no(bounds="[100,400][980,460]", texto="Total R$ 10", rid="br.app:id/total"),
         no("android.widget.Button", f"[100,{y}][980,{y + 150}]", rid="br.app:id/btn_confirmar",
            clicavel=True, extra=f'enabled="{str(habilitado).lower()}"',
            filhos=no(bounds=f"[400,{y + 40}][680,{y + 110}]", texto="Confirmar")),
@@ -968,6 +968,58 @@ class SincroniaTest(unittest.TestCase):
         self.assertTrue(resultado.success, resultado.message)
         self.assertEqual(aparelho.deslizes, 0, "rolou sem ter visto a tela")
 
+    def test_launch_app_espera_o_app_em_primeiro_plano(self):
+        # SYNC-9: o monkey volta antes de a activity abrir; o launcher ainda na tela
+        # passaria nas duas leituras iguais.
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        focos = iter([None, None, "com.android.launcher", "br.app"])
+        aparelho.foreground_app = lambda: next(focos, "br.app")
+        r, linhas, relogio = runner(aparelho)
+        self.assertTrue(r.run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertGreaterEqual(relogio.t, 0.9)
+        self.assertTrue(any("o app abriu" in linha for linha in linhas), linhas)
+
+    def test_launch_app_que_nao_chega_ao_primeiro_plano_segue_com_aviso(self):
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        aparelho.foreground_app = lambda: "com.outro.app"
+        r, linhas, relogio = runner(aparelho)
+        self.assertTrue(r.run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertGreaterEqual(relogio.t, 10)
+        self.assertTrue(any("nao ficou em primeiro plano" in linha for linha in linhas), linhas)
+
+    def test_launch_app_com_pedido_de_permissao_por_cima_nao_espera(self):
+        # R2-04: o permissioncontroller por cima do app quer dizer que ele abriu.
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        aparelho.foreground_app = lambda: "com.google.android.permissioncontroller"
+        r, linhas, relogio = runner(aparelho)
+        self.assertTrue(r.run(parse_flow("appId: br.app\n---\n- launchApp\n")).success)
+        self.assertLess(relogio.t, 2)
+        self.assertFalse(any("nao ficou em primeiro plano" in linha for linha in linhas), linhas)
+
+    def test_launch_app_respeita_o_cancelamento_na_espera(self):
+        aparelho = AparelhoFalso({"login": LOGIN}, "login")
+        consultas = []
+        aparelho.foreground_app = lambda: consultas.append(1) or "com.android.launcher3"
+        r, _, _ = runner(aparelho, cancelado=lambda: len(consultas) >= 3)
+        resultado = r.run(parse_flow("appId: br.app\n---\n- launchApp\n"))
+        self.assertEqual(resultado.message, "Flow cancelado.")
+        self.assertEqual(len(consultas), 3)
+
+    def test_abrir_app_usa_o_pacote_da_maior_parte_dos_passos(self):
+        # R2-06: a gravacao comecou tocando o icone no launcher.
+        launcher = replace(PASSOS_G55[0], package="com.android.launcher3")
+        flow = flow_from_steps([launcher, *PASSOS_G55], abrir_app=True)
+        self.assertEqual(flow.on_start[0].app_id, "br.app")
+
+    def test_flow_gravado_pode_comecar_abrindo_o_app(self):
+        flow = flow_from_steps(PASSOS_G55, abrir_app=True)
+        self.assertEqual([(s.command, s.app_id) for s in flow.on_start], [("launchApp", "br.app")])
+        self.assertEqual(len(flow.steps), len(PASSOS_G55), "abrir o app nao vira passo gravado")
+        self.assertEqual(flow_from_steps(PASSOS_G55).on_start, ())
+        sem_pacote = [replace(p, package="") for p in PASSOS_G55]
+        with self.assertRaisesRegex(InvalidInputError, "pacote"):
+            flow_from_steps(sem_pacote, abrir_app=True)
+
     def test_log_de_sincronia_por_passo_e_rastro_das_telas(self):
         # SYNC-1: cada passo diz quanto esperou; o rastro guarda cada tela diferente.
         aparelho = AparelhoComCarregamento(ROTEIRO_G55)
@@ -1040,6 +1092,137 @@ class SincroniaTest(unittest.TestCase):
                     conteudo = arquivo.read_text(encoding="utf-8")
                     self.assertNotIn("a&amp;b&quot;c&lt;d", conteudo)
                     self.assertIn("***", conteudo)
+
+
+
+# ----------------------------------------------------- ancora por passo (SYNC-8)
+
+# A tela intermediaria em que o botao ja existe, mas o conteudo ainda nao: o
+# seletor do passo casa nela, e so a ancora diz que a tela certa nao chegou.
+INTERMEDIARIA_COM_BOTAO = tela(
+    no(bounds="[0,80][1080,200]", texto="Detalhe"),
+    no("android.widget.Button", "[100,2000][980,2150]", rid="br.app:id/btn_confirmar", clicavel=True,
+       filhos=no(bounds="[400,2040][680,2110]", texto="Confirmar")),
+)
+
+
+class AncoraTest(unittest.TestCase):
+    def ancora(self, xml, x, y):
+        from mobaile.services.maestro_flow import choose_anchor
+
+        elementos = UIHierarchyParser.parse_xml(xml)
+        return choose_anchor(elementos, UIHierarchyParser.element_at(elementos, x, y))
+
+    def test_escolhe_o_id_unico_mais_perto_do_alvo_fora_dele(self):
+        # Toque em "Confirmar": o botao e o rotulo sao o proprio alvo; o titulo
+        # "Detalhe" esta mais longe que o total.
+        self.assertEqual(self.ancora(REAL, 540, 2075), {"id": "br.app:id/total"})
+
+    def test_sem_id_cai_no_texto_estavel_e_unico(self):
+        xml = tela(no(bounds="[0,80][1080,200]", texto="Detalhe"),
+                   no(bounds="[100,400][980,460]", texto="Total R$ 10"),
+                   no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True))
+        # "Total R$ 10" tem numero (muda com o pedido); sobra o titulo.
+        self.assertEqual(self.ancora(xml, 540, 2075), {"text": "Detalhe"})
+
+    def test_nunca_campo_editavel_senha_outro_pacote_id_de_sistema_nem_repetido(self):
+        xml = tela(
+            no("android.widget.EditText", "[100,300][980,380]", rid="br.app:id/email", texto="ana@exemplo.com"),
+            no(bounds="[0,0][1080,60]", rid="android:id/statusBarBackground"),
+            no(bounds="[100,500][980,560]", rid="br.app:id/linha"),
+            no(bounds="[100,600][980,660]", rid="br.app:id/linha"),
+            no("android.widget.ProgressBar", "[500,900][580,980]", rid="br.app:id/carregando"),
+            no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True),
+        ).replace('package="br.app" bounds="[0,0][1080,60]"', 'package="com.android.systemui" bounds="[0,0][1080,60]"')
+        self.assertIsNone(self.ancora(xml, 540, 2075))
+
+    def test_ancora_espera_a_tela_certa_quando_o_seletor_ja_casa_na_intermediaria(self):
+        roteiro = [TRANSICAO, INTERMEDIARIA_COM_BOTAO, INTERMEDIARIA_COM_BOTAO, INTERMEDIARIA_COM_BOTAO, REAL]
+        passos = [
+            PASSOS_G55[0],
+            replace(gravado(2, LocatorStrategy.ID, "(AppiumBy.ID, 'br.app:id/btn_confirmar')", (540, 2075),
+                            classe="android.widget.Button"), anchor={"id": "br.app:id/total"}),
+        ]
+        aparelho = AparelhoComCarregamento(roteiro)
+        r, _, _ = runner(aparelho)
+        resultado = r.run(flow_from_steps(passos))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertIs(aparelho.tocado_em[-1], REAL, "tocou o botao na tela intermediaria")
+        sem_ancora = AparelhoComCarregamento(roteiro)
+        runner(sem_ancora)[0].run(flow_from_steps([passos[0], replace(passos[1], anchor=None)]))
+        self.assertIs(sem_ancora.tocado_em[-1], INTERMEDIARIA_COM_BOTAO, "o cenario nao exercita a ancora")
+
+    def test_ancora_que_nao_aparece_segue_no_limite_sem_falhar(self):
+        passos = [replace(PASSOS_G55[0], anchor={"text": "Nunca aparece"})]
+        r, linhas, relogio = runner(AparelhoComCarregamento([REAL]))
+        resultado = r.run(flow_from_steps(passos))
+        self.assertTrue(resultado.success, resultado.message)
+        self.assertLess(relogio.t, 7)
+        self.assertTrue(any("a ancora do passo nao apareceu" in linha for linha in linhas), linhas)
+
+    def test_ancora_vai_para_o_yaml_e_volta_pelo_leitor(self):
+        passos = [replace(PASSOS_G55[0], anchor={"id": "br.app:id/titulo"})]
+        yaml, _ = export_steps(passos, app_id="br.app")
+        self.assertIn("- extendedWaitUntil:", yaml)
+        self.assertIn('visible: {id: "br\\\\.app:id/titulo"}', yaml)
+        self.assertIn("optional: true", yaml)
+        flow = parse_flow(yaml)
+        espera = flow.steps[1]
+        self.assertEqual((espera.command, espera.optional, espera.timeout_s), ("assertVisible", True, 5.0))
+
+    def test_ancora_igual_ao_texto_digitado_fica_de_fora(self):
+        digitar = replace(PASSOS_G55[0], action_type="input", input_text="pizza calabresa")
+        seguinte = replace(PASSOS_G55[1], anchor={"text": "pizza calabresa"})
+        yaml, _ = export_steps([digitar, seguinte], app_id="br.app")
+        self.assertNotIn("extendedWaitUntil", yaml)
+        flow = flow_from_steps([digitar, seguinte])
+        self.assertNotIn("assertVisible", [s.command for s in flow.steps[1].steps])
+
+    def test_ancora_por_texto_nao_vai_para_o_yaml(self):
+        # R2-01: o texto da tela pode ser dado pessoal, e quem o escolheu foi o motor.
+        passos = [replace(PASSOS_G55[0], anchor={"text": "Resultados para tenis"})]
+        yaml, _ = export_steps(passos, app_id="br.app")
+        self.assertNotIn("Resultados", yaml)
+        self.assertIn("assertVisible", [s.command for s in flow_from_steps(passos).steps[0].steps])
+
+    def test_ancora_que_contem_texto_digitado_fica_de_fora(self):
+        digitar = replace(PASSOS_G55[0], action_type="input", input_text="tenis")
+        seguinte = replace(PASSOS_G55[1], anchor={"text": "Resultados para tenis"})
+        flow = flow_from_steps([digitar, seguinte])
+        self.assertNotIn("assertVisible", [s.command for s in flow.steps[1].steps])
+
+    def test_nunca_email_nem_tecla_nem_rotulo_do_ios_com_numero(self):
+        email = tela(no(bounds="[100,400][980,460]", texto="ana.souza@empresa.com"),
+                     no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True))
+        self.assertIsNone(self.ancora(email, 540, 2075))
+        ios = ('<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="390" height="844">'
+               '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="R$ 59,90" label="R$ 59,90" '
+               'x="20" y="300" width="200" height="30"/>'
+               '<XCUIElementTypeKey type="XCUIElementTypeKey" name="Pagar" label="Pagar" x="20" y="700" width="30" height="40"/>'
+               '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Comprar" label="Comprar" '
+               'x="20" y="600" width="350" height="50"/></XCUIElementTypeApplication>')
+        self.assertIsNone(self.ancora(ios, 195, 625))
+
+    def test_ancora_de_outro_pacote_fica_de_fora(self):
+        xml = tela(no(bounds="[100,400][980,460]", rid="com.teclado:id/sugestao"),
+                   no("android.widget.Button", "[100,2000][980,2150]", texto="Confirmar", clicavel=True))
+        xml = xml.replace('package="br.app" bounds="[100,400][980,460]"', 'package="com.teclado" bounds="[100,400][980,460]"')
+        self.assertIsNone(self.ancora(xml, 540, 2075))
+
+    def test_falha_da_ancora_nao_repete_o_texto_e_o_disjuntor_desliga_as_outras(self):
+        # R2-03 e R2-09.
+        passos = [replace(p, anchor={"text": "Ola, Ana"}) for p in (PASSOS_G55[0], PASSOS_G55[0], PASSOS_G55[0])]
+        r, linhas, relogio = runner(AparelhoRoteirizado([ANTERIOR]))
+        self.assertTrue(r.run(flow_from_steps(passos)).success)
+        self.assertFalse(any("Ana" in linha for linha in linhas), linhas)
+        self.assertEqual(sum("a ancora do passo nao apareceu" in linha for linha in linhas), 2, linhas)
+        self.assertTrue(any("nao serao esperadas" in linha for linha in linhas), linhas)
+        self.assertLess(relogio.t, 12, "a terceira ancora ainda foi esperada")
+
+    def test_passo_sem_ancora_continua_como_antes(self):
+        self.assertIsNone(PASSOS_G55[0].anchor)
+        self.assertIsNone(PASSOS_G55[0].to_dict()["anchor"])
+        self.assertEqual([s.command for s in flow_from_steps(PASSOS_G55).steps[0].steps], ["tapOn"])
 
 
 if __name__ == "__main__":

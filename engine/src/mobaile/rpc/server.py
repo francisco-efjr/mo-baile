@@ -1775,8 +1775,8 @@ class EngineServer:
         # tela, em vez de aplicar uma estrategia fixa a todos os elementos.
         alternativas: list[dict] = []
         valor_escolhido: str | None = None
+        na_tela = UIHierarchyParser.parse_xml(xml)
         if strategy_raw == "auto":
-            na_tela = UIHierarchyParser.parse_xml(xml)
             alternativas = self.codegen.rank_locators(element, na_tela)
             escolhido = alternativas[0]["strategy"]
             # O passo grava o valor do candidato escolhido. Reconstruir pela
@@ -1788,8 +1788,10 @@ class EngineServer:
             strategy = LocatorStrategy(strategy_raw)
         except ValueError as exc:
             raise InvalidInputError(f"Estrategia invalida: {strategy_raw!r}") from exc
+        # A ancora sai da mesma arvore em que o toque foi resolvido (SYNC-8).
+        ancora = maestro_flow.choose_anchor(na_tela, element)
         var_name, object_code, action_code = self.codegen.generate_entry(
-            element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido
+            element, strategy=strategy, click_coord=(x, y), locator_value=valor_escolhido, anchor=ancora
         )
         passos = self.codegen.get_steps()
         return {
@@ -2129,7 +2131,9 @@ class EngineServer:
         quando o layout muda. `runner: "coordinates"` (ou `MOBAILE_FLOW_RUNNER`)
         roda o script de coordenadas de antes, o caminho de aparelho sem arvore
         nenhuma; o iOS segue nele ate o `/source` do WDA ser medido no runner. O
-        andamento sai por `flow.log` e `flow.step`, igual nos dois.
+        andamento sai por `flow.log` e `flow.step`, igual nos dois. Com
+        `launch_app`, o runner de localizador abre o app gravado do zero antes
+        do primeiro passo.
         """
         passos = self.codegen.get_steps()
         if not passos:
@@ -2142,7 +2146,11 @@ class EngineServer:
             raise InvalidInputError(f"runner invalido: {runner!r}. Use locator ou coordinates.")
         if sessao.platform is Platform.IOS:
             runner = "coordinates"
-        flow = maestro_flow.flow_from_steps(passos) if runner == "locator" else None
+        abrir_app = params.get("launch_app", False)
+        if not isinstance(abrir_app, bool):
+            raise InvalidInputError("launch_app deve ser verdadeiro ou falso.")
+        # Abrir o app do zero e do runner de localizador; o de coordenadas (iOS) ignora.
+        flow = maestro_flow.flow_from_steps(passos, abrir_app=abrir_app) if runner == "locator" else None
         if flow is not None:
             self._conferir_leitura_do_flow(device or "")
         with self._state_lock:
@@ -2168,6 +2176,8 @@ class EngineServer:
             if not ok:
                 raise EngineError(motivo)
             self._check_cancelled()
+            if abrir_app and flow is None:
+                ao_sair("Abrir o app do zero nao vale no runner de coordenadas; rodando sem abrir o app.")
             if flow is not None:
                 ler, backend = self._leitor_do_flow(device or "")
                 execucao = maestro_flow.FlowThread(

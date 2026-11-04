@@ -313,6 +313,26 @@ final class EngineSessionTests: XCTestCase {
         }
     }
 
+    /// SYNC-9: com "Abrir o app do zero" ligado nos Ajustes, o `flow.run` leva
+    /// `launch_app`; desligado, a chamada sai como antes, sem parâmetro.
+    func testRodarPassosLevaAbrirAppQuandoOAjusteEstaLigado() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: FlowRunOptions.launchAppKey) }
+        for ligado in [true, false] {
+            UserDefaults.standard.set(ligado, forKey: FlowRunOptions.launchAppKey)
+            let estado = AppState()
+            let motor = FakeEngine(respostas: try resultadosDasFixtures())
+            let sessao = EngineSession(state: estado, client: motor)
+            await sessao.record(at: CGPoint(x: 60, y: 45))
+            await motor.responder("flow.run", com: Data(#"{"running": true, "steps": 1, "runner": "locator"}"#.utf8))
+
+            await sessao.runFlow()
+
+            let params = await motor.parametros(de: "flow.run")
+            XCTAssertEqual(params?["launch_app"], ligado ? .bool(true) : nil)
+            XCTAssertEqual(estado.runState, .running)
+        }
+    }
+
     /// AUT-3: exportar pede ao motor para gravar o flow e devolve o caminho;
     /// o status diz as variáveis que o flow pede em `env`.
     func testExportarFlowGravaPeloMotorEDizAsVariaveis() async throws {
