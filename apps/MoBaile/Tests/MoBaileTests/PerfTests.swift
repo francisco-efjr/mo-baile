@@ -146,4 +146,35 @@ final class PerfTests: XCTestCase {
         XCTAssertGreaterThan(sinais.physicalMemoryGB, 0)
         XCTAssertEqual(PerfSignals.thermalName(.serious), "serious")
     }
+
+    // MARK: - PERF-5: paleta e Ajustes
+
+    func testPaletaAlternaOModoLeve() async throws {
+        let (estado, motor, sessao) = try sessao()
+        estado.perf.preference = .auto
+        var comando = try XCTUnwrap(CommandRegistry.command(.perfLight, in: .current(estado, sessao, nil)))
+        XCTAssertEqual(comando.title, "Ativar Modo Leve")
+        XCTAssertTrue(comando.isEnabled)
+
+        CommandPerformer(appState: estado, session: sessao).perform(.perfLight)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let enviados = await motor.parametros(de: "perf.set_preference")
+        XCTAssertEqual(enviados?["preference"], .string("leve"))
+        XCTAssertEqual(estado.perf.preference, .leve)
+
+        comando = try XCTUnwrap(CommandRegistry.command(.perfLight, in: .current(estado, sessao, nil)))
+        XCTAssertEqual(comando.title, "Voltar ao Desempenho Automático")
+    }
+
+    func testPaletaAchaOModoLevePorSinonimos() {
+        for termo in ["lento", "economia", "desempenho"] {
+            let secoes = CommandSearch.sections(CommandRegistry.commands(in: CommandContext()), query: termo, recents: [])
+            XCTAssertTrue(secoes.flatMap(\.commands).contains { $0.id == .perfLight }, termo)
+        }
+    }
+
+    func testTextosDosAjustesPorPerfil() {
+        XCTAssertTrue(PerformanceSettings.explicacao("leve").contains("sem vidro"))
+        XCTAssertEqual(PerfPreference.allCases.map(\.displayName), ["Automático", "Completo", "Equilibrado", "Leve"])
+    }
 }

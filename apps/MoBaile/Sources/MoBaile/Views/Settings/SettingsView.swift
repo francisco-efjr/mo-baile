@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Janela de Ajustes (⌘,): abas Geral e Conexões. As mudanças valem na hora,
-/// sem Salvar nem Cancelar.
+/// Janela de Ajustes (⌘,): abas Geral, Desempenho, Paletas e Conexões. As
+/// mudanças valem na hora, sem Salvar nem Cancelar.
 struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings()
                 .frame(width: 520)
                 .tabItem { Label("Geral", systemImage: "gearshape") }
+            PerformanceSettings()
+                .frame(width: 520)
+                .tabItem { Label("Desempenho", systemImage: "gauge.with.dots.needle.33percent") }
             PaletteGallery()
                 .frame(width: 680, height: 640)
                 .tabItem { Label("Paletas", systemImage: "paintpalette") }

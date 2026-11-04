@@ -23,6 +23,7 @@ struct CommandID: RawRepresentable, Hashable, Sendable, ExpressibleByStringLiter
     static let palette: CommandID = "app.palette"
     static let settings: CommandID = "app.settings"
     static let restartEngine: CommandID = "app.restartEngine"
+    static let perfLight: CommandID = "app.perfLight"
 
     static func area(_ area: WorkspaceTab) -> CommandID { CommandID(rawValue: "area.\(area.rawValue)") }
 
@@ -184,6 +185,8 @@ struct CommandContext: Equatable, Sendable {
     var hasReportSpec = false
     var canRunReport = false
     var hasReport = false
+    /// Modo leve fixado em Ajustes › Desempenho (PERF-5).
+    var perfLightPinned = false
 
     struct DeviceOption: Equatable, Sendable {
         let id: String
@@ -238,6 +241,7 @@ extension CommandContext {
         c.hasReportSpec = appState.reportSpec != nil
         c.canRunReport = appState.canRunReport
         c.hasReport = appState.report != nil
+        c.perfLightPinned = appState.perf.preference == .leve
         return c
     }
 }
@@ -512,6 +516,12 @@ enum CommandRegistry {
                 id: .settings, title: "Ajustes…", category: .app, symbol: "gearshape",
                 keywords: ["preferências", "configurações", "paletas", "conexões", "portas"],
                 shortcut: .cmd(",")
+            ),
+            AppCommand(
+                id: .perfLight, title: c.perfLightPinned ? "Voltar ao Desempenho Automático" : "Ativar Modo Leve",
+                category: .app, symbol: c.perfLightPinned ? "gauge.with.dots.needle.67percent" : "leaf",
+                keywords: ["desempenho", "performance", "lite", "leve", "economia", "bateria", "lento", "travando",
+                           "automático", "alternar"]
             ),
             AppCommand(
                 id: .restartEngine, title: "Reiniciar Motor", category: .app, symbol: "arrow.triangle.2.circlepath",
