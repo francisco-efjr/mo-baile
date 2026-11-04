@@ -77,6 +77,8 @@
         "simulators.boot",
         "simulators.list",
         "simulators.shutdown",
+        "stream.pause",
+        "stream.resume",
         "stream.start",
         "stream.stats",
         "stream.stop",
@@ -249,6 +251,16 @@
           "progress": false
         },
         "stream.stats": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.pause": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.resume": {
           "lane": "fast",
           "timeout_s": 15,
           "progress": false

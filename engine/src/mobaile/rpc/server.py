@@ -274,6 +274,9 @@ class EngineServer:
         # uma vez so).
         self._proxy_teardown_lock = threading.Lock()
         self._stream: RealTimeStreamEngine | None = None
+        # O front pediu a pausa do espelho (janela oculta, PERF-1). Vale tambem
+        # para o espelho que ligar depois, ate o front pedir a retomada.
+        self._pausa_pedida = False
         # Leitor do MJPEG do WDA, so enquanto o espelho iOS estiver ligado.
         self._mjpeg: MJPEGReader | None = None
         self._watcher: DeviceWatcher | None = None
@@ -319,6 +322,8 @@ class EngineServer:
             "stream.start": self.stream_start,
             "stream.stop": self.stream_stop,
             "stream.stats": self.stream_stats,
+            "stream.pause": self.stream_pause,
+            "stream.resume": self.stream_resume,
             "scrcpy.start": self.scrcpy_start,
             "scrcpy.stop": self.scrcpy_stop,
             "scrcpy.status": self.scrcpy_status,
@@ -1150,6 +1155,7 @@ class EngineServer:
             fps=fps,
         )
         self._stream.start()
+        self._aplicar_pausa()
         return {
             "started": True, "fps": fps, "max_width": max_width, "format": fmt, "quality": quality,
             "source": "wda_mjpeg" if self._mjpeg is not None else "capture",
@@ -1169,6 +1175,40 @@ class EngineServer:
             self._stream.stop()
             self._stream = None
         return {"stopped": True}
+
+    def _espelho_mantido_por(self) -> str | None:
+        """Quem precisa do espelho ligado mesmo com a janela oculta."""
+        if self._flow_running:
+            return "flow"
+        if self._passive is not None:
+            return "passive"
+        return None
+
+    def _aplicar_pausa(self) -> dict[str, Any]:
+        """Pausa ou retoma o espelho conforme o pedido do front e quem o usa.
+
+        Chamado no pedido do front e sempre que um flow ou a escuta passiva
+        comeca ou termina: a pausa nunca vale durante automacao ou gravacao.
+        """
+        stream = self._stream
+        mantido = self._espelho_mantido_por() if self._pausa_pedida else None
+        pausar = self._pausa_pedida and mantido is None
+        if stream is not None:
+            if pausar:
+                stream.pause()
+            else:
+                stream.resume()
+        return {"running": stream is not None, "paused": stream is not None and pausar, "kept_for": mantido}
+
+    def stream_pause(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Janela oculta: para de capturar sem desligar o espelho (PERF-1)."""
+        self._pausa_pedida = True
+        return self._aplicar_pausa()
+
+    def stream_resume(self, _params: dict[str, Any]) -> dict[str, Any]:
+        """Janela visivel de novo: volta a capturar e reenvia o quadro atual."""
+        self._pausa_pedida = False
+        return self._aplicar_pausa()
 
     def stream_stats(self, _params: dict[str, Any]) -> dict[str, Any]:
         if not self._stream:
@@ -1757,6 +1797,7 @@ class EngineServer:
         if encerrando:
             ouvinte.stop()
             raise EngineError("O motor esta encerrando; a escuta passiva nao foi ligada.")
+        self._aplicar_pausa()
         logger.info("Escuta passiva ligada para %s (%sx%s)", device, largura, altura)
         return {"listening": True, "platform": sessao.platform.value, "screen": [largura, altura]}
 
@@ -1791,6 +1832,7 @@ class EngineServer:
             self._passive.stop()
         finally:
             self._passive = None
+            self._aplicar_pausa()
         return {"listening": False}
 
     def passive_status(self, _params: dict[str, Any]) -> dict[str, Any]:
@@ -1944,6 +1986,7 @@ class EngineServer:
             self._flow_running = True
             self._flow_cancelled = False
             self._flow_thread = None
+        self._aplicar_pausa()
 
         def ao_sair(linha: str) -> None:
             self.notify("flow.log", {"line": linha})
@@ -1991,6 +2034,7 @@ class EngineServer:
             with self._state_lock:
                 self._flow_running = False
                 self._flow_thread = None
+            self._aplicar_pausa()
             raise
         return {"running": True, "steps": len(passos), "runner": "coordinates", "script": script}
 
@@ -1999,7 +2043,9 @@ class EngineServer:
         with self._state_lock:
             self._flow_running = False
             self._flow_thread = None
-            return self._flow_cancelled
+            cancelado = self._flow_cancelled
+        self._aplicar_pausa()
+        return cancelado
 
     def _notify_flow_step(self, index: int, total: int) -> None:
         """Inicio de um passo de nivel superior; `index` comeca em 1."""
@@ -2116,6 +2162,7 @@ class EngineServer:
                 raise InvalidInputError("Ja existe uma execucao em andamento.")
             self._flow_running = True
             self._flow_cancelled = False
+        self._aplicar_pausa()
 
         caminho_flow = str(params["path"]) if params.get("path") and not params.get("yaml") else None
 

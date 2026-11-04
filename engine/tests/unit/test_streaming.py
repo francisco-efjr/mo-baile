@@ -192,6 +192,47 @@ class TestRealTimeStreamEngine(unittest.TestCase):
         motor.stop()
         self.assertLess(time.time() - inicio, 1.5, "stop nao pode esperar o ciclo inteiro")
 
+    def test_pausado_nao_captura(self):
+        """PERF-1: com a janela oculta o espelho para de capturar, nao so de emitir."""
+        capturas = {"n": 0}
+
+        def captura():
+            capturas["n"] += 1
+            return tela("black")
+
+        motor = RealTimeStreamEngine(captura, lambda _f: None, lambda: None, fps=60)
+        motor.start()
+        try:
+            time.sleep(0.15)
+            motor.pause()
+            time.sleep(0.05)
+            antes = capturas["n"]
+            time.sleep(0.4)
+            self.assertLessEqual(capturas["n"] - antes, 1, "pausado, o laco nao pode seguir capturando")
+            self.assertTrue(motor.paused)
+        finally:
+            motor.stop()
+
+    def test_retomar_reenvia_o_quadro_mesmo_com_a_tela_igual(self):
+        """Ao voltar, a moldura recebe quadro novo na hora, mesmo sem mudanca."""
+        quadros = []
+        motor = RealTimeStreamEngine(lambda: tela("black"), quadros.append, lambda: None, fps=60)
+        motor.start()
+        try:
+            time.sleep(0.15)
+            motor.pause()
+            time.sleep(0.05)
+            antes = len(quadros)
+            inicio = time.monotonic()
+            motor.resume()
+            while len(quadros) == antes and time.monotonic() - inicio < 1.0:
+                time.sleep(0.01)
+            self.assertEqual(len(quadros), antes + 1)
+            self.assertLess(time.monotonic() - inicio, 0.5, "o quadro de retomada tem de chegar em ate 500 ms")
+            self.assertFalse(motor.paused)
+        finally:
+            motor.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -103,6 +103,12 @@ class RealTimeStreamEngine:
         self.stats = StreamStats()
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
+        # Acorda o laco antes da hora: retomada, parada e (PERF-2) toque do
+        # usuario. Toda espera do laco e neste Event, nunca em sleep.
+        self._wake = threading.Event()
+        # Depois de uma pausa, o primeiro quadro sai mesmo igual ao ultimo: a
+        # moldura volta com a tela de agora, e nao com a de antes da pausa.
+        self._force_emit = False
         self._thread: threading.Thread | None = None
 
     def start(self):
@@ -116,6 +122,7 @@ class RealTimeStreamEngine:
     def stop(self):
         self._stop_event.set()
         self._pause_event.set()
+        self._wake.set()
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2.0)
             if self._thread.is_alive():
@@ -124,10 +131,18 @@ class RealTimeStreamEngine:
             self._thread = None
 
     def pause(self):
+        """Para de capturar (janela oculta, PERF-1). O laco fica parado no Event."""
         self._pause_event.set()
 
     def resume(self):
+        if self._pause_event.is_set() and not self._stop_event.is_set():
+            self._force_emit = True
         self._pause_event.clear()
+        self._wake.set()
+
+    @property
+    def paused(self) -> bool:
+        return self._pause_event.is_set() and not self._stop_event.is_set()
 
     def reset_diff(self):
         self.diff_detector.reset()
@@ -136,9 +151,10 @@ class RealTimeStreamEngine:
         last_emit = time.time()
         while not self._stop_event.is_set():
             if self._pause_event.is_set():
-                # Espera interrompivel: no stop() a thread sai na hora em vez de
-                # dormir 300 ms antes de perceber.
-                self._stop_event.wait(0.3)
+                # Espera interrompivel: no stop() e no resume() a thread acorda
+                # na hora em vez de dormir 300 ms antes de perceber.
+                self._wake.wait(0.3)
+                self._wake.clear()
                 continue
 
             loop_start = time.time()
@@ -152,8 +168,9 @@ class RealTimeStreamEngine:
 
                     has_changed, is_settled, _score = self.diff_detector.process_frame(img)
                     first_frame = self.stats.frames_emitted == 0
+                    forced, self._force_emit = self._force_emit, False
 
-                    if has_changed or is_settled or first_frame:
+                    if has_changed or is_settled or first_frame or forced:
                         self.stats.frames_emitted += 1
                         now = time.time()
                         delta = now - last_emit
@@ -176,4 +193,5 @@ class RealTimeStreamEngine:
                 logger.exception("Falha ao processar quadro do espelho.")
 
             elapsed = time.time() - loop_start
-            self._stop_event.wait(max(0.01, self.frame_interval - elapsed))
+            self._wake.wait(max(0.01, self.frame_interval - elapsed))
+            self._wake.clear()

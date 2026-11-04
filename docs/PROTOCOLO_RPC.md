@@ -237,6 +237,8 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `stream.start` | `fps`, `max_width`, `format` (`jpeg` padrão ou `png`), `quality` (JPEG, 10–95, padrão 80) | confirma o início; devolve `format`, `quality` e `source` (`wda_mjpeg` quando o espelho iOS vem do MJPEG do WDA, `capture` quando vem de `simctl`/`screencap`). Formato inválido: `invalid_input` |
 | `stream.stop` | — | idempotente |
 | `stream.stats` | — | quadros capturados, emitidos, descartados, fps medido |
+| `stream.pause` | — | para de capturar sem desligar o espelho (janela oculta, coberta ou minimizada). Vale também para o espelho que ligar depois, até o `stream.resume`. Durante `flow.run`, `flow.maestro_run` ou a escuta passiva o espelho continua, e a pausa passa a valer quando eles terminam. Devolve `{running, paused, kept_for}`: `kept_for` é `flow`, `passive` ou nulo. Idempotente |
+| `stream.resume` | — | volta a capturar e reenvia o quadro atual mesmo se a tela não mudou. Devolve `{running, paused, kept_for}`. Idempotente |
 | `scrcpy.start` | `fps`, `max_size`, `title`, `always_on_top` | inicia janela nativa a 60 FPS com baixíssima latência |
 | `scrcpy.stop` | — | encerra o espelhamento scrcpy |
 | `scrcpy.status` | — | `{available, running}` |

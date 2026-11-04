@@ -120,6 +120,10 @@ METHODS: dict[str, dict[str, Any]] = {
     "stream.start": _spec(),
     "stream.stop": _spec(),
     "stream.stats": _spec(),
+    # Janela oculta (PERF-1): para de capturar sem desligar; nao vale durante
+    # flow nem escuta passiva (`kept_for`).
+    "stream.pause": _spec(),
+    "stream.resume": _spec(),
     "scrcpy.start": _spec(),
     "scrcpy.stop": _spec(),
     "scrcpy.status": _spec(),

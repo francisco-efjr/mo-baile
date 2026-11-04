@@ -152,6 +152,14 @@ final class EngineSession {
     /// token é de uma chamada que já terminou ou estourou o prazo, e não pode
     /// sobrescrever a mensagem da atual.
     private var activeProgressToken: String?
+    /// Janela principal visível (PERF-1). Oculta, coberta ou minimizada, o
+    /// espelho pausa no motor e a releitura automática da hierarquia espera.
+    private(set) var windowVisible = true
+    /// O que este motor sabe do pedido de pausa; zera a cada motor novo.
+    private var streamPauseSent = false
+    private var pauseTask: Task<Void, Never>?
+    /// Uma `stream.settled` chegou com a janela oculta: relê ao voltar.
+    private var hierarchyStale = false
     private var progressSequence = 0
 
     convenience init(
@@ -224,6 +232,7 @@ final class EngineSession {
             lastError = nil
             applyDaemonStatus(from: info)
             state.statusMessage = "Motor \(info.version) conectado"
+            await applyStreamPause()
             await refreshDevices()
             await startWatchingDevices()
             await refreshEnvironment()
@@ -342,6 +351,7 @@ final class EngineSession {
 
     private func install(_ client: any EngineCalling) {
         self.client = client
+        streamPauseSent = false
         notificationTask = Task { [weak self] in
             for await notification in client.notifications {
                 guard !Task.isCancelled else { return }
@@ -518,6 +528,7 @@ final class EngineSession {
     /// ele já trocou.
     private func restore(_ snapshot: RestoreSnapshot) async {
         guard let client else { return }
+        await applyStreamPause()
         if let device = snapshot.device {
             let sessao = try? await client.call(
                 "session.select_device",
@@ -865,6 +876,49 @@ final class EngineSession {
         try? await client.callIgnoringResult("stream.stop")
         state.streamActive = false
         state.fps = 0
+    }
+
+    // MARK: - Janela oculta (PERF-1)
+
+    /// A janela principal ficou visível ou deixou de estar.
+    ///
+    /// Oculta, a pausa espera `pauseDelayNanoseconds`: alternar de app por um
+    /// instante não deve parar e religar a captura. Visível, retoma na hora e
+    /// relê a hierarquia que ficou para trás. Quem decide se a pausa vale com
+    /// flow ou escuta passiva ligados é o motor (`kept_for`).
+    func setWindowVisible(_ visible: Bool, pauseDelayNanoseconds: UInt64 = 1_000_000_000) async {
+        guard visible != windowVisible else { return }
+        windowVisible = visible
+        pauseTask?.cancel()
+        pauseTask = nil
+        guard !visible else {
+            await applyStreamPause()
+            if hierarchyStale {
+                hierarchyStale = false
+                debouncedRefreshHierarchy()
+            }
+            return
+        }
+        pauseTask = Task { [weak self] in
+            if pauseDelayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: pauseDelayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.applyStreamPause()
+        }
+        await pauseTask?.value
+    }
+
+    /// Manda ao motor o pedido que corresponde à janela, só quando muda.
+    private func applyStreamPause() async {
+        guard let client else { return }
+        let pausar = !windowVisible
+        guard pausar != streamPauseSent else { return }
+        streamPauseSent = pausar
+        if (try? await client.callIgnoringResult(pausar ? "stream.pause" : "stream.resume")) == nil {
+            // Motor sem o método ou fora do ar: tenta de novo na próxima mudança.
+            streamPauseSent = !pausar
+        }
     }
 
     // MARK: - Scrcpy (Espelho Nativo 60 FPS)
@@ -1743,8 +1797,14 @@ final class EngineSession {
 
         case "stream.settled":
             // Tela parou de mudar: relê a hierarquia de forma desacoplada para
-            // não travar a recepção contínua dos quadros do espelho.
-            debouncedRefreshHierarchy()
+            // não travar a recepção contínua dos quadros do espelho. Com a
+            // janela oculta ninguém vê a árvore: relê quando ela voltar. A
+            // escuta passiva grava do aparelho e segue relendo.
+            if windowVisible || state.passiveListening {
+                debouncedRefreshHierarchy()
+            } else {
+                hierarchyStale = true
+            }
 
         case "proxy.event":
             guard let event = decodeParams(notification, as: EngineDTO.NetworkEventPayload.self) else { return }
