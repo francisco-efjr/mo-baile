@@ -1134,7 +1134,8 @@
       "line_separator": "CRLF",
       "bom": false,
       "read_only": false,
-      "size": 28
+      "size": 28,
+      "mtime_ns": 1757030000000000000
     }
   },
   "workspace.write": {
@@ -1143,7 +1144,20 @@
     "result": {
       "path": "pages/feature.py",
       "saved": true,
-      "bytes": 28
+      "bytes": 28,
+      "mtime_ns": 1757030001000000000
+    }
+  },
+  "erro_workspace_file_changed": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "O arquivo pages/feature.py mudou no disco depois de aberto.",
+      "data": {
+        "code": "file_changed",
+        "message": "O arquivo pages/feature.py mudou no disco depois de aberto."
+      }
     }
   },
   "simulators.list": {

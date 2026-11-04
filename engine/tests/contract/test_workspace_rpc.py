@@ -166,5 +166,89 @@ class TestTravasDeCaminho(Base):
         self.recusado("workspace.write", path="pages/a.py", text="x", line_separator="NEL")
 
 
+
+class TestRevisao(Base):
+    """Achados da revisao independente (R-04, R-09, R-10, R-11, R-14)."""
+
+    def test_r09_limite_conta_bytes_codificados(self):
+        # 400 mil caracteres de 3 bytes: menos de 1 milhao de caracteres, mais de 1 MB.
+        self.recusado("workspace.write", path="pages/a.py", text="\u20ac" * 400_000)
+        self.assertFalse((self.raiz / "pages" / "a.py").exists())
+
+    def test_r09_arquivo_existente_grande_nao_e_lido_para_gravar(self):
+        alvo = self.arquivo("pages/grande.py", b"x" * 1_000_001)
+        self.recusado("workspace.write", path="pages/grande.py", text="y")
+        self.assertEqual(alvo.stat().st_size, 1_000_001)
+
+    def test_r10_sem_permissao_vira_erro_de_entrada_e_nao_erro_interno(self):
+        alvo = self.arquivo("pages/travado.py", b"x = 1\n")
+        alvo.chmod(0o444)
+        self.addCleanup(alvo.chmod, 0o644)
+        self.recusado("workspace.write", path="pages/travado.py", text="x = 2\n")
+        self.assertEqual(alvo.read_bytes(), b"x = 1\n")
+        # Componente do caminho que e arquivo, e nao pasta.
+        self.arquivo("flows/arquivo.yaml", b"a: 1")
+        self.recusado("workspace.write", path="flows/arquivo.yaml/dentro.yaml", text="x")
+
+    def test_r10_pasta_sem_leitura_nao_derruba_a_arvore(self):
+        self.arquivo("pages/fechada/a.py", b"x")
+        fechada = self.raiz / "pages" / "fechada"
+        fechada.chmod(0o000)
+        self.addCleanup(fechada.chmod, 0o755)
+        arvore = self.ok("workspace.tree")
+        no = arvore["nodes"][0]["children"][0]
+        self.assertEqual(no["name"], "fechada")
+        self.assertEqual(no["children"], [])
+        self.assertIn("error", no)
+
+    def test_r11_gravacao_atomica_sem_sobra_de_temporario(self):
+        alvo = self.arquivo("pages/a.py", b"velho")
+        self.ok("workspace.write", path="pages/a.py", text="novo")
+        self.assertEqual(alvo.read_bytes(), b"novo")
+        self.assertEqual(sorted(p.name for p in alvo.parent.iterdir()), ["a.py"])
+
+    def test_r11_symlink_plantado_no_lugar_do_arquivo_nao_e_seguido(self):
+        from mobaile.security.paths import write_file_atomic
+
+        fora = self.home / "fora.py"
+        fora.write_text("segredo")
+        (self.raiz / "pages").mkdir(parents=True)
+        link = self.raiz / "pages" / "a.py"
+        link.symlink_to(fora)
+        with self.assertRaises(OSError):
+            write_file_atomic(link, b"invadido")
+        self.assertEqual(fora.read_text(), "segredo")
+
+    def test_r14_corte_por_profundidade_marca_truncated(self):
+        fundo = self.raiz / "pages"
+        for nivel in range(10):
+            fundo = fundo / f"n{nivel}"
+        fundo.mkdir(parents=True)
+        (fundo / "a.py").write_text("x")
+        self.assertTrue(self.ok("workspace.tree")["truncated"])
+
+    def test_r04_read_devolve_mtime_e_write_recusa_se_mudou(self):
+        alvo = self.arquivo("pages/a.py", b"x = 1\n")
+        lido = self.ok("workspace.read", path="pages/a.py")
+        self.assertEqual(lido["mtime_ns"], alvo.stat().st_mtime_ns)
+        # Outro editor (o PyCharm) grava no meio.
+        alvo.write_bytes(b"x = 99\n")
+        os.utime(alvo, ns=(lido["mtime_ns"] + 5_000_000, lido["mtime_ns"] + 5_000_000))
+        resposta = self.call("workspace.write", path="pages/a.py", text="x = 2\n", expected_mtime_ns=lido["mtime_ns"])
+        self.assertEqual(resposta["error"]["data"]["code"], "file_changed", resposta)
+        self.assertEqual(alvo.read_bytes(), b"x = 99\n")
+        # Sobrescrever: sem `expected_mtime_ns`, grava e devolve o mtime novo.
+        gravado = self.ok("workspace.write", path="pages/a.py", text="x = 2\n")
+        self.assertEqual(gravado["mtime_ns"], alvo.stat().st_mtime_ns)
+        self.ok("workspace.write", path="pages/a.py", text="x = 3\n", expected_mtime_ns=gravado["mtime_ns"])
+
+    def test_r04_arquivo_apagado_depois_de_lido_tambem_e_conflito(self):
+        alvo = self.arquivo("pages/a.py", b"x")
+        lido = self.ok("workspace.read", path="pages/a.py")
+        alvo.unlink()
+        resposta = self.call("workspace.write", path="pages/a.py", text="y", expected_mtime_ns=lido["mtime_ns"])
+        self.assertEqual(resposta["error"]["data"]["code"], "file_changed")
+
+
 if __name__ == "__main__":
     unittest.main()

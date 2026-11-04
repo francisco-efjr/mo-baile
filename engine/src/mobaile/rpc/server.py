@@ -1719,10 +1719,15 @@ class EngineServer:
         return workspace.ler(workspace.raiz_padrao(), params.get("path"))
 
     def workspace_write(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Grava com o separador e o BOM que o arquivo tinha (o front devolve)."""
+        """Grava com o separador e o BOM que o arquivo tinha (o front devolve).
+
+        Com `expected_mtime_ns`, recusa com `file_changed` se outro editor
+        gravou o arquivo depois do `workspace.read`.
+        """
         return workspace.gravar(
             workspace.raiz_padrao(), params.get("path"), params.get("text"),
             params.get("line_separator", "LF"), params.get("bom", False),
+            params.get("expected_mtime_ns"),
         )
 
     # ------------------------------------------------------- escuta passiva
