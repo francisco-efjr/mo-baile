@@ -5,6 +5,14 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.17.3] - 2026-11-05
+
+### Corrigido
+
+- **O rodapé do editor mostra a hora em 24 h.** Num Mac com relógio de 12 h,
+  "salvo às 14:32" aparecia como "salvo às 02:32". O teste da release da 3.17.2
+  pegou isso no runner do GitHub.
+
 ## [3.17.2] - 2026-11-04
 
 ### Corrigido

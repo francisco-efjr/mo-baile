@@ -22,7 +22,9 @@ enum EditorStatus {
     static func salvamento(acoes: String, locators: String, salvo: CodigoSalvo?) -> (texto: String, sujo: Bool)? {
         guard !acoes.isEmpty || !locators.isEmpty else { return nil }
         guard let salvo, salvo.acoes == acoes, salvo.locators == locators else { return ("não salvo", true) }
-        let hora = salvo.em.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+        // Sempre 24 h, como o PyCharm: num Mac em formato de 12 h o FormatStyle dava "02:32".
+        let partes = Calendar.current.dateComponents([.hour, .minute], from: salvo.em)
+        let hora = String(format: "%02d:%02d", partes.hour ?? 0, partes.minute ?? 0)
         return ("salvo às \(hora)", false)
     }
 
