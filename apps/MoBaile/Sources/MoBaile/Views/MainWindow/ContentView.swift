@@ -62,6 +62,8 @@ struct ContentView: View {
         .tint(theme.accent)
         // Paleta de comandos (⇧⌘P), por cima de tudo na janela.
         .overlay { CommandPaletteOverlay().tint(theme.accent) }
+        // Perfil leve: vidro próprio vira sólido em toda a janela (PERF-4).
+        .environment(\.mbPerfLight, appState.perf.reducesGlass)
         .animation(Motion.crossfade, value: appState.commandPalettePresented)
         .sheet(isPresented: $state.showingStructure) {
             StructureSheet()

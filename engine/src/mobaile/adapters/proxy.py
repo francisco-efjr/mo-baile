@@ -72,18 +72,19 @@ def _looks_textual(headers: dict[str, str]) -> bool:
     return any(hint in ctype for hint in _TEXTUAL_HINTS)
 
 
-def _decode_body(raw: bytes, headers: dict[str, str], total_bytes: int | None = None) -> tuple[str, bool]:
+def _decode_body(raw: bytes, headers: dict[str, str], total_bytes: int | None = None,
+                 limite: int = MAX_BODY_CAPTURE) -> tuple[str, bool]:
     """Devolve (texto_para_exibicao, foi_truncado)."""
     if not raw:
         return "", False
     total_bytes = len(raw) if total_bytes is None else total_bytes
-    truncated = total_bytes > MAX_BODY_CAPTURE
-    chunk = raw[:MAX_BODY_CAPTURE]
+    truncated = total_bytes > limite
+    chunk = raw[:limite]
     if not _looks_textual(headers):
         return f"«{total_bytes} bytes binários não capturados»", truncated
     text = chunk.decode("utf-8", errors="replace")
     if truncated:
-        text += f"\n\n«truncado: {total_bytes} bytes no total, {MAX_BODY_CAPTURE} capturados»"
+        text += f"\n\n«truncado: {total_bytes} bytes no total, {limite} capturados»"
     return text, truncated
 
 
@@ -350,7 +351,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
         if len(body_bytes) != int(significant_length):
             self._reject_request(client_sock, 400)
             return
-        request_body_str, req_truncated = _decode_body(body_bytes, headers)
+        request_body_str, req_truncated = _decode_body(body_bytes, headers, limite=server.body_capture_limit)
         request_body_str = redact_body(request_body_str)
 
         remote_conn = None
@@ -409,7 +410,7 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
                         raise http.client.IncompleteRead(b"", remaining_length)
                     break
                 resp_len += len(chunk)
-                remaining = MAX_BODY_CAPTURE - len(captured_response)
+                remaining = server.body_capture_limit - len(captured_response)
                 if remaining > 0:
                     captured_response.extend(chunk[:remaining])
                 client_sock.sendall(chunk)
@@ -435,7 +436,9 @@ class ProxyRequestHandler(socketserver.BaseRequestHandler):
             except OSError:
                 pass
         finally:
-            response_body_str, resp_truncated = _decode_body(bytes(captured_response), resp_headers, resp_len)
+            response_body_str, resp_truncated = _decode_body(
+                bytes(captured_response), resp_headers, resp_len, limite=server.body_capture_limit
+            )
             response_body_str = redact_body(response_body_str)
             if remote_conn:
                 try:
@@ -501,11 +504,17 @@ class MobileNetworkProxy:
     registra não pode tocar em widget nem bloquear.
     """
 
-    def __init__(self, host: str | None = None, port: int | None = None):
+    def __init__(self, host: str | None = None, port: int | None = None, queue_events: bool = True):
         self.host = host or settings.proxy_host
         self.port = port or settings.proxy_port
+        # O motor do app nativo notifica pelo callback e ninguem drena a fila:
+        # ela enchia com os 4.000 primeiros eventos e os segurava para sempre.
+        # Quem nao le passa `queue_events=False` (PERF-3, K7).
+        self._queue_events = queue_events
         self.event_queue: queue.Queue = queue.Queue(maxsize=MAX_HISTORY * 2)
         self._events: deque[NetworkEvent] = deque(maxlen=MAX_HISTORY)
+        self.body_capture_limit = MAX_BODY_CAPTURE
+        self._history_full = False
         self._server: ThreadedTCPServer | None = None
         self._thread: threading.Thread | None = None
         self._is_running = False
@@ -555,13 +564,31 @@ class MobileNetworkProxy:
     def add_event_callback(self, cb: Callable[[NetworkEvent], None]) -> None:
         self._callbacks.append(cb)
 
+    def set_body_capture_limit(self, limite: int) -> None:
+        """Corpo guardado por requisicao nova, pelo perfil de desempenho.
+
+        So vale para o que for capturado depois: o historico nao muda (D-6).
+        """
+        self.body_capture_limit = limite
+
+    @property
+    def history_full(self) -> bool:
+        """O historico ja passou do teto e esta descartando o mais antigo."""
+        return self._history_full
+
     def emit_event(self, event: NetworkEvent) -> None:
         with self._lock:
+            cheio = len(self._events) == self._events.maxlen
             self._events.append(event)  # deque com maxlen descarta o mais antigo
-        try:
-            self.event_queue.put_nowait(event)
-        except queue.Full:
-            logger.debug("Fila de eventos cheia; consumidor não está drenando.")
+            avisar = cheio and not self._history_full
+            self._history_full = self._history_full or cheio
+        if avisar:
+            logger.warning("Historico de rede passou de %s requisicoes; as mais antigas saem da memoria.", MAX_HISTORY)
+        if self._queue_events:
+            try:
+                self.event_queue.put_nowait(event)
+            except queue.Full:
+                logger.debug("Fila de eventos cheia; consumidor não está drenando.")
         for cb in self._callbacks:
             try:
                 cb(event)
@@ -611,6 +638,7 @@ class MobileNetworkProxy:
     def clear_history(self) -> None:
         with self._lock:
             self._events.clear()
+            self._history_full = False
         while True:
             try:
                 self.event_queue.get_nowait()

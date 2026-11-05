@@ -97,9 +97,14 @@ class IOSBridge:
         except Exception:
             return []
 
-    def take_screenshot(self, device_udid: str = "booted") -> Image.Image | None:
+    def take_screenshot(self, device_udid: str = "booted", fmt: str = "png") -> Image.Image | None:
+        """Print do simulador. `fmt="jpeg"` so no espelho (PERF-3, K3): decodifica
+        em ~4 ms contra ~16 ms do PNG; o inspetor continua em PNG."""
         try:
-            cmd = ["xcrun", "simctl", "io", device_udid, "screenshot", "-"]
+            cmd = ["xcrun", "simctl", "io", device_udid, "screenshot"]
+            if fmt == "jpeg":
+                cmd.append("--type=jpeg")
+            cmd.append("-")
             proc = subprocess.run(cmd, capture_output=True, timeout=6)
             if proc.returncode == 0 and proc.stdout:
                 img = Image.open(io.BytesIO(proc.stdout)).convert("RGB")

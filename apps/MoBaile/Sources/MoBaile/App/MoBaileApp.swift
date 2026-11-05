@@ -32,6 +32,8 @@ struct MoBaileApp: App {
                 .onAppear { delegate.session = session }
                 // A janela espera o splash de abertura sair (SplashController).
                 .background(WindowReader { SplashController.shared.hold($0) })
+                // Janela oculta pausa o espelho no motor (PERF-1).
+                .background(WindowReader { WindowVisibility.shared.observe($0, session: session) })
         }
         .defaultSize(DesignMetrics.Window.defaultSize)
         .windowToolbarStyle(.unified)

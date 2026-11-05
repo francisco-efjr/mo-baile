@@ -152,6 +152,24 @@ final class EngineSession {
     /// token é de uma chamada que já terminou ou estourou o prazo, e não pode
     /// sobrescrever a mensagem da atual.
     private var activeProgressToken: String?
+    /// Janela principal visível (PERF-1). Oculta, coberta ou minimizada, o
+    /// espelho pausa no motor e a releitura automática da hierarquia espera.
+    private(set) var windowVisible = true
+    /// O que este motor sabe do pedido de pausa; zera a cada motor novo.
+    private var streamPauseSent = false
+    private var pauseTask: Task<Void, Never>?
+    /// `stream.resume` que falhou com a janela à vista é repetido nestes
+    /// intervalos (R4); sem isso a moldura ficava parada até a janela sumir e
+    /// voltar. Interno para o teste encurtar.
+    var resumeRetryDelays: [UInt64] = [500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000]
+    private var resumeRetryTask: Task<Void, Never>?
+    /// Uma `stream.settled` chegou com a janela oculta: relê ao voltar.
+    private var hierarchyStale = false
+    /// Sinais do Mac para o perfil de desempenho (PERF-4).
+    private let perfSensors = PerfSensors()
+    /// Onde a parte de animação do perfil é aplicada. Injetável (R6): o teste
+    /// passa a sua e não mexe na compartilhada.
+    @ObservationIgnored var motionPolicy: MotionPolicy = .shared
     private var progressSequence = 0
 
     convenience init(
@@ -190,6 +208,8 @@ final class EngineSession {
         self.makeClient = { throw EngineError.notRunning }
         self.client = client
         self.isConnected = true
+        // Teste: política de animação própria, longe da do app (R6).
+        self.motionPolicy = MotionPolicy()
     }
 
     // MARK: - Ciclo de vida
@@ -224,6 +244,8 @@ final class EngineSession {
             lastError = nil
             applyDaemonStatus(from: info)
             state.statusMessage = "Motor \(info.version) conectado"
+            await applyStreamPause()
+            await syncPerf()
             await refreshDevices()
             await startWatchingDevices()
             await refreshEnvironment()
@@ -342,6 +364,7 @@ final class EngineSession {
 
     private func install(_ client: any EngineCalling) {
         self.client = client
+        streamPauseSent = false
         notificationTask = Task { [weak self] in
             for await notification in client.notifications {
                 guard !Task.isCancelled else { return }
@@ -518,6 +541,8 @@ final class EngineSession {
     /// ele já trocou.
     private func restore(_ snapshot: RestoreSnapshot) async {
         guard let client else { return }
+        await applyStreamPause()
+        await syncPerf()
         if let device = snapshot.device {
             let sessao = try? await client.call(
                 "session.select_device",
@@ -853,7 +878,9 @@ final class EngineSession {
     func startStream() async {
         guard let client, state.selectedDevice != nil else { return }
         do {
-            try await client.callIgnoringResult("stream.start", params: ["fps": .double(6.0), "max_width": .int(900)])
+            // Cadência, largura e qualidade vêm do perfil de desempenho do motor
+            // (PERF-3): o completo repete os 6 fps e 900 px de antes.
+            try await client.callIgnoringResult("stream.start")
             state.streamActive = true
         } catch {
             report(error)
@@ -865,6 +892,112 @@ final class EngineSession {
         try? await client.callIgnoringResult("stream.stop")
         state.streamActive = false
         state.fps = 0
+    }
+
+    // MARK: - Janela oculta (PERF-1)
+
+    /// A janela principal ficou visível ou deixou de estar.
+    ///
+    /// Oculta, a pausa espera `pauseDelayNanoseconds`: alternar de app por um
+    /// instante não deve parar e religar a captura. Visível, retoma na hora e
+    /// relê a hierarquia que ficou para trás. Quem decide se a pausa vale com
+    /// flow ou escuta passiva ligados é o motor (`kept_for`).
+    func setWindowVisible(_ visible: Bool, pauseDelayNanoseconds: UInt64 = 1_000_000_000) async {
+        guard visible != windowVisible else { return }
+        windowVisible = visible
+        pauseTask?.cancel()
+        pauseTask = nil
+        resumeRetryTask?.cancel()
+        resumeRetryTask = nil
+        guard !visible else {
+            await applyStreamPause()
+            if hierarchyStale {
+                hierarchyStale = false
+                debouncedRefreshHierarchy()
+            }
+            return
+        }
+        pauseTask = Task { [weak self] in
+            if pauseDelayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: pauseDelayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.applyStreamPause()
+        }
+        await pauseTask?.value
+    }
+
+    /// Manda ao motor o pedido que corresponde à janela, só quando muda. A
+    /// retomada que falha com a janela visível é repetida com recuo curto.
+    private func applyStreamPause() async {
+        if await sendStreamPauseIfNeeded() || !windowVisible { return }
+        resumeRetryTask?.cancel()
+        resumeRetryTask = Task { [weak self] in
+            for atraso in self?.resumeRetryDelays ?? [] {
+                try? await Task.sleep(nanoseconds: atraso)
+                guard !Task.isCancelled, let self, self.windowVisible else { return }
+                if await self.sendStreamPauseIfNeeded() { return }
+            }
+        }
+    }
+
+    /// Verdadeiro quando o motor já sabe o pedido atual (ou não há motor).
+    private func sendStreamPauseIfNeeded() async -> Bool {
+        guard let client else { return true }
+        let pausar = !windowVisible
+        guard pausar != streamPauseSent else { return true }
+        streamPauseSent = pausar
+        if (try? await client.callIgnoringResult(pausar ? "stream.pause" : "stream.resume")) != nil { return true }
+        // Motor sem o método, fora do ar ou com a fila presa.
+        streamPauseSent = !pausar
+        return false
+    }
+
+    // MARK: - Perfil de desempenho (PERF-4)
+
+    /// Manda a preferência e os sinais ao motor e passa a observar o Mac.
+    private func syncPerf() async {
+        perfSensors.start { [weak self] in
+            Task { await self?.sendPerfSignals() }
+        }
+        await setPerfPreference(state.perf.preference)
+        await sendPerfSignals()
+    }
+
+    /// Sinais do Mac para o motor. Sem resposta dele, o freio local liga a
+    /// parte visual do leve até a próxima resposta.
+    func sendPerfSignals() async {
+        guard let client else { return }
+        do {
+            let status: EngineDTO.PerfStatus = try await client.call("perf.signals", params: perfSensors.current.params)
+            applyPerf(status)
+        } catch {
+            state.perf.semMotor = true
+            motionPolicy.reduced = state.perf.reducesMotion
+        }
+    }
+
+    /// Ajustes › Desempenho e a paleta. A escolha fica guardada e vale na hora.
+    func setPerfPreference(_ preferencia: PerfPreference) async {
+        state.perf.preference = preferencia
+        preferencia.store()
+        guard let client else { return }
+        if let status = try? await client.call(
+            "perf.set_preference", params: ["preference": .string(preferencia.rawValue)], as: EngineDTO.PerfStatus.self
+        ) {
+            applyPerf(status)
+        }
+    }
+
+    /// Qualquer resposta do motor (sinais, preferência ou `perf.profile`)
+    /// prova que ele está vivo: o freio local sai aqui (R2).
+    private func applyPerf(_ status: EngineDTO.PerfStatus) {
+        state.perf.semMotor = false
+        state.perf.profile = status.profile
+        state.perf.reason = status.reason
+        state.perf.vidro = status.knobs.vidro
+        state.perf.animacoes = status.knobs.animacoes
+        motionPolicy.reduced = state.perf.reducesMotion
     }
 
     // MARK: - Scrcpy (Espelho Nativo 60 FPS)
@@ -1191,17 +1324,26 @@ final class EngineSession {
     func saveCode() async {
         guard let client else { return }
         do {
+            let (acoes, locators) = (state.actionsCode, state.locatorsCode)
             let resultado: EngineDTO.SaveResult = try await client.call(
                 "codegen.save",
                 params: [
-                    "actions_code": .string(state.actionsCode),
-                    "locators_code": .string(state.locatorsCode),
+                    "actions_code": .string(acoes),
+                    "locators_code": .string(locators),
                 ]
             )
+            state.codigoSalvo = CodigoSalvo(acoes: acoes, locators: locators, em: Date(), caminho: resultado.paths.first)
             state.statusMessage = "Salvo em \(resultado.directory)"
         } catch {
             report(error)
         }
+    }
+
+    /// Chamada avulsa para quem guarda o resultado no próprio estado (a árvore
+    /// Projeto, `EngineDTO+Workspace.swift`). Sem motor, `notRunning`.
+    func chamarMotor<R: Decodable & Sendable>(_ metodo: String, params: [String: JSONValue] = [:]) async throws -> R {
+        guard let client else { throw EngineError.notRunning }
+        return try await client.call(metodo, params: params)
     }
 
     /// Grava os passos como flow do Maestro em `~/Documents/Mo baile/flows/`
@@ -1234,7 +1376,8 @@ final class EngineSession {
     ///
     /// O serviço existia no motor e era testado, mas só a interface Tk o usava:
     /// o front nativo não tinha como rodar automação. O andamento chega por
-    /// `flow.step` (passo atual) e `flow.log` (linha a linha).
+    /// `flow.step` (passo atual) e `flow.log` (linha a linha). Com a opção dos
+    /// Ajustes ligada, o motor abre o app gravado do zero antes do primeiro passo.
     func runFlow() async {
         guard let client, !state.steps.isEmpty else { return }
         state.runLog.removeAll()
@@ -1244,7 +1387,8 @@ final class EngineSession {
         state.runStartedAt = Date()
         state.runState = .running
         do {
-            let inicio: EngineDTO.FlowRun = try await client.call("flow.run")
+            let params: [String: JSONValue] = FlowRunOptions.launchApp ? ["launch_app": .bool(true)] : [:]
+            let inicio: EngineDTO.FlowRun = try await client.call("flow.run", params: params)
             state.statusMessage = "Executando \(inicio.steps) passo(s)…"
         } catch {
             state.runState = .failed
@@ -1743,8 +1887,18 @@ final class EngineSession {
 
         case "stream.settled":
             // Tela parou de mudar: relê a hierarquia de forma desacoplada para
-            // não travar a recepção contínua dos quadros do espelho.
-            debouncedRefreshHierarchy()
+            // não travar a recepção contínua dos quadros do espelho. Com a
+            // janela oculta ninguém vê a árvore: relê quando ela voltar. A
+            // escuta passiva grava do aparelho e segue relendo.
+            if windowVisible || state.passiveListening {
+                debouncedRefreshHierarchy()
+            } else {
+                hierarchyStale = true
+            }
+
+        case "perf.profile":
+            guard let status = decodeParams(notification, as: EngineDTO.PerfStatus.self) else { return }
+            applyPerf(status)
 
         case "proxy.event":
             guard let event = decodeParams(notification, as: EngineDTO.NetworkEventPayload.self) else { return }

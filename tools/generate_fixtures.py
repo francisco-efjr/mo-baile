@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -209,11 +210,40 @@ def _trocar_caminhos(valor: Any, de: tuple[str, ...], para: str) -> Any:
     return valor
 
 
+def arvore_projeto(call) -> dict:
+    """`workspace.*` (PO-5) numa pasta de trabalho descartavel."""
+    with tempfile.TemporaryDirectory() as tmp:
+        home = pathlib.Path(tmp).resolve()
+        raiz = home / "Documents" / "Mo baile"
+        (raiz / "pages").mkdir(parents=True)
+        (raiz / "flows").mkdir()
+        (raiz / "pages" / "feature.py").write_bytes(b"def tocar(self):\r\n    pass\r\n")
+        (raiz / "flows" / "login.yaml").write_bytes(b"appId: br.app\n")
+        # mtime fixo na leitura; o da gravacao e o relogio, trocado abaixo.
+        os.utime(raiz / "pages" / "feature.py", ns=(1757030000_000000000, 1757030000_000000000))
+        with patch.dict(os.environ, {"HOME": str(home)}):
+            saida = {
+                "workspace.tree": call("workspace.tree"),
+                "workspace.read": call("workspace.read", {"path": "pages/feature.py"}),
+                "workspace.write": call("workspace.write", {
+                    "path": "pages/feature.py", "text": "def tocar(self):\n    pass\n", "line_separator": "CRLF",
+                    "expected_mtime_ns": 1757030000_000000000,
+                }),
+                "erro_workspace_file_changed": call("workspace.write", {
+                    "path": "pages/feature.py", "text": "x", "expected_mtime_ns": 1,
+                }),
+            }
+        saida["workspace.write"]["result"]["mtime_ns"] = 1757030001_000000000
+        return _trocar_caminhos(saida, (str(raiz),), "/Users/qa/Documents/Mo baile")
+
+
 def relatorio(server: EngineServer, call) -> dict:
     """`report.*` pelo servidor de verdade, sobre arquivos de verdade."""
     with tempfile.TemporaryDirectory() as tmp:
         pasta = pathlib.Path(tmp).resolve()
-        server.report = ReportService(ocr=_OcrFalso(), documents_dir=pasta / "Mo baile")
+        server.report = ReportService(
+            ocr=_OcrFalso(), documents_dir=pasta / "Mo baile", now=lambda: datetime.datetime(2026, 10, 8, 21, 30, 5)
+        )
         prints = pasta / "prints"
         prints.mkdir()
         # Bytes fixos, e nao `Image.save`: o encoder do Pillow muda entre
@@ -281,6 +311,26 @@ def build() -> dict:
         with patch.object(server.adb, "get_screen_size", return_value=(1080, 2400)):
             fixtures["screen.size"] = call("screen.size")
         fixtures["stream.stats"] = call("stream.stats")
+        fixtures["stream.pause"] = call("stream.pause")
+        fixtures["stream.resume"] = call("stream.resume")
+        # Perfis de desempenho (PERF-3): o estado inicial, um sinal quente que
+        # leva ao leve (com a notificacao), e a volta ao automatico.
+        fixtures["perf.status"] = call("perf.status")
+        out.seek(0)
+        out.truncate()
+        fixtures["perf.signals"] = call("perf.signals", {
+            "thermal": "serious", "low_power": False, "memory_pressure": "normal",
+            "physical_memory_gb": 16, "arch": "arm64", "translated": False,
+        })
+        avisos = [json.loads(linha) for linha in out.getvalue().splitlines() if linha.strip()]
+        fixtures["notif_perf.profile"] = next(m for m in avisos if m.get("method") == "perf.profile")
+        fixtures["perf.set_preference"] = call("perf.set_preference", {"preference": "leve"})
+        call("perf.set_preference", {"preference": "auto"})
+        call("perf.signals", {"thermal": "nominal"})
+        # Governador zerado e knobs do completo de volta, para o resto das
+        # fixtures nao depender da ordem.
+        server.perf = type(server.perf)()
+        server._aplicar_knobs()
         fixtures["proxy.events"] = call("proxy.events")
         with patch.object(server.adb, "is_proxy_configured", return_value=False):
             fixtures["proxy.diagnose"] = call("proxy.diagnose")
@@ -307,6 +357,7 @@ def build() -> dict:
             server.home._changelog = lambda: pasta_home / "CHANGELOG.md"
             server.home._version = "9.9.0"
             fixtures["home.summary"] = call("home.summary")
+        fixtures.update(arvore_projeto(call))
         fixtures["simulators.list"] = call("simulators.list")
         fixtures["simulators.boot"] = call("simulators.boot", {"udid": SIMULADORES[0]["udid"]})
         fixtures["emulators.list"] = call("emulators.list")

@@ -37,6 +37,9 @@ struct CommandPerformer {
             openSettings()
         case .restartEngine:
             Task { await session.restartEngine() }
+        case .perfLight:
+            let nova: PerfPreference = appState.perf.preference == .leve ? .auto : .leve
+            Task { await session.setPerfPreference(nova) }
 
         case .inspector:
             appState.toggleInspector()
@@ -44,6 +47,9 @@ struct CommandPerformer {
             appState.toggleMirror()
         case .workspace:
             withAnimation(Motion.smooth()) { appState.workspaceVisible.toggle() }
+        case .projectTree:
+            appState.workspaceTab = .pageObjects
+            withAnimation(Motion.smooth()) { appState.projectTreeVisible.toggle() }
         case .allPanels:
             withAnimation(Motion.smooth()) { appState.restoreAllPanels() }
         case .zen:
@@ -97,7 +103,11 @@ struct CommandPerformer {
                 if let caminho = await session.exportMaestroFlow() { Exporters.revealInFinder(caminho) }
             }
         case .save:
-            Task { await session.saveCode() }
+            if appState.workspaceTab == .pageObjects, let id = appState.arquivoAtivo {
+                Task { await appState.salvarArquivo(id, sessao: session) }
+            } else {
+                Task { await session.saveCode() }
+            }
         case .copyActions:
             Exporters.copy(appState.actionsCode)
             appState.statusMessage = "Código das ações copiado"

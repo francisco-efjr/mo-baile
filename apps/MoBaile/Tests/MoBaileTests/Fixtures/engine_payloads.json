@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.16.0",
+      "version": "3.17.3",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -52,6 +52,9 @@
         "passive.start",
         "passive.status",
         "passive.stop",
+        "perf.set_preference",
+        "perf.signals",
+        "perf.status",
         "proxy.clear",
         "proxy.diagnose",
         "proxy.events",
@@ -77,11 +80,16 @@
         "simulators.boot",
         "simulators.list",
         "simulators.shutdown",
+        "stream.pause",
+        "stream.resume",
         "stream.start",
         "stream.stats",
         "stream.stop",
         "wda.start",
-        "wda.status"
+        "wda.status",
+        "workspace.read",
+        "workspace.tree",
+        "workspace.write"
       ],
       "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
     }
@@ -91,7 +99,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.16.0",
+      "engine_version": "3.17.3",
       "capabilities": [
         "cancel",
         "progress",
@@ -253,6 +261,31 @@
           "timeout_s": 15,
           "progress": false
         },
+        "stream.pause": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.resume": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "perf.signals": {
+          "lane": "fast",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "perf.set_preference": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "perf.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
         "scrcpy.start": {
           "lane": "fast",
           "timeout_s": 15,
@@ -348,6 +381,21 @@
           "timeout_s": 15,
           "progress": false
         },
+        "workspace.tree": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.read": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.write": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
         "flow.run": {
           "lane": "services",
           "timeout_s": 30,
@@ -437,6 +485,7 @@
         "flow.log",
         "flow.step",
         "flow.finished",
+        "perf.profile",
         "$/progress"
       ],
       "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
@@ -574,7 +623,8 @@
           ],
           "input_text": null,
           "package": "br.app",
-          "platform": "android"
+          "platform": "android",
+          "anchor": null
         }
       ]
     }
@@ -619,6 +669,156 @@
     "id": 1,
     "result": {
       "running": false
+    }
+  },
+  "stream.pause": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "paused": false,
+      "kept_for": null
+    }
+  },
+  "stream.resume": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "paused": false,
+      "kept_for": null
+    }
+  },
+  "perf.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "completo",
+      "reason": "sinais_normais",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 6.0,
+        "stream_idle_fps": 2.0,
+        "stream_max_width": 900,
+        "stream_quality": 80,
+        "stream_capture_jpeg": false,
+        "poll_interval": 1.5,
+        "proxy_body_capture_kb": 256,
+        "glass": true,
+        "animations": true
+      },
+      "signals": {
+        "thermal": "nominal",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": null,
+        "arch": null,
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "perf.signals": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "leve",
+      "reason": "thermal_serious",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_body_capture_kb": 64,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "notif_perf.profile": {
+    "jsonrpc": "2.0",
+    "method": "perf.profile",
+    "params": {
+      "profile": "leve",
+      "reason": "thermal_serious",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_body_capture_kb": 64,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "perf.set_preference": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "leve",
+      "reason": "manual",
+      "preference": "leve",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_body_capture_kb": 64,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
     }
   },
   "proxy.events": {
@@ -1067,6 +1267,78 @@
           "Tela Início nova",
           "Tela Ambiente"
         ]
+      }
+    }
+  },
+  "workspace.tree": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "root": "/Users/qa/Documents/Mo baile",
+      "name": "Mo baile",
+      "exists": true,
+      "nodes": [
+        {
+          "name": "flows",
+          "path": "flows",
+          "kind": "dir",
+          "children": [
+            {
+              "name": "login.yaml",
+              "path": "flows/login.yaml",
+              "kind": "file"
+            }
+          ]
+        },
+        {
+          "name": "pages",
+          "path": "pages",
+          "kind": "dir",
+          "children": [
+            {
+              "name": "feature.py",
+              "path": "pages/feature.py",
+              "kind": "file"
+            }
+          ]
+        }
+      ],
+      "truncated": false
+    }
+  },
+  "workspace.read": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "pages/feature.py",
+      "text": "def tocar(self):\n    pass\n",
+      "encoding": "UTF-8",
+      "line_separator": "CRLF",
+      "bom": false,
+      "read_only": false,
+      "size": 28,
+      "mtime_ns": 1757030000000000000
+    }
+  },
+  "workspace.write": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "pages/feature.py",
+      "saved": true,
+      "bytes": 28,
+      "mtime_ns": 1757030001000000000
+    }
+  },
+  "erro_workspace_file_changed": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "O arquivo pages/feature.py mudou no disco depois de aberto.",
+      "data": {
+        "code": "file_changed",
+        "message": "O arquivo pages/feature.py mudou no disco depois de aberto."
       }
     }
   },
@@ -1868,8 +2140,8 @@
         },
         {
           "kind": "html",
-          "name": "relatorio_auditoria.html",
-          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.html",
+          "name": "relatorio_teste_android_08-10-2026.html",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_teste_android_08-10-2026.html",
           "bytes": 356936
         },
         {

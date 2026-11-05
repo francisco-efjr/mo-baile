@@ -154,8 +154,11 @@ def _parse_ios_dict(body: str) -> dict[str, Any]:
 class FirebaseAnalyticsListener:
     """Gerencia a captura contínua e o parsing de eventos de Analytics via ADB (Android) ou simctl (iOS)."""
 
-    def __init__(self, adb_bridge: ADBBridge | None = None):
+    def __init__(self, adb_bridge: ADBBridge | None = None, queue_events: bool = True):
         self.adb = adb_bridge or ADBBridge()
+        # Como no proxy: o motor do app nativo nao drena a fila (PERF-3, K7).
+        self._queue_events = queue_events
+        self._history_full = False
         # Com limite, como a do proxy: so o Tk drena esta fila, e no app nativo
         # ninguem le. Cheia, perde o evento mais antigo (COD-1).
         self.event_queue: queue.Queue = queue.Queue(maxsize=MAX_HISTORY * 2)
@@ -380,9 +383,15 @@ class FirebaseAnalyticsListener:
     def is_running(self) -> bool:
         return self._is_running
 
+    @property
+    def history_full(self) -> bool:
+        """O historico ja passou do teto: a auditoria da sessao nao ve o comeco."""
+        return self._history_full
+
     def clear_history(self):
         with self._lock:
             self.events_history.clear()
+            self._history_full = False
             while not self.event_queue.empty():
                 try:
                     self.event_queue.get_nowait()
@@ -454,7 +463,15 @@ class FirebaseAnalyticsListener:
         if not event:
             return
         with self._lock:
+            cheio = len(self.events_history) == self.events_history.maxlen
             self.events_history.append(event)
+            avisar = cheio and not self._history_full
+            self._history_full = self._history_full or cheio
+        if avisar:
+            logger.warning(
+                "Historico de analytics passou de %s eventos; a auditoria da sessao nao ve os mais antigos.",
+                MAX_HISTORY,
+            )
         self._enqueue(event)
         for cb in self._callbacks:
             try:
@@ -464,7 +481,7 @@ class FirebaseAnalyticsListener:
 
     def _enqueue(self, event: AnalyticsEvent) -> None:
         """Poe na fila sem bloquear; cheia, descarta o mais antigo."""
-        while True:
+        while self._queue_events:
             try:
                 self.event_queue.put_nowait(event)
                 return

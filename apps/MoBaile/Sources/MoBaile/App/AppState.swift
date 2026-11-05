@@ -31,6 +31,16 @@ class AppState {
 
     /// Mostra os dois editores lado a lado, ou só o de ações.
     var splitEditors: Bool = false
+    /// Painel Projeto (árvore da pasta de trabalho) na aba Page Objects, como
+    /// a tool window Project do PyCharm (PO-5).
+    var projectTreeVisible: Bool = true
+    /// Arquivos da árvore abertos em abas e a aba à frente (`nil` é o Page
+    /// Object da sessão). Aqui, e não na view, para sobreviver à troca de
+    /// área (R-01). Ações em `ArquivoAbertoPane.swift`.
+    var arquivosAbertos: [ArquivoAberto] = []
+    var arquivoAtivo: String? = nil
+    /// Aba cuja gravação esbarrou em conflito com o disco (R-04).
+    var conflitoDeArquivo: String? = nil
     /// Modal com a tabela ordenada dos passos gravados.
     var showingStructure: Bool = false
     /// Modal com a execucao visual do fluxo gravado.
@@ -47,6 +57,9 @@ class AppState {
     var steps: [AutomationStep] = []
     var actionsCode: String = ""
     var locatorsCode: String = ""
+    /// Código do último `codegen.save` que deu certo: o rodapé do editor
+    /// compara para dizer "não salvo" ou "salvo às hh:mm" (PO-4).
+    var codigoSalvo: CodigoSalvo? = nil
     
     // --- Network Traffic ---
     var httpRequests: [NetworkEvent] = []
@@ -149,6 +162,9 @@ class AppState {
     var usesToolbarSearch: Bool {
         workspaceTab == .report || (isDeviceConnected && workspaceTab != .pageObjects)
     }
+
+    // --- Desempenho (PERF-4): perfil que o motor escolheu ---
+    var perf = PerfState()
 
     // --- Metrics ---
     var fps: Int = 0

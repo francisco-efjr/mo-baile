@@ -1,0 +1,77 @@
+import SwiftUI
+
+/// Posição do cursor para o rodapé. Objeto próprio, lido só pelo rodapé: mover
+/// o cursor não redesenha a aba Page Objects nem os editores (R-06).
+@Observable
+final class CursorDoEditor {
+    var linha = 1
+    var coluna = 1
+}
+
+/// O que estava nos editores no último `codegen.save` que deu certo.
+struct CodigoSalvo: Equatable {
+    let acoes: String
+    let locators: String
+    let em: Date
+    let caminho: String?
+}
+
+/// Textos do rodapé do editor (PO-4), testáveis sem view.
+enum EditorStatus {
+    /// "não salvo" ou "salvo às 14:32". `nil` sem código nos editores.
+    static func salvamento(acoes: String, locators: String, salvo: CodigoSalvo?) -> (texto: String, sujo: Bool)? {
+        guard !acoes.isEmpty || !locators.isEmpty else { return nil }
+        guard let salvo, salvo.acoes == acoes, salvo.locators == locators else { return ("não salvo", true) }
+        // Sempre 24 h, como o PyCharm: num Mac em formato de 12 h o FormatStyle dava "02:32".
+        let partes = Calendar.current.dateComponents([.hour, .minute], from: salvo.em)
+        let hora = String(format: "%02d:%02d", partes.hour ?? 0, partes.minute ?? 0)
+        return ("salvo às \(hora)", false)
+    }
+
+    static func interpretador(versao: String?) -> String {
+        versao.map { "Python \($0)" } ?? "Python"
+    }
+}
+
+/// Lado direito do rodapé, como a status bar do PyCharm: `linha:coluna`,
+/// separador de linha, codificação, recuo, interpretador e estado salvo.
+struct EditorStatusBar: View {
+    @Environment(ThemeManager.self) private var themeManager
+    let cursor: CursorDoEditor
+    let python: String?
+    let pythonPath: String?
+    let salvamento: (texto: String, sujo: Bool)?
+    let caminho: String?
+    /// Coluna estreita: só posição e estado salvo.
+    var compacto = false
+    var separador = "LF"
+    var codificacao = "UTF-8"
+
+    var body: some View {
+        let theme = themeManager.current
+        HStack(spacing: 14) {
+            item("\(cursor.linha):\(cursor.coluna)", falado: "Linha \(cursor.linha), coluna \(cursor.coluna)")
+            if !compacto {
+                item(separador, falado: "Separador de linha \(separador)")
+                item(codificacao, falado: "Codificação \(codificacao)")
+                item("4 espaços", falado: "Recuo de 4 espaços")
+                item(EditorStatus.interpretador(versao: python), falado: "Interpretador \(EditorStatus.interpretador(versao: python))")
+                    .help(pythonPath.map { "Python do motor: \($0)" } ?? "Python do motor")
+            }
+            if let salvamento {
+                StatusIndicator(
+                    status: salvamento.sujo ? .warn : .ok, label: salvamento.texto,
+                    detail: salvamento.sujo ? "Salve com ⌘S" : caminho.map { "Gravado em \($0)" }
+                )
+            }
+        }
+        .font(DSFont.mono(11))
+        .foregroundStyle(theme.labelSecondary)
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    private func item(_ texto: String, falado: String) -> some View {
+        Text(texto).accessibilityLabel(falado)
+    }
+}

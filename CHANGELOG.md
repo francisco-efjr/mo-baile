@@ -5,6 +5,87 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.17.3] - 2026-11-05
+
+### Corrigido
+
+- **O rodapé do editor mostra a hora em 24 h.** Num Mac com relógio de 12 h,
+  "salvo às 14:32" aparecia como "salvo às 02:32". O teste da release da 3.17.2
+  pegou isso no runner do GitHub.
+
+## [3.17.2] - 2026-11-04
+
+### Corrigido
+
+- **Testes da cadência do espelho estáveis no runner do CI.** Os testes exigiam
+  25 capturas em 0,5 s, e o Mac do GitHub fez 18. Isso derrubou a release da
+  3.17.1. Agora eles conferem que a cadência nunca cai para a ociosa, com um
+  piso folgado. O motor não mudou.
+
+## [3.17.1] - 2026-11-04
+
+### Corrigido
+
+Correções da revisão independente dos perfis de desempenho, que ficaram de
+fora da 3.17.0:
+
+- **O perfil nunca encolhe o histórico de rede e analytics.** No Equilibrado e
+  no Leve, a 3.17.0 cortava os eventos já capturados (analytics 5.000 → 2.000).
+  Com isso, o Relatório com `source: "session"` acusava "não disparado" um
+  evento que tinha disparado. Agora o teto é o mesmo em todos os perfis. O
+  Leve só encurta o corpo das capturas novas. Quando o teto estoura, o motor
+  avisa uma vez e marca `perf.status.history_full`.
+- **O modo leve visual não fica preso com o motor vivo.** Qualquer resposta
+  do motor tira o freio local.
+- **O espelho não fica pausado com a janela à vista.** Isso acontecia quando
+  um flow terminava no instante em que a janela voltava. Um `stream.resume`
+  que falha agora é repetido com recuo.
+- **O espelho que acabou de iniciar já usa o perfil escolhido**, mesmo
+  quando o perfil muda durante o `stream.start`.
+- **Sensores do Mac:**
+  - os observadores e a fonte de pressão de memória são liberados ao fechar;
+  - a pressão de memória e a visibilidade da janela partem do estado atual;
+  - a política de animação passou a ser injetável, o que evita testes
+    instáveis.
+
+## [3.17.0] - 2026-11-04
+
+### Adicionado
+
+- **Âncora por passo gravado.** A gravação guarda, em cada passo, um elemento
+  estável da tela, o mais perto do alvo e fora dele: um resource-id único ou
+  um texto curto, único e sem número. A reprodução espera a âncora antes de
+  agir, por até 5 s, e cobre a tela intermediária em que o seletor do passo já
+  aparece. Campo editável, senha, e-mail, indicador e elemento de outro
+  pacote nunca viram âncora. No YAML exportado, só a âncora por id entra, como
+  `extendedWaitUntil` opcional. Depois de duas âncoras que não aparecem, as
+  outras daquele flow deixam de ser esperadas.
+- **Ajustes › Geral › Ao rodar automação: "Abrir o app do zero antes do
+  primeiro passo".** O Rodar Automação (⌘R) fecha e abre o app gravado antes
+  de começar, para o primeiro passo sair sempre da mesma tela. Só no Android.
+
+- **Aba Page Objects no modelo do PyCharm.** O editor grava os caracteres
+  exatamente como digitados: sem aspas inteligentes, sem correção, sem soft
+  wrap, Tab com 4 espaços, LF e UTF-8 sem BOM no arquivo. Os caracteres
+  especiais (NBSP, ZWSP, bidi…) aparecem como etiqueta. Usa JetBrains Mono e o
+  esquema de cores do PyCharm (Ajustes › Geral › "Cores do editor" volta à
+  paleta do app). O rodapé imita a status bar do PyCharm. O painel Projeto
+  mostra `pages/`, `locators/` e `flows/` e abre arquivos em abas, pelos RPCs
+  novos `workspace.tree`, `workspace.read` e `workspace.write`.
+- **Perfis de desempenho e modo leve.** Ajustes › Desempenho: Completo,
+  Equilibrado, Leve e Automático, que escolhe pelo estado do Mac. O espelho
+  pausa com a janela oculta (`stream.pause`/`stream.resume`) e reduz a captura
+  com a tela parada. Há badge e comando do modo leve.
+
+### Mudado
+
+- **Relatório HTML exportado com o nome do projeto:**
+  `relatorio_<projeto>_<plataforma>_<dd-mm-aaaa>.html`.
+- **`launchApp` espera o app ficar em primeiro plano** (até 10 s) antes de
+  ler a tela. O `monkey` volta antes de a activity abrir. No emulador, o
+  launcher ainda estava em foco 0,4 s depois. Um pedido de permissão por cima
+  do app conta como app aberto.
+
 ## [3.16.0] - 2026-10-28
 
 ### Mudado

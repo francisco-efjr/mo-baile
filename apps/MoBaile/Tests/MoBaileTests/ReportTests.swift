@@ -84,7 +84,7 @@ final class ReportContractTests: XCTestCase {
     func testExportacao() throws {
         let exportado = try resultado("report.export", como: EngineDTO.ReportExportPayload.self).toModel()
         XCTAssertEqual(exportado.files.map(\.kind), ["board", "html", "markdown", "tsv"])
-        XCTAssertEqual(exportado.file("html")?.name, "relatorio_auditoria.html")
+        XCTAssertEqual(exportado.file("html")?.name, "relatorio_teste_android_08-10-2026.html")
         XCTAssertTrue(exportado.files.allSatisfy { $0.bytes > 0 && $0.path.hasPrefix(exportado.directory) })
     }
 

@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # shell do aparelho como argumento solto, entao so passa o que tem esse formato.
 _APP_ID = re.compile(r"[A-Za-z][A-Za-z0-9_\-]*(\.[A-Za-z0-9_\-]+)+")
 
+# `mCurrentFocus=Window{1a2b u0 br.app/br.app.Main}` ou `... u0 Splash Screen br.app}`.
+_FOCO = re.compile(r"mCurrentFocus=Window\{\S+ u\d+ (?:Splash Screen )?([A-Za-z][\w.]*)")
+
 # Nomes de tecla do Maestro -> keycode Android.
 ANDROID_KEYS = {
     "enter": 66, "back": 4, "home": 3, "backspace": 67, "delete": 67, "tab": 61,
@@ -79,6 +82,23 @@ class AndroidFlowDevice:
         if self._tamanho is None:
             self._tamanho = self.adb.get_screen_size(self.serial)
         return self._tamanho
+
+    def foreground_app(self) -> str | None:
+        """Pacote da janela em foco (`mCurrentFocus`), para o `launchApp` esperar o app abrir.
+
+        Sem o filtro de launcher do `get_current_package`: o app testado pode
+        ter "launcher" no nome. A splash do Android 12+ (`Splash Screen <pacote>`)
+        ja conta: o processo do app subiu.
+        """
+        try:
+            ret, out, _ = self.adb._run_cmd(self.adb._device_args(self.serial, "shell", "dumpsys", "window"), timeout=5)
+        except (InvalidInputError, ToolNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.debug("dumpsys window falhou: %s", exc)
+            return None
+        if ret != 0:
+            return None
+        m = _FOCO.search(out.decode("utf-8", errors="ignore"))
+        return m.group(1) if m else None
 
     def tap(self, x: int, y: int) -> bool:
         return self.adb.tap(self.serial, x, y)

@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Janela de Ajustes (⌘,): abas Geral e Conexões. As mudanças valem na hora,
-/// sem Salvar nem Cancelar.
+/// Janela de Ajustes (⌘,): abas Geral, Desempenho, Paletas e Conexões. As
+/// mudanças valem na hora, sem Salvar nem Cancelar.
 struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings()
                 .frame(width: 520)
                 .tabItem { Label("Geral", systemImage: "gearshape") }
+            PerformanceSettings()
+                .frame(width: 520)
+                .tabItem { Label("Desempenho", systemImage: "gauge.with.dots.needle.33percent") }
             PaletteGallery()
                 .frame(width: 680, height: 640)
                 .tabItem { Label("Paletas", systemImage: "paintpalette") }
@@ -22,6 +25,8 @@ struct GeneralSettings: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage(LocatorStrategy.defaultKey) private var seletorPadrao: LocatorStrategy = .auto
+    @AppStorage(FlowRunOptions.launchAppKey) private var abrirAppAntes = false
+    @AppStorage(EditorScheme.chave) private var esquemaEditor = EditorScheme.pycharmID
 
     var body: some View {
         @Bindable var state = appState
@@ -60,6 +65,14 @@ struct GeneralSettings: View {
             .onChange(of: seletorPadrao) { _, novo in appState.locatorStrategy = novo }
             .help("Estratégia com que o app abre. Auto: o motor escolhe o localizador único mais robusto.")
 
+            // Editor de Page Objects no modelo do PyCharm (PO-3).
+            Picker("Cores do editor:", selection: $esquemaEditor) {
+                Text("PyCharm").tag(EditorScheme.pycharmID)
+                Text("Paleta do app").tag(EditorScheme.temaID)
+            }
+            .fixedSize()
+            .help("PyCharm: as cores do Islands Dark (escuro) e do IntelliJ Light (claro), com JetBrains Mono 13.")
+
             Divider()
 
             LabeledContent("Ao conectar:") {
@@ -68,6 +81,16 @@ struct GeneralSettings: View {
                     Text("O espelho começa assim que um aparelho é detectado.")
                         .font(DSFont.subheadline)
                         .foregroundStyle(themeManager.current.labelSecondary)
+                }
+            }
+
+            LabeledContent("Ao rodar automação:") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Abrir o app do zero antes do primeiro passo", isOn: $abrirAppAntes)
+                    Text("Fecha e abre o app gravado, para o primeiro passo começar sempre na mesma tela. Só no Android.")
+                        .font(DSFont.subheadline)
+                        .foregroundStyle(themeManager.current.labelSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

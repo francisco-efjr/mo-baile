@@ -80,6 +80,18 @@ if a[:1] == ["shell"] and len(a) >= 2:
     if a[1:3] == ["dumpsys", "input_method"]:
         print("mInputShown=" + ("true" if (AQUI / "teclado_aberto").exists() else "false"))
         sys.exit(0)
+    if a[1:3] == ["dumpsys", "window"]:
+        # Logo depois do monkey o launcher ainda esta em foco por uma consulta.
+        marca = AQUI / "abriu_agora"
+        if marca.exists():
+            marca.unlink()
+            print("  mCurrentFocus=Window{9f8e u0 com.android.launcher3/com.android.launcher3.Launcher}")
+        else:
+            print("  mCurrentFocus=Window{1a2b u0 br.app/br.app.MainActivity}")
+        sys.exit(0)
+    if a[1:2] == ["monkey"]:
+        (AQUI / "abriu_agora").write_text("1", encoding="utf-8")
+        sys.exit(0)
     if a[1:3] == ["input", "tap"]:
         registrar({"toque_inicio": a[3:5]})
         time.sleep(float(ler("atraso_toque", "0") or 0))

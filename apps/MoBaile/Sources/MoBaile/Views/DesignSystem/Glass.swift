@@ -34,9 +34,11 @@ enum GlassSurface: Equatable {
     /// Reduzir transparência: superfície opaca.
     case solid
 
+    /// `perfLight`: perfil leve de desempenho (PERF-4). Segue o caminho de
+    /// Reduzir transparência, que não compõe vidro nem desfoque.
     static func resolve(_ role: GlassRole, glassAvailable: Bool, reduceTransparency: Bool,
-                        interactive: Bool = false) -> GlassSurface {
-        if reduceTransparency { return .solid }
+                        interactive: Bool = false, perfLight: Bool = false) -> GlassSurface {
+        if reduceTransparency || perfLight { return .solid }
         if glassAvailable { return .glass(clear: role == .midia, interactive: interactive) }
         return role == .flutuante ? .material : .fill
     }
@@ -55,6 +57,11 @@ enum GlassSupport {
         if #available(macOS 26.0, *) { return true }
         return false
     }
+}
+
+extension EnvironmentValues {
+    /// Perfil leve de desempenho: o vidro próprio cai no sólido (PERF-4).
+    @Entry var mbPerfLight = false
 }
 
 extension View {
@@ -95,6 +102,7 @@ private struct GlassBackground<S: InsettableShape>: ViewModifier {
     /// Opcional: o splash abre antes da janela e não tem tema no ambiente.
     @Environment(ThemeManager.self) private var themeManager: ThemeManager?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.mbPerfLight) private var perfLight
     let role: GlassRole
     let shape: S
     let interactive: Bool
@@ -103,7 +111,8 @@ private struct GlassBackground<S: InsettableShape>: ViewModifier {
     func body(content: Content) -> some View {
         let theme = themeManager?.current ?? PraiaLightTheme()
         let surface = GlassSurface.resolve(role, glassAvailable: GlassSupport.available,
-                                           reduceTransparency: reduceTransparency, interactive: interactive)
+                                           reduceTransparency: reduceTransparency, interactive: interactive,
+                                           perfLight: perfLight)
         glass(content.background(highlighted && surface != .fill ? theme.fillSecondary : .clear, in: shape),
               surface, theme)
             .overlay {
@@ -184,6 +193,7 @@ struct ProminentGlassButtonStyle: ButtonStyle {
         let tingido: Bool
         @Environment(\.isEnabled) private var isEnabled
         @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+        @Environment(\.mbPerfLight) private var perfLight
 
         var body: some View {
             let rotulo = configuration.label
@@ -192,7 +202,7 @@ struct ProminentGlassButtonStyle: ButtonStyle {
                 .padding(.horizontal, DesignMetrics.Spacing.s5)
                 .frame(minWidth: DesignMetrics.Heights.controlLarge + 4, minHeight: DesignMetrics.Heights.controlLarge + 4)
                 .contentShape(Capsule())
-            if GlassSupport.available, !reduceTransparency, #available(macOS 26.0, *) {
+            if GlassSupport.available, !reduceTransparency, !perfLight, #available(macOS 26.0, *) {
                 // O vidro interativo já responde ao clique.
                 rotulo.glassEffect(tingido ? Glass.regular.tint(theme.accent).interactive() : .regular.interactive(),
                                    in: Capsule())
@@ -208,9 +218,10 @@ struct ProminentGlassButtonStyle: ButtonStyle {
 
 private struct GlassTransition: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mbPerfLight) private var perfLight
 
     func body(content: Content) -> some View {
-        if GlassSupport.available, #available(macOS 26.0, *) {
+        if GlassSupport.available, !perfLight, #available(macOS 26.0, *) {
             content.glassEffectTransition(reduceMotion ? .identity : .materialize)
         } else {
             content

@@ -322,6 +322,24 @@ extension ThemeTokens {
     var floatingShadow: Color { Color.black.opacity(0.22) }
 }
 
+/// Animação reduzida pelo perfil de desempenho (PERF-4, R6).
+///
+/// Era um estático global; agora é uma instância injetável. A `EngineSession`
+/// escreve na que recebeu (no app, a compartilhada), e cada teste usa a sua,
+/// sem tocar no que outro teste em paralelo lê. Trava própria: as animações
+/// leem na hora da ação, em qualquer thread.
+final class MotionPolicy: @unchecked Sendable {
+    static let shared = MotionPolicy()
+
+    private let lock = NSLock()
+    private var _reduced = false
+
+    var reduced: Bool {
+        get { lock.withLock { _reduced } }
+        set { lock.withLock { _reduced = newValue } }
+    }
+}
+
 /// Molas no estilo WWDC23 ("Animate with springs").
 ///
 /// *smooth* (0,5 s, sem quique) é o padrão de painéis e sheets; *snappy*
@@ -329,12 +347,14 @@ extension ThemeTokens {
 /// crossfade de 180 ms troca de seção. Com Reduzir movimento, tudo vira
 /// crossfade curto.
 enum Motion {
-    static func smooth(reduceMotion: Bool = false) -> Animation {
-        reduceMotion ? .linear(duration: 0.18) : .spring(duration: 0.5, bounce: 0)
+    /// `policy`: perfil leve (PERF-4), as molas viram o crossfade de Reduzir
+    /// movimento. O app usa a política compartilhada; o teste injeta a dele.
+    static func smooth(reduceMotion: Bool = false, policy: MotionPolicy = .shared) -> Animation {
+        reduceMotion || policy.reduced ? .linear(duration: 0.18) : .spring(duration: 0.5, bounce: 0)
     }
 
-    static func snappy(reduceMotion: Bool = false) -> Animation {
-        reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.35, bounce: 0.15)
+    static func snappy(reduceMotion: Bool = false, policy: MotionPolicy = .shared) -> Animation {
+        reduceMotion || policy.reduced ? .linear(duration: 0.15) : .spring(duration: 0.35, bounce: 0.15)
     }
 
     static let crossfade = Animation.linear(duration: 0.18)
