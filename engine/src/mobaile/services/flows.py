@@ -1,0 +1,572 @@
+#!/usr/bin/env python3
+import json
+import logging
+import os
+import subprocess
+import sys
+import threading
+import uuid
+from collections.abc import Callable, Iterable
+from pathlib import Path
+
+from mobaile.config import settings
+from mobaile.domain.errors import InvalidInputError
+from mobaile.security import sweep_orphan_runner_scripts, validate_device_id, write_executable_script
+from mobaile.services.codegen import AutomationStep
+
+logger = logging.getLogger(__name__)
+
+# O que substitui um texto digitado que, por engano, aparecesse no log.
+MASK = "***"
+MIN_MASKED_TEXT = 3
+
+# Linha-marcador que o script imprime no início de cada passo, fora do `log()`
+# (sem timestamp): `\x1emobaile.step {"index":i,"total":n}`. `FlowExecution`
+# a troca por `on_step` e nunca a repassa como saída. O separador de registro
+# (0x1E) no começo garante que nenhuma linha humana do log case por acaso.
+STEP_MARKER = "\x1emobaile.step "
+
+
+class _TemporaryScript(str):
+    """Caminho gerado pelo motor, distinguido de um script exportado pelo usuário."""
+
+
+def verify_preconditions(
+    platform: str,
+    device_id: str | None = None,
+    wda_url: str | None = None,
+    adb_path: str | None = None,
+) -> tuple[bool, str]:
+    """
+    Valida as pré-condições para execução da automação em Android ou iOS.
+    Retorna (True, 'OK') ou (False, 'Mensagem de Erro').
+    """
+    plat = platform.lower()
+    active_adb = adb_path or settings.adb_path or "adb"
+    active_wda = wda_url or settings.wda_url
+
+    if plat == "android":
+        if not device_id:
+            return False, "Nenhum dispositivo Android selecionado ou conectado."
+
+        try:
+            cmd = [active_adb, "devices"]
+            res = subprocess.run(cmd, capture_output=True, timeout=5)
+            if res.returncode != 0:
+                return False, f"Falha ao executar ADB: {res.stderr.decode('utf-8', errors='ignore')}"
+
+            lines = res.stdout.decode("utf-8", errors="ignore").strip().splitlines()
+            found_state = None
+            for line in lines[1:]:
+                parts = line.strip().split()
+                if len(parts) >= 2 and parts[0] == device_id:
+                    found_state = parts[1]
+                    break
+
+            if not found_state:
+                return False, f"Dispositivo '{device_id}' não encontrado na lista do ADB."
+            if found_state != "device":
+                return False, f"Dispositivo '{device_id}' não está pronto (estado atual: '{found_state}')."
+
+            # Tenta despertar a tela e desbloquear o aparelho
+            subprocess.run(
+                [active_adb, "-s", device_id, "shell", "input", "keyevent", "224"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=4,
+            )
+            subprocess.run(
+                [active_adb, "-s", device_id, "shell", "wm", "dismiss-keyguard"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=4,
+            )
+            return True, f"Android '{device_id}' pronto (Conectado, Tela desperta e Desbloqueada)."
+        except Exception as e:
+            return False, f"Erro ao validar pré-condições do Android: {e}"
+
+    elif plat == "ios":
+        # Checa status do simulador iOS via xcrun simctl
+        try:
+            cmd = ["xcrun", "simctl", "list", "devices"]
+            res = subprocess.run(cmd, capture_output=True, timeout=5)
+            if res.returncode == 0:
+                output = res.stdout.decode("utf-8", errors="ignore")
+                if "Booted" not in output:
+                    return False, "Nenhum simulador iOS ativo (Booted) encontrado."
+        except Exception as e:
+            return False, f"Falha ao checar simuladores iOS: {e}"
+
+        # Checa status do WebDriverAgent (WDA)
+        try:
+            import requests
+            resp = requests.get(f"{active_wda}/status", timeout=3)
+            if resp.status_code != 200:
+                return False, f"WebDriverAgent não respondeu com sucesso em {active_wda}/status (HTTP {resp.status_code})."
+            data = resp.json()
+            if not data.get("sessionId") and not (data.get("value") or {}).get("sessionId"):
+                # Tenta abrir sessão
+                s_resp = requests.post(f"{active_wda}/session", json={"capabilities": {}}, timeout=4)
+                if s_resp.status_code != 200:
+                    return False, f"Não foi possível iniciar sessão no WebDriverAgent ({active_wda})."
+            return True, f"iOS e WebDriverAgent prontos ({active_wda})."
+        except Exception as e:
+            return False, f"WebDriverAgent indisponível em {active_wda}. Certifique-se de que o WDA está rodando. Erro: {e}"
+
+    return False, f"Plataforma desconhecida: {platform}"
+
+
+def generate_hidden_runner_script(
+    steps: list[AutomationStep],
+    platform: str,
+    device_id: str,
+    wda_url: str = "http://localhost:8100",
+    adb_path: str = "adb",
+    output_path: str | None = None,
+) -> str:
+    """
+    Gera o script Python executável e autônomo em arquivo oculto (.flow_runner.py).
+    Retorna o caminho absoluto do arquivo criado.
+    """
+    # O serial vem de `adb devices` / `adb connect`, ou seja, de fora. Ele era
+    # interpolado direto dentro de uma string literal do script gerado, o que
+    # permitia fechar a aspa e emendar código Python arbitrário. Valida antes,
+    # e mesmo assim só entra no script via repr().
+    device_id = validate_device_id(device_id)
+    if platform.lower() not in ("android", "ios"):
+        raise InvalidInputError(f"Plataforma não suportada: {platform!r}")
+
+    steps_data = []
+    for s in steps:
+        steps_data.append({
+            "step_num": s.step_num,
+            "action_type": s.action_type,
+            "var_name": s.var_name,
+            "element_name": s.element_name,
+            "class_name": s.class_name,
+            "strategy": s.strategy.value if hasattr(s.strategy, "value") else str(s.strategy),
+            "locator_value": s.locator_value,
+            "coords": list(s.coords) if s.coords else [0, 0],
+            # Sem valor padrao: digitar um texto inventado no aparelho e dado falso
+            # com cara de verdadeiro. Passo sem texto falha na execucao.
+            "input_text": s.input_text,
+            "package": s.package,
+            "platform": s.platform,
+        })
+
+    steps_json = json.dumps(steps_data, indent=4, ensure_ascii=False)
+
+    script_content = f"""#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+\"\"\"
+ARQUIVO DE EXECUÇÃO DE AUTOMAÇÃO (OCULTO)
+Gerado automaticamente pelo Mobile Element Recorder.
+Plataforma: {platform.upper()}
+Dispositivo/Target: {device_id}
+Total de Passos: {len(steps)}
+\"\"\"
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+PLATFORM = {platform.lower()!r}
+DEVICE_ID = {device_id!r}
+ADB_PATH = {adb_path!r}
+WDA_URL = {wda_url!r}
+# Os passos entram como JSON e são desserializados em tempo de execução: assim
+# nenhum conteúdo gravado pelo usuário é interpretado como código Python.
+STEPS = json.loads({steps_json!r})
+STOP_REQUESTED = False
+STEP_MARKER = {STEP_MARKER!r}
+
+def request_stop(_signal, _frame):
+    global STOP_REQUESTED
+    STOP_REQUESTED = True
+
+def check_cancelled():
+    if STOP_REQUESTED:
+        log("Execução cancelada; nenhum novo passo será iniciado.")
+        sys.exit(130)
+
+def wait_between_steps(seconds):
+    deadline = time.monotonic() + seconds
+    while True:
+        check_cancelled()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.05, remaining))
+
+# Aspas simples: o unico quoting em que o sh do aparelho nao interpreta nada dentro.
+def _quote_for_device_shell(raw):
+    return "'" + raw.replace("'", "'\\''") + "'"
+
+def log(msg):
+    timestamp = time.strftime("%H:%M:%S")
+    print(f"[{{timestamp}}] {{msg}}", flush=True)
+
+def announce_step(index, total):
+    # Para o motor, não para quem lê: sem timestamp e fora do `log()`. O motor
+    # troca esta linha pela notificação `flow.step` e não a mostra. Rodado na
+    # mão (script exportado), fica calado: só o motor liga a variável.
+    if os.environ.get("MOBAILE_STEP_MARKER") != "1":
+        return
+    print(STEP_MARKER + json.dumps({{"index": index, "total": total}}, separators=(",", ":")), flush=True)
+
+def verify_preconditions():
+    log("=== [PRÉ-CONDIÇÕES] Verificando ambiente antes da execução ===")
+    if PLATFORM == "android":
+        if not DEVICE_ID:
+            log("❌ ERRO: Dispositivo Android não informado.")
+            return False
+        try:
+            res = subprocess.run([ADB_PATH, "-s", DEVICE_ID, "get-state"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            state = res.stdout.decode("utf-8", errors="ignore").strip()
+            if state != "device":
+                log(f"❌ ERRO: Dispositivo '{{DEVICE_ID}}' em estado inválido: '{{state}}'.")
+                return False
+            log(f"✔ Dispositivo Android conectado e autorizado: {{DEVICE_ID}}")
+            # Despertar tela e desbloquear
+            subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "keyevent", "224"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+            subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "wm", "dismiss-keyguard"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+            log("✔ Tela desperta e bloqueio descartado com sucesso.")
+            return True
+        except Exception as e:
+            log(f"❌ ERRO ao checar ADB: {{e}}")
+            return False
+    elif PLATFORM == "ios":
+        try:
+            import requests
+            log(f"Verificando WebDriverAgent em {{WDA_URL}}...")
+            r = requests.get(f"{{WDA_URL}}/status", timeout=4)
+            if r.status_code == 200:
+                log("✔ WebDriverAgent respondendo normalmente.")
+                return True
+            log(f"❌ ERRO: WDA retornou código {{r.status_code}}.")
+            return False
+        except Exception as e:
+            log(f"❌ ERRO: Falha ao conectar ao WebDriverAgent em {{WDA_URL}}: {{e}}")
+            return False
+    return False
+
+def execute_android_step(step):
+    coords = step.get("coords") or [0, 0]
+    x, y = coords[0], coords[1]
+    action = step.get("action_type", "click")
+    var_name = step.get("var_name", "ELEMENTO")
+
+    if action == "input":
+        text = step.get("input_text")
+        if not isinstance(text, str) or not text:
+            log(f"❌ Passo {{var_name}} de digitação sem texto gravado; nada foi digitado.")
+            return False
+        log(f"-> Clicando no campo {{var_name}} em ({{x}}, {{y}})...")
+        tap = subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
+        if tap.returncode != 0:
+            return False
+        time.sleep(0.5)
+        encoded = text.replace(" ", "%s")
+        # Nunca o valor: o log vira `flow.log` na interface e pode conter senha.
+        log(f"-> Digitando {{len(text)}} caracteres em {{var_name}}...")
+        result = subprocess.run(
+            [ADB_PATH, "-s", DEVICE_ID, "shell", "input text " + _quote_for_device_shell(encoded)],
+            timeout=5,
+        )
+        return result.returncode == 0
+    else:
+        log(f"-> Clicando em {{var_name}} em ({{x}}, {{y}})...")
+        result = subprocess.run([ADB_PATH, "-s", DEVICE_ID, "shell", "input", "tap", str(x), str(y)], timeout=5)
+        return result.returncode == 0
+
+def execute_ios_step(step):
+    import requests
+    coords = step.get("coords") or [0, 0]
+    x, y = coords[0], coords[1]
+    var_name = step.get("var_name", "ELEMENTO")
+
+    # Obtém sessão WDA
+    sid = None
+    try:
+        r = requests.get(f"{{WDA_URL}}/status", timeout=3)
+        if r.status_code == 200:
+            sid = r.json().get("sessionId")
+    except Exception:
+        pass
+    if not sid:
+        r = requests.post(f"{{WDA_URL}}/session", json={{"capabilities": {{}}}}, timeout=4)
+        if r.status_code == 200:
+            data = r.json()
+            sid = data.get("sessionId") or (data.get("value") or {{}}).get("sessionId")
+
+    if not sid:
+        log("❌ Falha ao obter Session ID do WebDriverAgent.")
+        return False
+
+    def wda_ok(res):
+        # O WDA real devolve 200 com o erro dentro de `value`; so o status nao basta.
+        if res.status_code != 200:
+            return False
+        try:
+            valor = res.json().get("value")
+        except ValueError:
+            return True
+        return not (isinstance(valor, dict) and valor.get("error"))
+
+    def tocar(rotulo):
+        log(f"-> Clicando em {{rotulo}} via WDA em ({{x}}, {{y}})...")
+        res = requests.post(f"{{WDA_URL}}/session/{{sid}}/wda/tap", json={{"x": x, "y": y}}, timeout=5)
+        if wda_ok(res):
+            return True
+        # Fallback para /actions
+        action_payload = {{
+            "actions": [
+                {{
+                    "type": "pointer",
+                    "id": "finger1",
+                    "parameters": {{"pointerType": "touch"}},
+                    "actions": [
+                        {{"type": "pointerMove", "duration": 0, "x": x, "y": y}},
+                        {{"type": "pointerDown", "button": 0}},
+                        {{"type": "pause", "duration": 80}},
+                        {{"type": "pointerUp", "button": 0}},
+                    ],
+                }}
+            ]
+        }}
+        res2 = requests.post(f"{{WDA_URL}}/session/{{sid}}/actions", json=action_payload, timeout=5)
+        return wda_ok(res2)
+
+    if step.get("action_type", "click") != "input":
+        return tocar(var_name)
+
+    # Digitacao: antes este passo virava so um toque e era dado como sucesso.
+    text = step.get("input_text")
+    if not isinstance(text, str) or not text:
+        log(f"❌ Passo {{var_name}} de digitação sem texto gravado; nada foi digitado.")
+        return False
+    if not tocar(f"campo {{var_name}}"):
+        return False
+    time.sleep(0.3)
+    # Nunca o valor: o log vira `flow.log` na interface e pode conter senha.
+    log(f"-> Digitando {{len(text)}} caracteres em {{var_name}} via WDA...")
+    res = requests.post(f"{{WDA_URL}}/session/{{sid}}/wda/keys", json={{"value": list(text)}}, timeout=10)
+    if not wda_ok(res):
+        # Sem a mensagem do WDA: ela pode repetir o texto do campo.
+        log(f"❌ O WebDriverAgent recusou a digitação em {{var_name}} (HTTP {{res.status_code}}).")
+        return False
+    return True
+
+def main():
+    # SIGTERM apenas pede a parada: a ação atual pode terminar, e o próximo
+    # passo não começa. O handler fica no processo filho, nunca no motor.
+    signal.signal(signal.SIGTERM, request_stop)
+    check_cancelled()
+    log("================================================================")
+    log(f"🚀 INICIANDO EXECUÇÃO DO FLUXO ({{len(STEPS)}} PASSOS)")
+    log(f"Plataforma: {{PLATFORM.upper()}} | Dispositivo: {{DEVICE_ID}}")
+    log("================================================================")
+
+    if not STEPS:
+        log("⚠ AVISO: Nenhum passo gravado para executar.")
+        sys.exit(1)
+
+    # 1. Checagem e execução de pré-condições
+    if not verify_preconditions():
+        log("❌ ABORTADO: Pré-condições falharam. Corrija o dispositivo e tente novamente.")
+        sys.exit(1)
+
+    check_cancelled()
+    log("✔ Pré-condições validadas! Iniciando passos sequenciais...")
+    wait_between_steps(0.8)
+
+    # 2. Execução dos passos
+    total = len(STEPS)
+    for i, step in enumerate(STEPS, start=1):
+        check_cancelled()
+        announce_step(i, total)
+        var_name = step.get("var_name", f"PASSO_{{i}}")
+        coords = step.get("coords", [0, 0])
+        action = step.get("action_type", "click")
+        log(f"----------------------------------------------------------------")
+        log(f"▶ [{{i}}/{{total}}] Executando: {{var_name}} (Ação: {{action}}, Coords: {{coords}})")
+
+        success = False
+        try:
+            if PLATFORM == "android":
+                success = execute_android_step(step)
+            elif PLATFORM == "ios":
+                success = execute_ios_step(step)
+        except Exception as e:
+            # So o tipo: a mensagem de TimeoutExpired, por exemplo, repete o
+            # comando inteiro, inclusive o texto digitado.
+            log(f"❌ Erro inesperado ao executar o passo {{i}}: {{type(e).__name__}}")
+            success = False
+
+        if not success:
+            log(f"❌ FALHA no passo {{i}} ({{var_name}}). Interrompendo automação.")
+            sys.exit(1)
+
+        log(f"✔ [{{i}}/{{total}}] Passo {{var_name}} concluído com sucesso!")
+        wait_between_steps(1.0)  # Delay para observabilidade visual no espelho
+
+    log("================================================================")
+    log("🎉 AUTOMAÇÃO EXECUTADA COM SUCESSO TOTAL!")
+    log(f"Todos os {{total}} passos foram validados e rodaram corretamente.")
+    log("================================================================")
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
+"""
+
+    # Antes o script ia para a raiz do projeto com permissão 0755: código
+    # executável em caminho previsível, gravável entre a escrita e a execução.
+    # Agora vai para um diretório da sessão (0700) com arquivo 0600, e roda via
+    # `sys.executable <script>`, que dispensa bit de execução.
+    if output_path:
+        target = os.path.abspath(output_path)
+        with open(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+            f.write(script_content)
+        os.chmod(target, 0o600)
+        return target
+
+    # Órfãos de um motor morto por SIGKILL levam texto digitado: saem antes do
+    # novo script, que por ser recente nunca entra na varredura.
+    sweep_orphan_runner_scripts()
+    return _TemporaryScript(write_executable_script(
+        script_content, filename=f"flow_runner_{uuid.uuid4().hex}.py",
+    ))
+
+
+class FlowExecution(threading.Thread):
+    """Thread de execução com cancelamento cooperativo do script gerado."""
+
+    def __init__(self, script_path, on_output, on_finished, sensitive_texts=(), on_step=None):
+        super().__init__(daemon=True, name="mobaile-flow")
+        # Rede de seguranca, nao o mecanismo principal: o runner ja nao imprime o
+        # que digita, mas um traceback inesperado poderia repetir o comando. Texto
+        # curto demais nao e mascarado para nao corromper palavras comuns do log.
+        self._segredos = sorted(
+            {t for t in sensitive_texts if isinstance(t, str) and len(t) >= MIN_MASKED_TEXT},
+            key=len, reverse=True,
+        )
+        self.script_path = script_path
+        self._temporary_script = isinstance(script_path, _TemporaryScript)
+        self.on_output = on_output
+        self.on_finished = on_finished
+        self.on_step = on_step
+        self._cancelled = threading.Event()
+        self._process_lock = threading.Lock()
+        self._process: subprocess.Popen | None = None
+
+    def _mascarar(self, linha: str) -> str:
+        for segredo in self._segredos:
+            linha = linha.replace(segredo, MASK)
+        return linha
+
+    def _anunciar_passo(self, linha: str) -> None:
+        """Troca a linha-marcador por `on_step(index, total)`. Marcador torto é descartado."""
+        try:
+            dados = json.loads(linha[len(STEP_MARKER):])
+            index, total = int(dados["index"]), int(dados["total"])
+        except (ValueError, TypeError, KeyError):
+            logger.debug("Linha-marcador de passo ilegível descartada.")
+            return
+        if self.on_step is not None:
+            self.on_step(index, total)
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        with self._process_lock:
+            if self._process is not None and self._process.poll() is None:
+                try:
+                    self._process.terminate()
+                except ProcessLookupError:
+                    pass  # O processo terminou entre poll() e o envio do sinal.
+
+    def run(self) -> None:
+        proc = None
+        success, message = False, "Automação não iniciada."
+        try:
+            with self._process_lock:
+                if self._cancelled.is_set():
+                    return
+                proc = self._process = subprocess.Popen(
+                    [sys.executable, self.script_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    # DEVNULL evita que o filho consuma linhas do canal RPC.
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True,
+                    # Herda o ambiente (o PYTHONPYCACHEPREFIX da MEL-2 depende
+                    # disso) e liga o marcador de passo, que fora do motor fica
+                    # calado.
+                    env={**os.environ, "MOBAILE_STEP_MARKER": "1"},
+                )
+
+            for line in iter(proc.stdout.readline, ""):
+                stripped = line.rstrip()
+                if stripped.startswith(STEP_MARKER):
+                    # Nunca vira saída: nem com `on_step` ausente (Tk), que
+                    # mostraria o marcador cru.
+                    self._anunciar_passo(stripped)
+                elif stripped:
+                    self.on_output(self._mascarar(stripped))
+
+            proc.stdout.close()
+            return_code = proc.wait()
+
+            success = return_code == 0
+            message = ("Automação executada com sucesso!" if success else
+                       f"Automação falhou (código de saída: {return_code}).")
+        except Exception as ex:
+            success = False
+            message = f"Exceção durante execução: {ex}"
+        finally:
+            if proc is not None:
+                if proc.poll() is None:
+                    try:
+                        proc.terminate()
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        proc.wait(timeout=6)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            proc.kill()
+                        except ProcessLookupError:
+                            pass
+                        proc.wait()
+                if proc.stdout is not None:
+                    proc.stdout.close()
+            if self._cancelled.is_set():
+                success, message = False, "Automação cancelada."
+            if self._temporary_script:
+                try:
+                    Path(self.script_path).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Falha ao remover script temporário %s: %s", self.script_path, exc)
+            self.on_finished(success, message)
+
+
+def run_flow_in_background(
+    script_path: str,
+    on_output: Callable[[str], None],
+    on_finished: Callable[[bool, str], None],
+    sensitive_texts: Iterable[str] = (),
+    on_step: Callable[[int, int], None] | None = None,
+) -> FlowExecution:
+    """Executa o script em processo próprio; `cancel()` para entre passos.
+
+    `on_step(index, total)` chega no início de cada passo, com `index` a partir de 1.
+    """
+
+    t = FlowExecution(script_path, on_output, on_finished, sensitive_texts, on_step)
+    t.start()
+    return t

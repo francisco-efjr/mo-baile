@@ -1,0 +1,3848 @@
+{
+  "engine.info": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "version": "3.24.0",
+      "platform": "android",
+      "device_id": null,
+      "adb_path": "adb",
+      "adb_available": true,
+      "scrcpy_available": false,
+      "wda_url": "http://localhost:8100",
+      "page_objects_key": "minha_tela_objs",
+      "proxy": {
+        "host": "127.0.0.1",
+        "port": 8082,
+        "running": false
+      },
+      "methods": [
+        "analytics.clear",
+        "analytics.events",
+        "analytics.ios_devices",
+        "analytics.start",
+        "analytics.stop",
+        "codegen.record",
+        "codegen.reset",
+        "codegen.save",
+        "codegen.steps",
+        "devices.list",
+        "devices.watch_start",
+        "devices.watch_stop",
+        "diagnostics.check",
+        "emulators.boot",
+        "emulators.list",
+        "engine.hello",
+        "engine.info",
+        "engine.shutdown",
+        "flow.maestro_check",
+        "flow.maestro_export",
+        "flow.maestro_run",
+        "flow.run",
+        "flow.status",
+        "flow.stop",
+        "hierarchy.dump",
+        "hierarchy.element_at",
+        "home.forget_recent",
+        "home.summary",
+        "input.tap",
+        "input.text",
+        "netlog.start",
+        "netlog.stop",
+        "passive.start",
+        "passive.status",
+        "passive.stop",
+        "perf.set_preference",
+        "perf.signals",
+        "perf.status",
+        "project.configure",
+        "project.doctor",
+        "project.forget",
+        "project.inspect",
+        "project.list",
+        "project.open",
+        "project.trust",
+        "proxy.clear",
+        "proxy.diagnose",
+        "proxy.events",
+        "proxy.start",
+        "proxy.stop",
+        "recording.start",
+        "recording.status",
+        "recording.stop",
+        "report.audit",
+        "report.card",
+        "report.card_update",
+        "report.cards",
+        "report.cards_update",
+        "report.checklist_export",
+        "report.export",
+        "report.import",
+        "report.spec",
+        "run.start",
+        "run.status",
+        "run.stop",
+        "scrcpy.start",
+        "scrcpy.status",
+        "scrcpy.stop",
+        "screen.capture",
+        "screen.size",
+        "session.correlate",
+        "session.select_device",
+        "setup.check",
+        "simulators.boot",
+        "simulators.list",
+        "simulators.shutdown",
+        "stream.pause",
+        "stream.resume",
+        "stream.start",
+        "stream.stats",
+        "stream.stop",
+        "wda.start",
+        "wda.status",
+        "workspace.read",
+        "workspace.tree",
+        "workspace.write"
+      ],
+      "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
+    }
+  },
+  "engine.hello": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocol_version": 2,
+      "engine_version": "3.24.0",
+      "capabilities": [
+        "cancel",
+        "progress",
+        "lanes"
+      ],
+      "methods": {
+        "engine.hello": {
+          "lane": "inline",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "engine.info": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "engine.shutdown": {
+          "lane": "inline",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "session.select_device": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "session.correlate": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "devices.list": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "devices.watch_start": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "devices.watch_stop": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "diagnostics.check": {
+          "lane": "query",
+          "timeout_s": 30,
+          "progress": true
+        },
+        "setup.check": {
+          "lane": "query",
+          "timeout_s": 10,
+          "progress": false
+        },
+        "home.summary": {
+          "lane": "query",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "home.forget_recent": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "simulators.list": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "simulators.boot": {
+          "lane": "environment",
+          "timeout_s": 180,
+          "progress": true
+        },
+        "simulators.shutdown": {
+          "lane": "environment",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "emulators.list": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "emulators.boot": {
+          "lane": "environment",
+          "timeout_s": 120,
+          "progress": true
+        },
+        "wda.start": {
+          "lane": "environment",
+          "timeout_s": 600,
+          "progress": true
+        },
+        "wda.status": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "recording.start": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "recording.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "recording.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "screen.capture": {
+          "lane": "capture",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "screen.size": {
+          "lane": "capture",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "hierarchy.dump": {
+          "lane": "capture",
+          "timeout_s": 60,
+          "progress": true
+        },
+        "hierarchy.element_at": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "input.tap": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "input.text": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.start": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.stop": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.stats": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.pause": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "stream.resume": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "perf.signals": {
+          "lane": "fast",
+          "timeout_s": 5,
+          "progress": false
+        },
+        "perf.set_preference": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "perf.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "scrcpy.start": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "scrcpy.stop": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "scrcpy.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.start": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "proxy.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "proxy.events": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.clear": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "proxy.diagnose": {
+          "lane": "services",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "netlog.start": {
+          "lane": "services",
+          "timeout_s": 45,
+          "progress": false
+        },
+        "netlog.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "analytics.start": {
+          "lane": "services",
+          "timeout_s": 20,
+          "progress": false
+        },
+        "analytics.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "analytics.events": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "analytics.clear": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "analytics.ios_devices": {
+          "lane": "query",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.record": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.steps": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.reset": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "codegen.save": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.tree": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.read": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "workspace.write": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.run": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "flow.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "flow.status": {
+          "lane": "services",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.maestro_check": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.maestro_export": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "flow.maestro_run": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "passive.start": {
+          "lane": "capture",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "passive.stop": {
+          "lane": "capture",
+          "timeout_s": 75,
+          "progress": false
+        },
+        "passive.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.spec": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.audit": {
+          "lane": "report",
+          "timeout_s": 60,
+          "progress": true
+        },
+        "report.export": {
+          "lane": "report",
+          "timeout_s": 120,
+          "progress": true
+        },
+        "report.import": {
+          "lane": "report",
+          "timeout_s": 600,
+          "progress": true
+        },
+        "report.checklist_export": {
+          "lane": "report",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "report.card": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.card_update": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.cards": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "report.cards_update": {
+          "lane": "report",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "project.open": {
+          "lane": "project",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "project.list": {
+          "lane": "project",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "project.forget": {
+          "lane": "project",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "project.inspect": {
+          "lane": "project",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "project.configure": {
+          "lane": "project",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "project.trust": {
+          "lane": "project",
+          "timeout_s": 15,
+          "progress": false
+        },
+        "project.doctor": {
+          "lane": "project",
+          "timeout_s": 180,
+          "progress": true
+        },
+        "run.start": {
+          "lane": "services",
+          "timeout_s": 30,
+          "progress": false
+        },
+        "run.stop": {
+          "lane": "services",
+          "timeout_s": 60,
+          "progress": false
+        },
+        "run.status": {
+          "lane": "fast",
+          "timeout_s": 15,
+          "progress": false
+        }
+      },
+      "notifications": [
+        "stream.frame",
+        "stream.settled",
+        "proxy.event",
+        "analytics.event",
+        "device.changed",
+        "home.changed",
+        "passive.step",
+        "passive.skipped",
+        "passive.text",
+        "flow.log",
+        "flow.step",
+        "flow.finished",
+        "run.log",
+        "run.finished",
+        "perf.profile",
+        "$/progress"
+      ],
+      "log_path": "/Users/qa/Library/Logs/Mo baile/engine.log"
+    }
+  },
+  "erro_incompatible_protocol": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Protocolo incompativel: o front fala a versao 1 e o motor, a versao 2. Atualize o Mo baile para que os dois andem juntos.",
+      "data": {
+        "code": "incompatible_protocol",
+        "message": "Protocolo incompativel: o front fala a versao 1 e o motor, a versao 2. Atualize o Mo baile para que os dois andem juntos."
+      }
+    }
+  },
+  "session.select_device": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "platform": "android",
+      "device_id": "emulator-5554"
+    }
+  },
+  "hierarchy.dump": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "count": 1,
+      "elements": [
+        {
+          "tag": "node",
+          "class_name": "android.widget.Button",
+          "resource_id": "br.app:id/btn_ok",
+          "text": "Continuar",
+          "content_desc": "Botao continuar",
+          "clickable": true,
+          "bounds": [
+            10,
+            20,
+            110,
+            70
+          ],
+          "area": 5000,
+          "package": "br.app",
+          "platform": "android",
+          "depth": 0,
+          "parent_idx": null,
+          "chip_type": "B",
+          "display_name": "Continuar"
+        }
+      ]
+    }
+  },
+  "hierarchy.element_at": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "element": {
+        "tag": "node",
+        "class_name": "android.widget.Button",
+        "resource_id": "br.app:id/btn_ok",
+        "text": "Continuar",
+        "content_desc": "Botao continuar",
+        "clickable": true,
+        "bounds": [
+          10,
+          20,
+          110,
+          70
+        ],
+        "area": 5000,
+        "package": "br.app",
+        "platform": "android",
+        "depth": 0,
+        "parent_idx": null,
+        "chip_type": "B",
+        "display_name": "Continuar"
+      }
+    }
+  },
+  "codegen.record": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "var_name": "BOTAO_CONTINUAR",
+      "object_code": "    BOTAO_CONTINUAR = (AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
+      "action_code": "    def click_continuar(self):\n        self.wait_to_be_visible(self.locators['minha_tela_objs'].BOTAO_CONTINUAR, 15)\n        self.click(self.locators['minha_tela_objs'].BOTAO_CONTINUAR, 2)\n",
+      "element": {
+        "tag": "node",
+        "class_name": "android.widget.Button",
+        "resource_id": "br.app:id/btn_ok",
+        "text": "Continuar",
+        "content_desc": "Botao continuar",
+        "clickable": true,
+        "bounds": [
+          10,
+          20,
+          110,
+          70
+        ],
+        "area": 5000,
+        "package": "br.app",
+        "platform": "android",
+        "depth": 0,
+        "parent_idx": null,
+        "chip_type": "B",
+        "display_name": "Continuar"
+      },
+      "step_count": 1,
+      "step_num": 1,
+      "recorded_at": 1757030000.0,
+      "strategy": "position",
+      "alternatives": []
+    }
+  },
+  "codegen.steps": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "steps": [
+        {
+          "step_num": 1,
+          "recorded_at": 1757030000.0,
+          "action_type": "click",
+          "var_name": "BOTAO_CONTINUAR",
+          "element_name": "Continuar",
+          "class_name": "android.widget.Button",
+          "strategy": "position",
+          "locator_value": "(AppiumBy.XPATH, '//android.widget.Button[@resource-id=\"br.app:id/btn_ok\"]')",
+          "coords": [
+            60,
+            45
+          ],
+          "input_text": null,
+          "package": "br.app",
+          "platform": "android",
+          "anchor": null
+        }
+      ]
+    }
+  },
+  "session.correlate": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "step_num": 1,
+      "recorded_at": 1757030000.0,
+      "window": [
+        1757029999.0,
+        1757030004.0
+      ],
+      "requests": [],
+      "events": [],
+      "probable": true
+    }
+  },
+  "screen.capture": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "width": 30,
+      "height": 60,
+      "source_width": 60,
+      "source_height": 120,
+      "device_id": "emulator-5554"
+    }
+  },
+  "screen.size": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "width": 1080,
+      "height": 2400
+    }
+  },
+  "stream.stats": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false
+    }
+  },
+  "stream.pause": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "paused": false,
+      "kept_for": null
+    }
+  },
+  "stream.resume": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "paused": false,
+      "kept_for": null
+    }
+  },
+  "perf.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "completo",
+      "reason": "sinais_normais",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 6.0,
+        "stream_idle_fps": 2.0,
+        "stream_max_width": 900,
+        "stream_quality": 80,
+        "stream_capture_jpeg": false,
+        "poll_interval": 1.5,
+        "proxy_body_capture_kb": 256,
+        "glass": true,
+        "animations": true
+      },
+      "signals": {
+        "thermal": "nominal",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": null,
+        "arch": null,
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "perf.signals": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "leve",
+      "reason": "thermal_serious",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_body_capture_kb": 64,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "notif_perf.profile": {
+    "jsonrpc": "2.0",
+    "method": "perf.profile",
+    "params": {
+      "profile": "leve",
+      "reason": "thermal_serious",
+      "preference": "auto",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_body_capture_kb": 64,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "perf.set_preference": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "profile": "leve",
+      "reason": "manual",
+      "preference": "leve",
+      "knobs": {
+        "stream_fps": 2.0,
+        "stream_idle_fps": 0.5,
+        "stream_max_width": 600,
+        "stream_quality": 60,
+        "stream_capture_jpeg": true,
+        "poll_interval": 5.0,
+        "proxy_body_capture_kb": 64,
+        "glass": false,
+        "animations": false
+      },
+      "signals": {
+        "thermal": "serious",
+        "low_power": false,
+        "memory_pressure": "normal",
+        "physical_memory_gb": 16,
+        "arch": "arm64",
+        "translated": false
+      },
+      "history_full": {
+        "proxy": false,
+        "analytics": false
+      },
+      "improving": false
+    }
+  },
+  "proxy.events": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "events": [],
+      "total": 0
+    }
+  },
+  "proxy.diagnose": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "checked_at": 0,
+      "platform": "android",
+      "proxy_running": false,
+      "device_configured": null,
+      "netlog_running": false,
+      "requests_total": 0,
+      "tunnels_total": 0,
+      "tunnels_failed": 0,
+      "tunnels_active": 0,
+      "last_event_age_s": null,
+      "causes": [
+        {
+          "code": "proxy_stopped",
+          "title": "O proxy está desligado",
+          "detail": "Nenhuma captura ligada: nem o proxy nem o App em Debug.",
+          "fix": "Clique em Configurar Proxy. No iOS, ou em app que ignora o proxy, use o App em Debug."
+        }
+      ]
+    }
+  },
+  "devices.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "devices": []
+    }
+  },
+  "erro_dominio": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Coordenada x fora da faixa: -1",
+      "data": {
+        "code": "invalid_input",
+        "message": "Coordenada x fora da faixa: -1"
+      }
+    }
+  },
+  "diagnostics.check": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "ios": {
+        "platform": "ios",
+        "title": "iOS · WebDriverAgent",
+        "ready": false,
+        "checks": [
+          {
+            "label": "Ferramentas do Xcode",
+            "state": "ok",
+            "detail": "xcrun disponivel",
+            "action": null
+          },
+          {
+            "label": "Simulador instalado",
+            "state": "ok",
+            "detail": "2 disponíveis",
+            "action": null
+          },
+          {
+            "label": "Simulador ligado",
+            "state": "ok",
+            "detail": "iPhone 16 Pro",
+            "action": null
+          },
+          {
+            "label": "WebDriverAgent",
+            "state": "warn",
+            "detail": "Sem resposta em http://localhost:8100 (servidor parado). O espelho funciona; toque e hierarquia precisam dele.",
+            "action": "start_wda"
+          }
+        ]
+      },
+      "android": {
+        "platform": "android",
+        "title": "Android · ADB",
+        "ready": false,
+        "checks": [
+          {
+            "label": "ADB instalado",
+            "state": "ok",
+            "detail": "adb",
+            "action": null
+          },
+          {
+            "label": "Dispositivo autorizado",
+            "state": "warn",
+            "detail": "Nenhum aparelho conectado.",
+            "action": null
+          },
+          {
+            "label": "Emulador disponivel",
+            "state": "warn",
+            "detail": "2 emuladores parados.",
+            "action": "boot_avd"
+          }
+        ]
+      }
+    }
+  },
+  "setup.check": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "system": "macos",
+      "python": {
+        "version": "3.12.7",
+        "path": "/opt/homebrew/bin/python3"
+      },
+      "groups": [
+        {
+          "id": "motor",
+          "title": "Motor",
+          "components": [
+            {
+              "id": "python",
+              "label": "Python 3.12.7",
+              "state": "ok",
+              "detail": "/opt/homebrew/bin/python3 · Pillow 11.3.0 · requests 2.32.3",
+              "required": true,
+              "install": "python",
+              "link": null,
+              "needed_for": ""
+            }
+          ]
+        },
+        {
+          "id": "android",
+          "title": "Android",
+          "components": [
+            {
+              "id": "adb",
+              "label": "Android Platform Tools (adb)",
+              "state": "ok",
+              "detail": "adb",
+              "required": true,
+              "install": "android",
+              "link": null,
+              "needed_for": ""
+            },
+            {
+              "id": "emulator",
+              "label": "Emulador Android",
+              "state": "ok",
+              "detail": "/Users/qa/Library/Android/sdk/emulator/emulator",
+              "required": false,
+              "install": null,
+              "link": "https://developer.android.com/studio",
+              "needed_for": ""
+            },
+            {
+              "id": "scrcpy",
+              "label": "scrcpy",
+              "state": "off",
+              "detail": "Espelho em janela própria, a 60 quadros por segundo. Sem ele, o espelho do app funciona igual.",
+              "required": false,
+              "install": "scrcpy",
+              "link": null,
+              "needed_for": "espelho a 60 quadros"
+            },
+            {
+              "id": "uiautomator2",
+              "label": "Driver UiAutomator2 do Appium",
+              "state": "off",
+              "detail": "Reserva para aparelhos em que o adb devolve a hierarquia vazia.",
+              "required": false,
+              "install": "appium-android",
+              "link": null,
+              "needed_for": "hierarquia em alguns aparelhos"
+            }
+          ]
+        },
+        {
+          "id": "ios",
+          "title": "iOS",
+          "components": [
+            {
+              "id": "xcode",
+              "label": "Xcode",
+              "state": "ok",
+              "detail": "simctl em /var/db/xcode_select_link",
+              "required": true,
+              "install": null,
+              "link": "macappstore://apps.apple.com/app/id497799835",
+              "needed_for": ""
+            },
+            {
+              "id": "appium",
+              "label": "Appium com o driver XCUITest",
+              "state": "error",
+              "detail": "Appium 2.11.0 sem o driver XCUITest. Toque, hierarquia e Page Objects no iOS dependem dele.",
+              "required": true,
+              "install": "appium",
+              "link": null,
+              "needed_for": "toque e hierarquia no iOS"
+            }
+          ]
+        },
+        {
+          "id": "extras",
+          "title": "Extras opcionais",
+          "components": [
+            {
+              "id": "pymobiledevice3",
+              "label": "pymobiledevice3",
+              "state": "off",
+              "detail": "Só para Analytics e Rede de iPhone físico por cabo. O simulador não precisa.",
+              "required": false,
+              "install": "ios-device",
+              "link": null,
+              "needed_for": "iPhone físico por cabo"
+            },
+            {
+              "id": "quartz",
+              "label": "Escuta passiva de toques",
+              "state": "ok",
+              "detail": "pyobjc-framework-Quartz instalado.",
+              "required": false,
+              "install": "escuta",
+              "link": null,
+              "needed_for": ""
+            },
+            {
+              "id": "swift",
+              "label": "Leitura de prints no Relatório",
+              "state": "ok",
+              "detail": "Swift das Command Line Tools: o texto dos cards sai do print, sem rede.",
+              "required": false,
+              "install": null,
+              "link": "macappstore://apps.apple.com/app/id497799835",
+              "needed_for": ""
+            }
+          ]
+        }
+      ],
+      "features": [
+        {
+          "id": "page_objects",
+          "platforms": [
+            {
+              "platform": "ios",
+              "state": "warn",
+              "detail": "só o espelho; falta o Appium"
+            },
+            {
+              "platform": "android",
+              "state": "ok",
+              "detail": "pronto"
+            }
+          ]
+        },
+        {
+          "id": "network",
+          "platforms": [
+            {
+              "platform": "ios",
+              "state": "warn",
+              "detail": "só iPhone físico; falta o pymobiledevice3"
+            },
+            {
+              "platform": "android",
+              "state": "ok",
+              "detail": "pronto"
+            }
+          ]
+        },
+        {
+          "id": "analytics",
+          "platforms": [
+            {
+              "platform": "ios",
+              "state": "ok",
+              "detail": "simulador"
+            },
+            {
+              "platform": "android",
+              "state": "ok",
+              "detail": "pronto"
+            }
+          ]
+        },
+        {
+          "id": "report",
+          "platforms": [
+            {
+              "platform": "any",
+              "state": "ok",
+              "detail": "funciona sem aparelho"
+            }
+          ]
+        }
+      ],
+      "pending": 1,
+      "next_step": {
+        "component": "appium",
+        "label": "Appium com o driver XCUITest",
+        "detail": "Appium 2.11.0 sem o driver XCUITest. Toque, hierarquia e Page Objects no iOS dependem dele.",
+        "install": "appium",
+        "link": null
+      }
+    }
+  },
+  "home.summary": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "state": "daily",
+      "python": {
+        "version": "3.12.7",
+        "path": "/opt/homebrew/bin/python3"
+      },
+      "environment": {
+        "ready": 3,
+        "total": 4,
+        "pending": [
+          {
+            "id": "appium",
+            "title": "Appium com o driver XCUITest",
+            "install": "appium",
+            "link": null,
+            "blocks": [
+              {
+                "area": "page_objects",
+                "platform": "ios",
+                "effect": "toque e hierarquia no iOS"
+              }
+            ]
+          }
+        ]
+      },
+      "platforms": [
+        {
+          "platform": "android",
+          "ready": true,
+          "found": [
+            "adb encontrado",
+            "emulador encontrado"
+          ],
+          "missing": [],
+          "install": "android",
+          "link": null
+        },
+        {
+          "platform": "ios",
+          "ready": false,
+          "found": [
+            "Xcode encontrado"
+          ],
+          "missing": [
+            "Appium com o driver XCUITest"
+          ],
+          "install": "appium",
+          "link": null
+        }
+      ],
+      "suggested_platform": "android",
+      "targets": [
+        {
+          "id": "1A2B3C4D-0000-4000-8000-0000000000AA",
+          "name": "iPhone 16 Pro",
+          "platform": "ios",
+          "kind": "simulator",
+          "running": true,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": false,
+            "record": false
+          },
+          "blocked_by": [
+            "appium"
+          ]
+        },
+        {
+          "id": "Pixel_9",
+          "name": "Pixel 9",
+          "platform": "android",
+          "kind": "emulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": true,
+            "record": true
+          },
+          "blocked_by": []
+        },
+        {
+          "id": "Pixel_9_Pro",
+          "name": "Pixel 9 Pro",
+          "platform": "android",
+          "kind": "emulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": true,
+            "record": true
+          },
+          "blocked_by": []
+        },
+        {
+          "id": "1A2B3C4D-0000-4000-8000-0000000000BB",
+          "name": "iPad Air 11-inch (M3)",
+          "platform": "ios",
+          "kind": "simulator",
+          "running": false,
+          "connected": false,
+          "capabilities": {
+            "mirror": true,
+            "tap": false,
+            "record": false
+          },
+          "blocked_by": [
+            "appium"
+          ]
+        }
+      ],
+      "recent": [
+        {
+          "kind": "report",
+          "title": "Relatório · Demanda",
+          "subtitle": "2 divergências · 42,9% conforme",
+          "path": "/Users/qa/Documents/Mo baile/specs/demanda.json",
+          "at": 1757030000.0
+        }
+      ],
+      "whats_new": {
+        "version": "9.9.0",
+        "items": [
+          "Tela Início nova",
+          "Tela Ambiente"
+        ]
+      }
+    }
+  },
+  "workspace.tree": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "root": "/Users/qa/Documents/Mo baile",
+      "name": "Mo baile",
+      "exists": true,
+      "nodes": [
+        {
+          "name": "flows",
+          "path": "flows",
+          "kind": "dir",
+          "children": [
+            {
+              "name": "login.yaml",
+              "path": "flows/login.yaml",
+              "kind": "file"
+            }
+          ]
+        },
+        {
+          "name": "pages",
+          "path": "pages",
+          "kind": "dir",
+          "children": [
+            {
+              "name": "feature.py",
+              "path": "pages/feature.py",
+              "kind": "file"
+            }
+          ]
+        }
+      ],
+      "truncated": false
+    }
+  },
+  "workspace.read": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "pages/feature.py",
+      "text": "def tocar(self):\n    pass\n",
+      "encoding": "UTF-8",
+      "line_separator": "CRLF",
+      "bom": false,
+      "read_only": false,
+      "size": 28,
+      "mtime_ns": 1757030000000000000
+    }
+  },
+  "workspace.write": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "pages/feature.py",
+      "saved": true,
+      "bytes": 28,
+      "mtime_ns": 1757030001000000000
+    }
+  },
+  "erro_workspace_file_changed": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "O arquivo pages/feature.py mudou no disco depois de aberto.",
+      "data": {
+        "code": "file_changed",
+        "message": "O arquivo pages/feature.py mudou no disco depois de aberto."
+      }
+    }
+  },
+  "simulators.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "simulators": [
+        {
+          "udid": "1A2B3C4D-0000-4000-8000-0000000000AA",
+          "name": "iPhone 16 Pro",
+          "state": "Booted",
+          "runtime": "iOS 18.6",
+          "booted": true
+        },
+        {
+          "udid": "1A2B3C4D-0000-4000-8000-0000000000BB",
+          "name": "iPad Air 11-inch (M3)",
+          "state": "Shutdown",
+          "runtime": "iOS 18.6",
+          "booted": false
+        }
+      ]
+    }
+  },
+  "simulators.boot": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "udid": "1A2B3C4D-0000-4000-8000-0000000000AA",
+      "message": "Simulador iniciado e janela trazida para a frente.",
+      "booted": true
+    }
+  },
+  "emulators.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "avds": [
+        "Pixel_9",
+        "Pixel_9_Pro"
+      ]
+    }
+  },
+  "emulators.boot": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "name": "Pixel_9",
+      "starting": true
+    }
+  },
+  "wda.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "wda_running": false,
+      "appium_installed": true,
+      "appium_running": false,
+      "appium_url": "http://127.0.0.1:4723",
+      "wda_url": "http://localhost:8100"
+    }
+  },
+  "recording.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "recording": false,
+      "path": null,
+      "elapsed_s": 0.0,
+      "platform": null
+    }
+  },
+  "recording.start": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "recording": true,
+      "path": "/Users/qa/Movies/Mo baile/mobaile-android-20260908-101500.mp4",
+      "platform": "android",
+      "limit_s": 180
+    }
+  },
+  "recording.stop": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "recording": false,
+      "path": "/Users/qa/Movies/Mo baile/mobaile-android-20260908-101500.mp4",
+      "size_bytes": 1482310,
+      "duration_s": 12.4
+    }
+  },
+  "wda.start": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "udid": "1A2B3C4D-0000-4000-8000-0000000000AA",
+      "message": "WebDriverAgent respondendo em http://localhost:8100.",
+      "wda_running": true
+    }
+  },
+  "notif_$/progress": {
+    "jsonrpc": "2.0",
+    "method": "$/progress",
+    "params": {
+      "token": "wda-1",
+      "message": "Subindo o WebDriverAgent pelo Appium. Na primeira vez ele compila, o que leva minutos.",
+      "percent": null
+    }
+  },
+  "notif_stream.frame": {
+    "jsonrpc": "2.0",
+    "method": "stream.frame",
+    "params": {
+      "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "width": 30,
+      "height": 60,
+      "source_width": 60,
+      "source_height": 120,
+      "format": "png",
+      "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAB4AAAA8CAIAAAD+Np3IAAAAL0lEQVR4AWIYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRABjRIQAAFVQAAUdPEs4AAAAASUVORK5CYII=",
+      "device_id": "emulator-5554",
+      "fps": 0,
+      "capture_ms": 0,
+      "skipped": 0
+    }
+  },
+  "notif_flow.step": {
+    "jsonrpc": "2.0",
+    "method": "flow.step",
+    "params": {
+      "index": 2,
+      "total": 3
+    }
+  },
+  "notif_flow.finished": {
+    "jsonrpc": "2.0",
+    "method": "flow.finished",
+    "params": {
+      "success": false,
+      "message": "Automação cancelada.",
+      "cancelled": true
+    }
+  },
+  "notif_proxy.event": {
+    "jsonrpc": "2.0",
+    "method": "proxy.event",
+    "params": {
+      "id": 7,
+      "timestamp": 1757030000.5,
+      "time": "14:32:10.123",
+      "method": "POST",
+      "url": "https://api.exemplo.com.br/v2/pedido/simulacao",
+      "host": "api.exemplo.com.br",
+      "path": "/v2/pedido/simulacao",
+      "status_code": 200,
+      "status_text": "OK",
+      "request_headers": {
+        "Content-Type": "application/json",
+        "Authorization": "«redigido» (32 chars)"
+      },
+      "request_body": "{\"valor\":1000}",
+      "response_headers": {
+        "Content-Type": "application/json"
+      },
+      "response_body": "{\"parcelas\":12}",
+      "duration_ms": 182.7,
+      "protocol": "HTTP/1.1",
+      "is_tunnel": false,
+      "error": null,
+      "request_bytes": 14,
+      "response_bytes": 15,
+      "body_truncated": false
+    }
+  },
+  "notif_analytics.event": {
+    "jsonrpc": "2.0",
+    "method": "analytics.event",
+    "params": {
+      "id": 3,
+      "time": "14:32:11.001",
+      "timestamp": 1757030001.0,
+      "platform": "android",
+      "tag": "FA",
+      "event_name": "screen_view",
+      "params": {
+        "screen_name": "cadastro_demo",
+        "step": 2,
+        "first_open": true
+      },
+      "raw_log": "Logging event: screen_view"
+    }
+  },
+  "report.spec": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+      "projeto": "Teste",
+      "versao_especificacao": null,
+      "plataforma": "android",
+      "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+      "prints_dir_exists": true,
+      "fluxos": [
+        {
+          "key": "avulso",
+          "label": "PDA · pedido-avulso"
+        },
+        {
+          "key": "empresa",
+          "label": "PDE · pedido-empresa"
+        }
+      ],
+      "cards": 3,
+      "variants": 7,
+      "sections": [
+        "Home",
+        "Simulação"
+      ]
+    }
+  },
+  "report.audit": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "avulso",
+            "label": "PDA · pedido-avulso"
+          },
+          {
+            "key": "empresa",
+            "label": "PDE · pedido-empresa"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "platform": "android",
+      "source": "file",
+      "log_path": "/Users/qa/Documents/Mo baile/Demanda/log.json",
+      "log_stats": {
+        "total_lidos": 12,
+        "da_plataforma": 11,
+        "duplicados": 1,
+        "uteis": 10
+      },
+      "summary": {
+        "total": 7,
+        "ok": 3,
+        "divergent": 2,
+        "missing": 2,
+        "compliance_rate": 42.9,
+        "extras": 3,
+        "alerts": 1
+      },
+      "results": [
+        {
+          "id": 0,
+          "card_index": 0,
+          "section": "Home",
+          "card_title": "screen_view",
+          "print_path": "/Users/qa/Documents/Mo baile/Demanda/prints/home.png",
+          "flow": null,
+          "flow_label": null,
+          "event": "screen_view",
+          "variation": "app:pedido:home",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:home",
+              "obtained": "app:pedido:home",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido",
+              "obtained": "pedido",
+              "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:home"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido"
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:00:00.000",
+            "event_name": "screen_view",
+            "params": {
+              "flow_name": "pedido",
+              "ga_event_origin": "app",
+              "ga_screen": "app:pedido:home"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "",
+          "block": "// screen_view [OK]\n// log 10:00:00.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:pedido:home\",  ✓\n  \"flow_name\": \"pedido\"  ✓\n}"
+        },
+        {
+          "id": 1,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "avulso",
+          "flow_label": "PDA · pedido-avulso",
+          "event": "interaction_pedido_avulso",
+          "variation": "click:parcelas",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:avulso:simulacao",
+              "obtained": "app:pedido:avulso:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido-avulso",
+              "obtained": "pedido-avulso",
+              "ok": true
+            },
+            {
+              "field": "component",
+              "expected": "button",
+              "obtained": "button",
+              "ok": true
+            },
+            {
+              "field": "detail",
+              "expected": "click:parcelas",
+              "obtained": "click:parcelas",
+              "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:avulso:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-avulso"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:01:00.000",
+            "event_name": "interaction_pedido_avulso",
+            "params": {
+              "screen_name": "app:pedido:avulso:simulacao",
+              "flow_name": "pedido-avulso",
+              "component": "button",
+              "detail": "click:parcelas",
+              "ga_screen": "app:pedido:avulso:simulacao"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "",
+          "block": "// PDA · interaction_pedido_avulso [OK]\n// log 10:01:00.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:pedido:avulso:simulacao\",  ✓\n  \"flow_name\": \"pedido-avulso\",  ✓\n  \"component\": \"button\",  ✓\n  \"detail\": \"click:parcelas\"  ✓\n}"
+        },
+        {
+          "id": 2,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "avulso",
+          "flow_label": "PDA · pedido-avulso",
+          "event": "interaction_pedido_avulso",
+          "variation": "click:[numero]-parcela-sem-seguro",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:avulso:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-avulso"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDA · interaction_pedido_avulso [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:avulso:simulacao\",\n  \"flow_name\": \"pedido-avulso\",\n  \"component\": \"button\",\n  \"detail\": \"click:[numero]-parcela-sem-seguro\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 3,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "empresa",
+          "flow_label": "PDE · pedido-empresa",
+          "event": "interaction_pedido_empresa",
+          "variation": "click:parcelas",
+          "status": "error",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:empresa:simulacao",
+              "obtained": "app:pedido:empresa:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido-empresa",
+              "obtained": "pedido-empresa",
+              "ok": true
+            },
+            {
+              "field": "component",
+              "expected": "button",
+              "obtained": "toggle",
+              "ok": false
+            },
+            {
+              "field": "detail",
+              "expected": "click:parcelas",
+              "obtained": "click:parcelas",
+              "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:02:00.000",
+            "event_name": "interaction_pedido_empresa",
+            "params": {
+              "screen_name": "app:pedido:empresa:simulacao",
+              "flow_name": "pedido-empresa",
+              "component": "toggle",
+              "detail": "click:parcelas"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "component: obtido toggle, esperado button",
+          "block": "// PDE · interaction_pedido_empresa [ERRO]\n// log 10:02:00.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:pedido:empresa:simulacao\",  ✓\n  \"flow_name\": \"pedido-empresa\",  ✓\n  \"component\": \"toggle\",  ✗\n    // ↳ esperado: button\n  \"detail\": \"click:parcelas\"  ✓\n}"
+        },
+        {
+          "id": 4,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "empresa",
+          "flow_label": "PDE · pedido-empresa",
+          "event": "interaction_pedido_empresa",
+          "variation": "click:[numero]-parcela-sem-seguro",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDE · interaction_pedido_empresa [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:empresa:simulacao\",\n  \"flow_name\": \"pedido-empresa\",\n  \"component\": \"button\",\n  \"detail\": \"click:[numero]-parcela-sem-seguro\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 5,
+          "card_index": 2,
+          "section": "Simulação",
+          "card_title": "add_to_cart",
+          "print_path": null,
+          "flow": "avulso",
+          "flow_label": "PDA · pedido-avulso",
+          "event": "add_to_cart",
+          "variation": "app:pedido:avulso:simulacao",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:avulso:simulacao",
+              "obtained": "app:pedido:avulso:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido-avulso",
+              "obtained": "pedido-avulso",
+              "ok": true
+            },
+            {
+              "field": "insurance",
+              "expected": "[0|1]",
+              "obtained": "0",
+              "ok": true
+            },
+            {
+              "field": "value",
+              "expected": "[numero]",
+              "obtained": "200.5",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_id",
+              "expected": "1001",
+              "obtained": "1001",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_name",
+              "expected": "pedido-avulso",
+              "obtained": "pedido-avulso",
+              "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:avulso:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-avulso"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"1001\", \"item_name\": \"pedido-avulso\"}]"
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:04:00.000",
+            "event_name": "add_to_cart",
+            "params": {
+              "screen_name": "app:pedido:avulso:simulacao",
+              "flow_name": "pedido-avulso",
+              "insurance": "0",
+              "value": "200.5",
+              "items": [
+                {
+                  "item_name": "pedido-avulso",
+                  "item_category": "simulacao",
+                  "item_id": "1001"
+                }
+              ]
+            }
+          },
+          "occurrences": 2,
+          "older_divergent": 1,
+          "older_divergences": [
+            "items[0].item_name=pedido-errado"
+          ],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado",
+          "block": "// PDA · add_to_cart [OK]\n// log 10:04:00.000 · 2 disparo(s)\n{\n  \"screen_name\": \"app:pedido:avulso:simulacao\",  ✓\n  \"flow_name\": \"pedido-avulso\",  ✓\n  \"insurance\": \"0\",  ✓\n  \"value\": \"200.5\",  ✓\n  \"items[0].item_id\": \"1001\",  ✓\n  \"items[0].item_name\": \"pedido-avulso\"  ✓\n}\n// ⚠ 1 disparo(s) anterior(es) divergente(s):\n//   items[0].item_name=pedido-errado"
+        },
+        {
+          "id": 6,
+          "card_index": 2,
+          "section": "Simulação",
+          "card_title": "add_to_cart",
+          "print_path": null,
+          "flow": "empresa",
+          "flow_label": "PDE · pedido-empresa",
+          "event": "add_to_cart",
+          "variation": "app:pedido:empresa:simulacao",
+          "status": "error",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:empresa:simulacao",
+              "obtained": "app:pedido:empresa:parcelas",
+              "ok": false
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido-empresa",
+              "obtained": "pedido-empresa",
+              "ok": true
+            },
+            {
+              "field": "insurance",
+              "expected": "[0|1]",
+              "obtained": "1",
+              "ok": true
+            },
+            {
+              "field": "value",
+              "expected": "[numero]",
+              "obtained": "1",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_id",
+              "expected": "[preenchido]",
+              "obtained": "1002",
+              "ok": true
+            },
+            {
+              "field": "items[0].item_name",
+              "expected": "pedido-empresa",
+              "obtained": "pedido-empresa",
+              "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"[preenchido]\", \"item_name\": \"pedido-empresa\"}]"
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": "10:01:45.000",
+            "event_name": "add_to_cart",
+            "params": {
+              "screen_name": "app:pedido:empresa:parcelas",
+              "flow_name": "pedido-empresa",
+              "insurance": "1",
+              "value": "1",
+              "items": [
+                {
+                  "item_name": "pedido-empresa",
+                  "item_id": "1002"
+                }
+              ],
+              "ga_screen": "app:pedido:empresa:simulacao"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": "app:pedido:empresa:simulacao",
+          "note": null,
+          "divergences": "screen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao",
+          "block": "// PDE · add_to_cart [ERRO]\n// log 10:01:45.000 · 1 disparo(s)\n{\n  \"screen_name\": \"app:pedido:empresa:parcelas\",  ✗\n    // ↳ esperado: app:pedido:empresa:simulacao\n  \"flow_name\": \"pedido-empresa\",  ✓\n  \"insurance\": \"1\",  ✓\n  \"value\": \"1\",  ✓\n  \"items[0].item_id\": \"1002\",  ✓\n  \"items[0].item_name\": \"pedido-empresa\"  ✓\n}\n// ga_screen: app:pedido:empresa:simulacao"
+        }
+      ],
+      "extras": [
+        {
+          "event": "interaction_pedido_avulso",
+          "screen": "app:pedido:avulso:detalhes-do-pedido",
+          "flow_name": "pedido-avulso",
+          "component": "button",
+          "detail": "click:parcelas",
+          "count": 1
+        },
+        {
+          "event": "screen_view",
+          "screen": "app:pedido:outra-tela",
+          "flow_name": "pedido",
+          "component": null,
+          "detail": null,
+          "count": 1
+        },
+        {
+          "event": "modal_view",
+          "screen": "app:pedido:avulso:simulacao",
+          "flow_name": "pedido-avulso",
+          "component": "modal",
+          "detail": "calendario",
+          "count": 1
+        }
+      ],
+      "alerts": [
+        {
+          "event": "app_exception",
+          "screen": "app:pedido:avulso:simulacao",
+          "flow_name": null,
+          "component": null,
+          "detail": null,
+          "count": 1
+        }
+      ],
+      "observations": "Eventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_avulso · app:pedido:avulso:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:avulso:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:avulso:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.",
+      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- Período do log: 08/10 10:00:00 até 10:06:00 (6 min)\n- 3 cards · 7 validações · OK: 3 · Erro: 4 (sendo 2 não disparadas) · Conformidade: 42.9%\n- Plataforma: ANDROID · 10 eventos únicos (1 duplicados removidos de 11 da plataforma; 12 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:pedido:home | OK |  | 10:00:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDA · pedido-avulso | interaction_pedido_avulso | click:parcelas | OK |  | 10:01:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDA · pedido-avulso | interaction_pedido_avulso | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:parcelas | ERRO | component: obtido toggle, esperado button | 10:02:00.000 | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | PDA · pedido-avulso | add_to_cart | app:pedido:avulso:simulacao | OK | ⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado | 10:04:00.000 | 2 |\n| Simulação | add_to_cart | PDE · pedido-empresa | add_to_cart | app:pedido:empresa:simulacao | ERRO | screen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao | 10:01:45.000 | 1 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  • interaction_pedido_avulso · app:pedido:avulso:detalhes-do-pedido · component=button · detail=click:parcelas — 1x\n  • screen_view · app:pedido:outra-tela — 1x\n  • modal_view · app:pedido:avulso:simulacao · component=modal · detail=calendario — 1x\n\nAlertas (app_exception / error_view nas telas da spec):\n  • app_exception · app:pedido:avulso:simulacao — 1x\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
+      "tsv": "Seção\tCard\tFluxo\tEvento\tVariação\tStatus\tDivergências\tHorário\tDisparos\nHome\tscreen_view\t-\tscreen_view\tapp:pedido:home\tOK\t\t10:00:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDA · pedido-avulso\tinteraction_pedido_avulso\tclick:parcelas\tOK\t\t10:01:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDA · pedido-avulso\tinteraction_pedido_avulso\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:parcelas\tERRO\tcomponent: obtido toggle, esperado button\t10:02:00.000\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tadd_to_cart\tPDA · pedido-avulso\tadd_to_cart\tapp:pedido:avulso:simulacao\tOK\t⚠ 1 disparo(s) anterior(es): items[0].item_name=pedido-errado\t10:04:00.000\t2\nSimulação\tadd_to_cart\tPDE · pedido-empresa\tadd_to_cart\tapp:pedido:empresa:simulacao\tERRO\tscreen_name: obtido app:pedido:empresa:parcelas, esperado app:pedido:empresa:simulacao\t10:01:45.000\t1\n"
+    }
+  },
+  "report.export": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "directory": "/Users/qa/Documents/Mo baile/Demanda/saida",
+      "files": [
+        {
+          "kind": "board",
+          "name": "board_auditoria.excalidraw",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/board_auditoria.excalidraw",
+          "bytes": 32559
+        },
+        {
+          "kind": "html",
+          "name": "relatorio_teste_android_08-10-2026.html",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_teste_android_08-10-2026.html",
+          "bytes": 356914
+        },
+        {
+          "kind": "markdown",
+          "name": "relatorio_auditoria.md",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.md",
+          "bytes": 2212
+        },
+        {
+          "kind": "tsv",
+          "name": "relatorio_auditoria.tsv",
+          "path": "/Users/qa/Documents/Mo baile/Demanda/saida/relatorio_auditoria.tsv",
+          "bytes": 1110
+        }
+      ]
+    }
+  },
+  "report.import": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec_path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.json",
+      "review_path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.revisao.md",
+      "checklist_path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.checklist.md",
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/demanda.json",
+        "projeto": "Demanda",
+        "versao_especificacao": "Rascunho gerado por OCR — revisar",
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "avulso",
+            "label": "avulso"
+          },
+          {
+            "key": "empresa",
+            "label": "empresa"
+          }
+        ],
+        "cards": 2,
+        "variants": 6,
+        "sections": [
+          "1. simulacao"
+        ]
+      },
+      "spec_error": null,
+      "review": [
+        {
+          "print": "home.png",
+          "event": "interaction_pedido_{fluxo}",
+          "doubts": [
+            "parâmetro 'screen name' lido como 'screen_name'",
+            "detail: item 'clickifechar' lido como 'click:fechar'",
+            "detail: exemplo 'click:10-parcela-com-seguro' generalizado para 'click:[numero]-parcela-com-seguro' (padrão da tabela)"
+          ]
+        },
+        {
+          "print": "simulacao.png",
+          "event": "add_to_cart",
+          "doubts": [
+            "items.item_category: 'Simulacao' lido como 'simulacao'",
+            "items: exemplo da spec é do fluxo 'avulso'; item_id fixado só para 'avulso'"
+          ]
+        }
+      ],
+      "doubts_total": 5
+    }
+  },
+  "erro_report_sessao_vazia": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log.",
+      "data": {
+        "code": "invalid_input",
+        "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log."
+      }
+    }
+  },
+  "report.card": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "card_index": 2,
+      "cards": 3,
+      "secao": "Simulação",
+      "titulo": null,
+      "evento": "add_to_cart",
+      "print": null,
+      "params": [
+        {
+          "key": "screen_name",
+          "value": "app:pedido:{fluxo}:simulacao"
+        },
+        {
+          "key": "flow_name",
+          "value": "pedido-{fluxo}"
+        },
+        {
+          "key": "insurance",
+          "value": "[0|1]"
+        },
+        {
+          "key": "value",
+          "value": "[numero]"
+        },
+        {
+          "key": "items",
+          "value": [
+            {
+              "item_id": "[preenchido]",
+              "item_name": "pedido-{fluxo}"
+            }
+          ]
+        }
+      ],
+      "variacoes": [],
+      "obs": null,
+      "obs_por_fluxo": false,
+      "params_por_fluxo": [
+        "avulso"
+      ]
+    }
+  },
+  "report.card_update": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "avulso",
+            "label": "PDA · pedido-avulso"
+          },
+          {
+            "key": "empresa",
+            "label": "PDE · pedido-empresa"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "card": {
+        "card_index": 1,
+        "cards": 3,
+        "secao": "Simulação",
+        "titulo": "Parcelas",
+        "evento": "interaction_pedido_{fluxo}",
+        "print": null,
+        "params": [
+          {
+            "key": "screen_name",
+            "value": "app:pedido:{fluxo}:simulacao"
+          },
+          {
+            "key": "flow_name",
+            "value": "pedido-{fluxo}"
+          },
+          {
+            "key": "component",
+            "value": "button"
+          }
+        ],
+        "variacoes": [
+          [
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          [
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ]
+        ],
+        "obs": "Conferido com produto",
+        "obs_por_fluxo": false,
+        "params_por_fluxo": []
+      }
+    }
+  },
+  "report.cards": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+      "projeto": "Teste",
+      "spec_error": null,
+      "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+      "fluxos": [
+        {
+          "key": "avulso",
+          "label": "PDA · pedido-avulso"
+        },
+        {
+          "key": "empresa",
+          "label": "PDE · pedido-empresa"
+        }
+      ],
+      "cards": [
+        {
+          "card_index": 0,
+          "cards": 3,
+          "secao": "Home",
+          "titulo": null,
+          "evento": "screen_view",
+          "print": "home.png",
+          "params": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:home"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido"
+            }
+          ],
+          "variacoes": [],
+          "obs": null,
+          "obs_por_fluxo": false,
+          "params_por_fluxo": []
+        },
+        {
+          "card_index": 1,
+          "cards": 3,
+          "secao": "Simulação",
+          "titulo": "Parcelas",
+          "evento": "interaction_pedido_{fluxo}",
+          "print": null,
+          "params": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:{fluxo}:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-{fluxo}"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            }
+          ],
+          "variacoes": [
+            [
+              {
+                "key": "detail",
+                "value": "click:parcelas"
+              }
+            ],
+            [
+              {
+                "key": "detail",
+                "value": "click:[numero]-parcela-sem-seguro"
+              }
+            ]
+          ],
+          "obs": "Conferido com produto",
+          "obs_por_fluxo": false,
+          "params_por_fluxo": []
+        },
+        {
+          "card_index": 2,
+          "cards": 3,
+          "secao": "Simulação",
+          "titulo": null,
+          "evento": "add_to_cart",
+          "print": null,
+          "params": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:{fluxo}:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-{fluxo}"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": [
+                {
+                  "item_id": "[preenchido]",
+                  "item_name": "pedido-{fluxo}"
+                }
+              ]
+            }
+          ],
+          "variacoes": [],
+          "obs": null,
+          "obs_por_fluxo": false,
+          "params_por_fluxo": [
+            "avulso"
+          ]
+        }
+      ]
+    }
+  },
+  "report.cards_update": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "avulso",
+            "label": "PDA · pedido-avulso"
+          },
+          {
+            "key": "empresa",
+            "label": "PDE · pedido-empresa"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+      "projeto": "Teste",
+      "spec_error": null,
+      "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+      "fluxos": [
+        {
+          "key": "avulso",
+          "label": "PDA · pedido-avulso"
+        },
+        {
+          "key": "empresa",
+          "label": "PDE · pedido-empresa"
+        }
+      ],
+      "cards": [
+        {
+          "card_index": 0,
+          "cards": 3,
+          "secao": "Home",
+          "titulo": null,
+          "evento": "screen_view",
+          "print": "home.png",
+          "params": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:home"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido"
+            }
+          ],
+          "variacoes": [],
+          "obs": null,
+          "obs_por_fluxo": false,
+          "params_por_fluxo": []
+        },
+        {
+          "card_index": 1,
+          "cards": 3,
+          "secao": "Simulação",
+          "titulo": "Parcelas",
+          "evento": "interaction_pedido_{fluxo}",
+          "print": null,
+          "params": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:{fluxo}:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-{fluxo}"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            }
+          ],
+          "variacoes": [
+            [
+              {
+                "key": "detail",
+                "value": "click:parcelas"
+              }
+            ],
+            [
+              {
+                "key": "detail",
+                "value": "click:[numero]-parcela-sem-seguro"
+              }
+            ]
+          ],
+          "obs": "Conferido com produto",
+          "obs_por_fluxo": false,
+          "params_por_fluxo": []
+        },
+        {
+          "card_index": 2,
+          "cards": 3,
+          "secao": "Simulação",
+          "titulo": null,
+          "evento": "add_to_cart",
+          "print": null,
+          "params": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:{fluxo}:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-{fluxo}"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": [
+                {
+                  "item_id": "[preenchido]",
+                  "item_name": "pedido-{fluxo}"
+                }
+              ]
+            }
+          ],
+          "variacoes": [],
+          "obs": null,
+          "obs_por_fluxo": false,
+          "params_por_fluxo": [
+            "avulso"
+          ]
+        }
+      ]
+    }
+  },
+  "report.checklist_export": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "path": "/Users/qa/Documents/Mo baile/Demanda/Mo baile/Specs/checklist_demanda_08-10-2026.html",
+      "name": "checklist_demanda_08-10-2026.html",
+      "bytes": 194935,
+      "total": 11,
+      "done": 0
+    }
+  },
+  "project.open": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project": {
+        "id": "0a1b2c3d4e5f",
+        "root": "/Users/qa/Projetos/projeto_exemplo_behave",
+        "name": "projeto_exemplo_behave",
+        "entry": "main.py",
+        "trusted": false,
+        "opened_at": 1757030000.0,
+        "interpreter_override": null,
+        "entry_override": null
+      }
+    }
+  },
+  "project.list": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "projects": [
+        {
+          "id": "0a1b2c3d4e5f",
+          "root": "/Users/qa/Projetos/projeto_exemplo_behave",
+          "name": "projeto_exemplo_behave",
+          "entry": "main.py",
+          "trusted": false,
+          "opened_at": 1757030000.0,
+          "interpreter_override": null,
+          "entry_override": null
+        }
+      ]
+    }
+  },
+  "project.inspect": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project": {
+        "id": "0a1b2c3d4e5f",
+        "root": "/Users/qa/Projetos/projeto_exemplo_behave",
+        "name": "projeto_exemplo_behave",
+        "entry": "main.py",
+        "trusted": false,
+        "opened_at": 1757030000.0,
+        "interpreter_override": null,
+        "entry_override": null
+      },
+      "entry": {
+        "file": "main.py",
+        "function": "main_sem_args",
+        "found": true
+      },
+      "interpreter": {
+        "path": "/Users/qa/Projetos/projeto_exemplo_behave/.venv/bin/python",
+        "source": "run_configuration",
+        "exists": false,
+        "candidates": []
+      },
+      "working_dir": "/Users/qa/Projetos/projeto_exemplo_behave",
+      "run_configuration": {
+        "name": "main",
+        "file": ".idea/runConfigurations/main.xml",
+        "env_names": [
+          "PYTHONUNBUFFERED",
+          "AMBIENTE",
+          "TOKEN_MASSA"
+        ]
+      },
+      "active_config": "config_android_local_HLG",
+      "hub_state": "local",
+      "hub_reason": null,
+      "configs": [
+        {
+          "name": "config_android_local_HLG",
+          "active": true,
+          "found": true,
+          "file": "configs.py",
+          "line": 9,
+          "platform": "android",
+          "values": {
+            "platformName": "Android",
+            "automationName": "UiAutomator2",
+            "udid": "emulator-5554",
+            "deviceName": "Pixel 7 (emulador)",
+            "platformVersion": "14",
+            "appPackage": "br.com.exemplo.hlg",
+            "appActivity": ".MainActivity"
+          },
+          "hub": "127.0.0.1:4723",
+          "cloud": false,
+          "hub_state": "local",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:automationName",
+            "appium:udid",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "appium:appPackage",
+            "appium:appActivity",
+            "appium:noReset",
+            "appium:newCommandTimeout",
+            "senha_usuario_teste"
+          ]
+        },
+        {
+          "name": "config_ios_local_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 23,
+          "platform": "ios",
+          "values": {
+            "platformName": "iOS",
+            "automationName": "XCUITest",
+            "udid": "00000000-0000-0000-0000-000000000000",
+            "deviceName": "iPhone 16",
+            "platformVersion": "18.0",
+            "bundleId": "br.com.exemplo.hlg",
+            "app": "builds/Exemplo-HLG.app"
+          },
+          "hub": "localhost:4723",
+          "cloud": false,
+          "hub_state": "local",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:automationName",
+            "appium:udid",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "appium:bundleId",
+            "appium:app"
+          ]
+        },
+        {
+          "name": "config_kobiton_android_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 34,
+          "platform": "android",
+          "values": {
+            "platformName": "Android",
+            "deviceName": "Galaxy S23",
+            "platformVersion": "14",
+            "app": "kobiton-store:000000"
+          },
+          "hub": "api.kobiton.com:443",
+          "cloud": true,
+          "hub_state": "cloud",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "kobiton:username",
+            "kobiton:accessKey",
+            "kobiton:sessionName",
+            "appium:app"
+          ]
+        },
+        {
+          "name": "config_kobiton_ios_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 45,
+          "platform": "ios",
+          "values": {
+            "platformName": "iOS",
+            "deviceName": "iPhone 15",
+            "bundleId": "br.com.exemplo.hlg"
+          },
+          "hub": "api.kobiton.com:443",
+          "cloud": true,
+          "hub_state": "cloud",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:deviceName",
+            "kobiton:accessKey",
+            "appium:bundleId"
+          ]
+        }
+      ],
+      "suites": [
+        {
+          "name": "test_suite_time_01",
+          "defined": true,
+          "line": 38,
+          "runs": [
+            {
+              "squad": "time_01",
+              "feature": "teste/teste.feature",
+              "line": 39,
+              "found": true,
+              "path": "features/teste/teste.feature",
+              "title": "Navegação básica do app de exemplo",
+              "scenarios": [
+                "Abrir a home",
+                "Abrir o extrato"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test_suite_time_02",
+          "defined": true,
+          "line": 42,
+          "runs": [
+            {
+              "squad": "time_02",
+              "feature": "login/login.feature",
+              "line": 43,
+              "found": true,
+              "path": "features/login/login.feature",
+              "title": "Login no ambiente HLG",
+              "scenarios": [
+                "Entrar com usuario de teste"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test_suite_time_03",
+          "defined": true,
+          "line": 46,
+          "runs": [
+            {
+              "squad": "time_03",
+              "feature": "teste/teste.feature",
+              "line": 47,
+              "found": true,
+              "path": "features/teste/teste.feature",
+              "title": "Navegação básica do app de exemplo",
+              "scenarios": [
+                "Abrir a home",
+                "Abrir o extrato"
+              ]
+            }
+          ]
+        }
+      ],
+      "unused_suites": [
+        "test_suite_canais"
+      ],
+      "problems": []
+    }
+  },
+  "project.doctor": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project_id": "0a1b2c3d4e5f",
+      "checks": [
+        {
+          "id": "interpreter",
+          "label": "Interpretador do projeto",
+          "state": "fail",
+          "message": "O interpretador /Users/qa/Projetos/projeto_exemplo_behave/.venv/bin/python não existe nesta máquina.",
+          "hint": "Confira o SDK da run configuration no PyCharm ou recrie o .venv do projeto.",
+          "needs_trust": false
+        },
+        {
+          "id": "packages",
+          "label": "Pacotes de teste",
+          "state": "skip",
+          "message": "Pulada: o interpretador do projeto não está disponível, e o projeto ainda não é confiável.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "requirements",
+          "label": "requirements.txt",
+          "state": "skip",
+          "message": "Pulada: o interpretador do projeto não está disponível, e o projeto ainda não é confiável.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "pip_check",
+          "label": "Dependências (pip check)",
+          "state": "skip",
+          "message": "Pulada: o interpretador do projeto não está disponível, e o projeto ainda não é confiável.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "appium",
+          "label": "Appium e driver",
+          "state": "warn",
+          "message": "Appium · sem drivers. Falta o driver uiautomator2.",
+          "hint": "appium driver install uiautomator2",
+          "needs_trust": false
+        },
+        {
+          "id": "appium_port",
+          "label": "Porta do Appium",
+          "state": "ok",
+          "message": "Appium do Mo baile em 127.0.0.1:4723. A sessão do Mo baile é fechada antes de rodar; o servidor continua de pé.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "device",
+          "label": "Aparelho da config",
+          "state": "ok",
+          "message": "emulator-5554 conectado.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "app",
+          "label": "App no aparelho",
+          "state": "ok",
+          "message": "br.com.exemplo.hlg instalado em emulator-5554.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "uiautomation",
+          "label": "UiAutomation livre",
+          "state": "ok",
+          "message": "Nenhuma outra instrumentação ativa.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "cloud",
+          "label": "Config local",
+          "state": "ok",
+          "message": "config_android_local_HLG é local.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "features",
+          "label": "Features do main",
+          "state": "ok",
+          "message": "3 execuções, todas com a feature encontrada.",
+          "hint": null,
+          "needs_trust": false
+        }
+      ],
+      "summary": {
+        "ok": 6,
+        "warn": 1,
+        "fail": 1,
+        "skip": 3
+      },
+      "ready": false,
+      "trusted": false
+    }
+  },
+  "project.doctor_sem_confianca": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project_id": "0a1b2c3d4e5f",
+      "checks": [
+        {
+          "id": "interpreter",
+          "label": "Interpretador do projeto",
+          "state": "skip",
+          "message": "/Users/qa/Projetos/projeto_exemplo_behave/.venv/bin/python existe; o Mo baile só roda o Python do projeto depois que você confiar nele.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "packages",
+          "label": "Pacotes de teste",
+          "state": "skip",
+          "message": "Pulada até você confiar no projeto.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "requirements",
+          "label": "requirements.txt",
+          "state": "skip",
+          "message": "Pulada até você confiar no projeto.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "pip_check",
+          "label": "Dependências (pip check)",
+          "state": "skip",
+          "message": "Pulada até você confiar no projeto.",
+          "hint": "Use \"Confiar neste projeto\" para o Mo baile rodar o Python dele e completar estas checagens.",
+          "needs_trust": true
+        },
+        {
+          "id": "appium",
+          "label": "Appium e driver",
+          "state": "warn",
+          "message": "Appium · sem drivers. Falta o driver uiautomator2.",
+          "hint": "appium driver install uiautomator2",
+          "needs_trust": false
+        },
+        {
+          "id": "appium_port",
+          "label": "Porta do Appium",
+          "state": "ok",
+          "message": "Appium do Mo baile em 127.0.0.1:4723. A sessão do Mo baile é fechada antes de rodar; o servidor continua de pé.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "device",
+          "label": "Aparelho da config",
+          "state": "ok",
+          "message": "emulator-5554 conectado.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "app",
+          "label": "App no aparelho",
+          "state": "ok",
+          "message": "br.com.exemplo.hlg instalado em emulator-5554.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "uiautomation",
+          "label": "UiAutomation livre",
+          "state": "ok",
+          "message": "Nenhuma outra instrumentação ativa.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "cloud",
+          "label": "Config local",
+          "state": "ok",
+          "message": "config_android_local_HLG é local.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "features",
+          "label": "Features do main",
+          "state": "ok",
+          "message": "3 execuções, todas com a feature encontrada.",
+          "hint": null,
+          "needs_trust": false
+        }
+      ],
+      "summary": {
+        "ok": 6,
+        "warn": 1,
+        "fail": 0,
+        "skip": 4
+      },
+      "ready": true,
+      "trusted": false
+    }
+  },
+  "project.trust": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project": {
+        "id": "0a1b2c3d4e5f",
+        "root": "/Users/qa/Projetos/projeto_exemplo_behave",
+        "name": "projeto_exemplo_behave",
+        "entry": "main.py",
+        "trusted": true,
+        "opened_at": 1757030000.0,
+        "interpreter_override": null,
+        "entry_override": null
+      }
+    }
+  },
+  "project.doctor_confiavel": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project_id": "0a1b2c3d4e5f",
+      "checks": [
+        {
+          "id": "interpreter",
+          "label": "Interpretador do projeto",
+          "state": "ok",
+          "message": "Python 3.14.0 · /Users/qa/Projetos/projeto_exemplo_behave/.venv/bin/python (run configuration do PyCharm)",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "packages",
+          "label": "Pacotes de teste",
+          "state": "ok",
+          "message": "behave 1.2.6 · Appium-Python-Client 5.1.3 · selenium 4.34.2",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "requirements",
+          "label": "requirements.txt",
+          "state": "ok",
+          "message": "3 pacotes do requirements.txt instalados.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "pip_check",
+          "label": "Dependências (pip check)",
+          "state": "ok",
+          "message": "Nenhuma dependência quebrada.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "appium",
+          "label": "Appium e driver",
+          "state": "warn",
+          "message": "Appium · sem drivers. Falta o driver uiautomator2.",
+          "hint": "appium driver install uiautomator2",
+          "needs_trust": false
+        },
+        {
+          "id": "appium_port",
+          "label": "Porta do Appium",
+          "state": "ok",
+          "message": "Appium do Mo baile em 127.0.0.1:4723. A sessão do Mo baile é fechada antes de rodar; o servidor continua de pé.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "device",
+          "label": "Aparelho da config",
+          "state": "ok",
+          "message": "emulator-5554 conectado.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "app",
+          "label": "App no aparelho",
+          "state": "ok",
+          "message": "br.com.exemplo.hlg instalado em emulator-5554.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "uiautomation",
+          "label": "UiAutomation livre",
+          "state": "ok",
+          "message": "Nenhuma outra instrumentação ativa.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "cloud",
+          "label": "Config local",
+          "state": "ok",
+          "message": "config_android_local_HLG é local.",
+          "hint": null,
+          "needs_trust": false
+        },
+        {
+          "id": "features",
+          "label": "Features do main",
+          "state": "ok",
+          "message": "3 execuções, todas com a feature encontrada.",
+          "hint": null,
+          "needs_trust": false
+        }
+      ],
+      "summary": {
+        "ok": 10,
+        "warn": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "ready": true,
+      "trusted": true
+    }
+  },
+  "erro_hub_unknown": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Não dá para provar que roda local: o hub de config_android_HLG é montado em tempo de execução. Confirme que a execucao e local para rodar mesmo assim.",
+      "data": {
+        "code": "hub_unknown",
+        "message": "Não dá para provar que roda local: o hub de config_android_HLG é montado em tempo de execução. Confirme que a execucao e local para rodar mesmo assim."
+      }
+    }
+  },
+  "project.inspect_sem_interpretador": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project": {
+        "id": "0a1b2c3d4e5f",
+        "root": "/Users/qa/Projetos/projeto_exemplo_behave",
+        "name": "projeto_exemplo_behave",
+        "entry": "main.py",
+        "trusted": false,
+        "opened_at": 1757030000.0,
+        "interpreter_override": null,
+        "entry_override": null
+      },
+      "entry": {
+        "file": "main.py",
+        "function": "main_sem_args",
+        "found": true
+      },
+      "interpreter": {
+        "path": null,
+        "source": null,
+        "exists": false,
+        "candidates": [
+          {
+            "path": "/usr/local/bin/python3",
+            "version": "3.14.0",
+            "behave": "1.2.6"
+          }
+        ]
+      },
+      "working_dir": "/Users/qa/Projetos/projeto_exemplo_behave",
+      "run_configuration": null,
+      "active_config": "config_android_local_HLG",
+      "hub_state": "local",
+      "hub_reason": null,
+      "configs": [
+        {
+          "name": "config_android_local_HLG",
+          "active": true,
+          "found": true,
+          "file": "configs.py",
+          "line": 9,
+          "platform": "android",
+          "values": {
+            "platformName": "Android",
+            "automationName": "UiAutomator2",
+            "udid": "emulator-5554",
+            "deviceName": "Pixel 7 (emulador)",
+            "platformVersion": "14",
+            "appPackage": "br.com.exemplo.hlg",
+            "appActivity": ".MainActivity"
+          },
+          "hub": "127.0.0.1:4723",
+          "cloud": false,
+          "hub_state": "local",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:automationName",
+            "appium:udid",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "appium:appPackage",
+            "appium:appActivity",
+            "appium:noReset",
+            "appium:newCommandTimeout",
+            "senha_usuario_teste"
+          ]
+        },
+        {
+          "name": "config_ios_local_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 23,
+          "platform": "ios",
+          "values": {
+            "platformName": "iOS",
+            "automationName": "XCUITest",
+            "udid": "00000000-0000-0000-0000-000000000000",
+            "deviceName": "iPhone 16",
+            "platformVersion": "18.0",
+            "bundleId": "br.com.exemplo.hlg",
+            "app": "builds/Exemplo-HLG.app"
+          },
+          "hub": "localhost:4723",
+          "cloud": false,
+          "hub_state": "local",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:automationName",
+            "appium:udid",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "appium:bundleId",
+            "appium:app"
+          ]
+        },
+        {
+          "name": "config_kobiton_android_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 34,
+          "platform": "android",
+          "values": {
+            "platformName": "Android",
+            "deviceName": "Galaxy S23",
+            "platformVersion": "14",
+            "app": "kobiton-store:000000"
+          },
+          "hub": "api.kobiton.com:443",
+          "cloud": true,
+          "hub_state": "cloud",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "kobiton:username",
+            "kobiton:accessKey",
+            "kobiton:sessionName",
+            "appium:app"
+          ]
+        },
+        {
+          "name": "config_kobiton_ios_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 45,
+          "platform": "ios",
+          "values": {
+            "platformName": "iOS",
+            "deviceName": "iPhone 15",
+            "bundleId": "br.com.exemplo.hlg"
+          },
+          "hub": "api.kobiton.com:443",
+          "cloud": true,
+          "hub_state": "cloud",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:deviceName",
+            "kobiton:accessKey",
+            "appium:bundleId"
+          ]
+        }
+      ],
+      "suites": [
+        {
+          "name": "test_suite_time_01",
+          "defined": true,
+          "line": 38,
+          "runs": [
+            {
+              "squad": "time_01",
+              "feature": "teste/teste.feature",
+              "line": 39,
+              "found": true,
+              "path": "features/teste/teste.feature",
+              "title": "Navegação básica do app de exemplo",
+              "scenarios": [
+                "Abrir a home",
+                "Abrir o extrato"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test_suite_time_02",
+          "defined": true,
+          "line": 42,
+          "runs": [
+            {
+              "squad": "time_02",
+              "feature": "login/login.feature",
+              "line": 43,
+              "found": true,
+              "path": "features/login/login.feature",
+              "title": "Login no ambiente HLG",
+              "scenarios": [
+                "Entrar com usuario de teste"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test_suite_time_03",
+          "defined": true,
+          "line": 46,
+          "runs": [
+            {
+              "squad": "time_03",
+              "feature": "teste/teste.feature",
+              "line": 47,
+              "found": true,
+              "path": "features/teste/teste.feature",
+              "title": "Navegação básica do app de exemplo",
+              "scenarios": [
+                "Abrir a home",
+                "Abrir o extrato"
+              ]
+            }
+          ]
+        }
+      ],
+      "unused_suites": [
+        "test_suite_canais"
+      ],
+      "problems": [
+        {
+          "file": null,
+          "line": null,
+          "message": "A confiança no projeto foi retirada porque mudou o interpretador, as variáveis de ambiente desde que você confiou. Confirme de novo antes de rodar."
+        }
+      ]
+    }
+  },
+  "project.configure": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "project": {
+        "id": "0a1b2c3d4e5f",
+        "root": "/Users/qa/Projetos/projeto_exemplo_behave",
+        "name": "projeto_exemplo_behave",
+        "entry": "main.py",
+        "trusted": false,
+        "opened_at": 1757030000.0,
+        "interpreter_override": "/Users/qa/.virtualenvs/exemplo/bin/python",
+        "entry_override": null
+      },
+      "entry": {
+        "file": "main.py",
+        "function": "main_sem_args",
+        "found": true
+      },
+      "interpreter": {
+        "path": "/Users/qa/.virtualenvs/exemplo/bin/python",
+        "source": "manual",
+        "exists": true,
+        "candidates": []
+      },
+      "working_dir": "/Users/qa/Projetos/projeto_exemplo_behave",
+      "run_configuration": null,
+      "active_config": "config_android_local_HLG",
+      "hub_state": "local",
+      "hub_reason": null,
+      "configs": [
+        {
+          "name": "config_android_local_HLG",
+          "active": true,
+          "found": true,
+          "file": "configs.py",
+          "line": 9,
+          "platform": "android",
+          "values": {
+            "platformName": "Android",
+            "automationName": "UiAutomator2",
+            "udid": "emulator-5554",
+            "deviceName": "Pixel 7 (emulador)",
+            "platformVersion": "14",
+            "appPackage": "br.com.exemplo.hlg",
+            "appActivity": ".MainActivity"
+          },
+          "hub": "127.0.0.1:4723",
+          "cloud": false,
+          "hub_state": "local",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:automationName",
+            "appium:udid",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "appium:appPackage",
+            "appium:appActivity",
+            "appium:noReset",
+            "appium:newCommandTimeout",
+            "senha_usuario_teste"
+          ]
+        },
+        {
+          "name": "config_ios_local_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 23,
+          "platform": "ios",
+          "values": {
+            "platformName": "iOS",
+            "automationName": "XCUITest",
+            "udid": "00000000-0000-0000-0000-000000000000",
+            "deviceName": "iPhone 16",
+            "platformVersion": "18.0",
+            "bundleId": "br.com.exemplo.hlg",
+            "app": "builds/Exemplo-HLG.app"
+          },
+          "hub": "localhost:4723",
+          "cloud": false,
+          "hub_state": "local",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:automationName",
+            "appium:udid",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "appium:bundleId",
+            "appium:app"
+          ]
+        },
+        {
+          "name": "config_kobiton_android_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 34,
+          "platform": "android",
+          "values": {
+            "platformName": "Android",
+            "deviceName": "Galaxy S23",
+            "platformVersion": "14",
+            "app": "kobiton-store:000000"
+          },
+          "hub": "api.kobiton.com:443",
+          "cloud": true,
+          "hub_state": "cloud",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:deviceName",
+            "appium:platformVersion",
+            "kobiton:username",
+            "kobiton:accessKey",
+            "kobiton:sessionName",
+            "appium:app"
+          ]
+        },
+        {
+          "name": "config_kobiton_ios_HLG",
+          "active": false,
+          "found": true,
+          "file": "configs.py",
+          "line": 45,
+          "platform": "ios",
+          "values": {
+            "platformName": "iOS",
+            "deviceName": "iPhone 15",
+            "bundleId": "br.com.exemplo.hlg"
+          },
+          "hub": "api.kobiton.com:443",
+          "cloud": true,
+          "hub_state": "cloud",
+          "keys": [
+            "url",
+            "platformName",
+            "appium:deviceName",
+            "kobiton:accessKey",
+            "appium:bundleId"
+          ]
+        }
+      ],
+      "suites": [
+        {
+          "name": "test_suite_time_01",
+          "defined": true,
+          "line": 38,
+          "runs": [
+            {
+              "squad": "time_01",
+              "feature": "teste/teste.feature",
+              "line": 39,
+              "found": true,
+              "path": "features/teste/teste.feature",
+              "title": "Navegação básica do app de exemplo",
+              "scenarios": [
+                "Abrir a home",
+                "Abrir o extrato"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test_suite_time_02",
+          "defined": true,
+          "line": 42,
+          "runs": [
+            {
+              "squad": "time_02",
+              "feature": "login/login.feature",
+              "line": 43,
+              "found": true,
+              "path": "features/login/login.feature",
+              "title": "Login no ambiente HLG",
+              "scenarios": [
+                "Entrar com usuario de teste"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test_suite_time_03",
+          "defined": true,
+          "line": 46,
+          "runs": [
+            {
+              "squad": "time_03",
+              "feature": "teste/teste.feature",
+              "line": 47,
+              "found": true,
+              "path": "features/teste/teste.feature",
+              "title": "Navegação básica do app de exemplo",
+              "scenarios": [
+                "Abrir a home",
+                "Abrir o extrato"
+              ]
+            }
+          ]
+        }
+      ],
+      "unused_suites": [
+        "test_suite_canais"
+      ],
+      "problems": []
+    }
+  },
+  "run.status": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "run": null,
+      "last": null
+    }
+  },
+  "run.stop": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "running": false,
+      "stopped": false,
+      "run_id": null
+    }
+  },
+  "erro_project_not_trusted": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "O projeto projeto_exemplo_behave ainda nao foi marcado como confiavel. Rodar executa o codigo dele nesta maquina, como o PyCharm faz.",
+      "data": {
+        "code": "project_not_trusted",
+        "message": "O projeto projeto_exemplo_behave ainda nao foi marcado como confiavel. Rodar executa o codigo dele nesta maquina, como o PyCharm faz."
+      }
+    }
+  },
+  "run.start": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "run_id": "20250905-000000-0a1b2c",
+      "project_id": "0a1b2c3d4e5f",
+      "folder": "/Users/qa/Documents/Mo baile/Execuções/projeto-exemplo-behave/20250905-000000",
+      "device_id": "emulator-5554",
+      "platform": "android",
+      "config": "config_android_local_HLG",
+      "command": {
+        "interpreter": "/Users/qa/Projetos/projeto_exemplo_behave/.venv/bin/python",
+        "entry": "main.py",
+        "working_dir": "/Users/qa/Projetos/projeto_exemplo_behave"
+      },
+      "video": {
+        "mode": null,
+        "warning": null
+      },
+      "started_at": 1757030000.0
+    }
+  },
+  "notif_run.log": {
+    "jsonrpc": "2.0",
+    "method": "run.log",
+    "params": {
+      "run_id": "20250905-000000-0a1b2c",
+      "line": "  Cenário: Abrir a home"
+    }
+  },
+  "notif_run.finished": {
+    "jsonrpc": "2.0",
+    "method": "run.finished",
+    "params": {
+      "run_id": "20250905-000000-0a1b2c",
+      "status": "failed",
+      "counts": {
+        "features": {
+          "passed": 0,
+          "failed": 1,
+          "skipped": 0,
+          "undefined": 0,
+          "errors": 0,
+          "untested": 0
+        },
+        "scenarios": {
+          "passed": 1,
+          "failed": 1,
+          "skipped": 0,
+          "undefined": 0,
+          "errors": 0,
+          "untested": 0
+        },
+        "steps": {
+          "passed": 5,
+          "failed": 1,
+          "skipped": 0,
+          "undefined": 0,
+          "errors": 0,
+          "untested": 0
+        },
+        "summaries": 1
+      },
+      "exit_code": 0,
+      "folder": "/Users/qa/Documents/Mo baile/Execuções/projeto-exemplo-behave/20250905-000000",
+      "video": null,
+      "video_warning": "Sem aparelho alvo: a execução segue sem vídeo.",
+      "message": "Falhou: 1 de 2 cenários.",
+      "duration_s": 1.2
+    }
+  },
+  "project.forget": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "removed": true
+    }
+  },
+  "erro_request_cancelled": {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "error": {
+      "code": -32800,
+      "message": "Requisicao cancelada.",
+      "data": {
+        "code": "request_cancelled",
+        "message": "Requisicao cancelada."
+      }
+    }
+  }
+}

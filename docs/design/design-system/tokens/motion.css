@@ -1,0 +1,43 @@
+/* Molas (WWDC23 "Animate with springs"): massa 1, rigidez=(2π/duração)², amortecimento=4π(1−bounce)/duração.
+   --spring-*-ease é a curva linear() amostrada; --spring-*-duration é o tempo até assentar. */
+:root{
+  --spring-smooth-perceptual: 0.5s; /* @kind other */
+  --spring-smooth-bounce: 0; /* @kind other */
+  --spring-smooth-stiffness: 157.91; /* @kind other */
+  --spring-smooth-damping: 25.13; /* @kind other */
+  --spring-smooth-duration: 761ms; /* @kind other */
+  --spring-smooth-ease: linear(0, 0.0258, 0.0861, 0.1649, 0.2515, 0.339, 0.4231, 0.5012, 0.5721, 0.6353, 0.6909, 0.7392, 0.7809, 0.8166, 0.847, 0.8727, 0.8943, 0.9125, 0.9276, 0.9403, 0.9513, 0.96, 0.9671, 0.973, 0.9779, 0.9819, 0.9852, 0.9879, 0.9901, 0.9919, 0.9934, 0.9947, 0.9956, 0.9965, 0.9971, 0.9977, 0.9981, 0.9985, 0.9987, 0.999, 1); /* @kind other */
+  --spring-snappy-perceptual: 0.35s; /* @kind other */
+  --spring-snappy-bounce: 0.15; /* @kind other */
+  --spring-snappy-stiffness: 322.27; /* @kind other */
+  --spring-snappy-damping: 30.52; /* @kind other */
+  --spring-snappy-duration: 534ms; /* @kind other */
+  --spring-snappy-ease: linear(0, 0.0259, 0.0931, 0.1767, 0.2698, 0.3725, 0.4646, 0.5504, 0.6338, 0.7019, 0.7651, 0.8148, 0.8563, 0.893, 0.9204, 0.9423, 0.9608, 0.9739, 0.9838, 0.9917, 0.9969, 1.0005, 1.003, 1.0044, 1.0052, 1.0054, 1.0053, 1.005, 1.0046, 1.0041, 1.0035, 1.003, 1.0025, 1.0021, 1.0017, 1.0014, 1.0011, 1.0008, 1.0006, 1.0005, 1); /* @kind other */
+  --spring-bouncy-perceptual: 0.5s; /* @kind other */
+  --spring-bouncy-bounce: 0.3; /* @kind other */
+  --spring-bouncy-stiffness: 157.91; /* @kind other */
+  --spring-bouncy-damping: 17.59; /* @kind other */
+  --spring-bouncy-duration: 844ms; /* @kind other */
+  --spring-bouncy-ease: linear(0, 0.0323, 0.111, 0.2171, 0.3358, 0.4619, 0.5762, 0.6797, 0.7696, 0.845, 0.906, 0.9534, 0.9889, 1.0139, 1.0303, 1.0402, 1.0443, 1.0445, 1.042, 1.0379, 1.0328, 1.0274, 1.0221, 1.0171, 1.0127, 1.0088, 1.0057, 1.0032, 1.0013, 1, 0.999, 0.9984, 0.9981, 0.998, 0.998, 0.9982, 0.9984, 0.9986, 0.9989, 0.9991, 1); /* @kind other */
+  --spring-smooth-small-perceptual: 0.3s; /* @kind other */
+  --spring-smooth-small-bounce: 0; /* @kind other */
+  --spring-smooth-small-stiffness: 438.65; /* @kind other */
+  --spring-smooth-small-damping: 41.89; /* @kind other */
+  --spring-smooth-small-duration: 491ms; /* @kind other */
+  --spring-smooth-small-ease: linear(0, 0.0293, 0.1021, 0.1882, 0.2804, 0.3717, 0.4647, 0.5429, 0.6125, 0.6737, 0.7307, 0.7756, 0.8136, 0.8482, 0.8748, 0.897, 0.9154, 0.9319, 0.9443, 0.9545, 0.9636, 0.9703, 0.9759, 0.9804, 0.9844, 0.9873, 0.9897, 0.9917, 0.9934, 0.9947, 0.9957, 0.9966, 0.9972, 0.9978, 0.9982, 0.9986, 0.9989, 0.9991, 0.9993, 0.9994, 1); /* @kind other */
+  --motion-hover: 60ms; /* @kind other */
+  --motion-menu-fade-out: 150ms; /* @kind other */
+  --motion-crossfade: 180ms; /* @kind other */
+  --ease-out-standard: cubic-bezier(.2,.8,.2,1); /* @kind other */
+}
+/* Reduzir movimento: deslizamentos e escalas viram crossfades simples. */
+[data-reduce-motion="true"]{
+  --spring-smooth-ease: linear; /* @kind other */
+  --spring-snappy-ease: linear; /* @kind other */
+  --spring-bouncy-ease: linear; /* @kind other */
+  --spring-smooth-small-ease: linear; /* @kind other */
+  --spring-smooth-duration: 180ms; /* @kind other */
+  --spring-snappy-duration: 150ms; /* @kind other */
+  --spring-bouncy-duration: 150ms; /* @kind other */
+  --spring-smooth-small-duration: 150ms; /* @kind other */
+}

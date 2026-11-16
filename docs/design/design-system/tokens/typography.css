@@ -1,0 +1,25 @@
+/* Tipografia — SF Pro (fonte do sistema; sem arquivos webfont). Escala de estilos de texto do macOS. */
+:root{
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+
+  --text-large-title: 26px; --lh-large-title: 32px;
+  --text-title-1: 22px; --lh-title-1: 26px;
+  --text-title-2: 17px; --lh-title-2: 22px;
+  --text-title-3: 15px; --lh-title-3: 20px;
+  --text-headline: 13px; --lh-headline: 16px;
+  --text-body: 13px; --lh-body: 16px;
+  --text-callout: 12px; --lh-callout: 15px;
+  --text-subheadline: 11px; --lh-subheadline: 14px;
+  --text-footnote: 10px; --lh-footnote: 13px;
+  --text-code: 12px; --lh-code: 18px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 590;
+  --weight-bold: 700;
+
+  --tracking-body: -0.08px;
+  --tracking-title: -0.26px;
+}

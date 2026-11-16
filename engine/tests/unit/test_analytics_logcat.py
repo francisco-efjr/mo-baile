@@ -1,0 +1,414 @@
+import unittest
+
+from mobaile.adapters.analytics_logcat import AnalyticsEvent, FirebaseAnalyticsListener
+
+
+class TestAnalyticsListener(unittest.TestCase):
+    def setUp(self):
+        self.listener = FirebaseAnalyticsListener()
+
+    def test_parse_logcat_line_case_a(self):
+        raw = "09-03 22:06:24.732 V/FA-SVC  (11637): Logging event: origin=app,name=Consent_Device,params=Bundle[{opened_from_app_list=1, ga_event_origin(_o)=app, ga_screen_class(_sc)=MainActivity, ga_screen_id(_si)=-1985242701408864993, ga_screen(_sn)=consent_device}]"
+        event = self.listener._parse_line(raw, platform="android")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_name, "Consent_Device")
+        self.assertEqual(event.tag, "FA-SVC")
+        self.assertEqual(event.time_str, "22:06:24.732")
+        self.assertEqual(event.params.get("ga_screen"), "consent_device")
+        self.assertEqual(event.params.get("opened_from_app_list"), "1")
+
+    def test_parse_logcat_line_case_b(self):
+        raw = "09-03 14:10:00.100 V/FA: Logging event: screen_view, Bundle[{ga_screen_name=app:home, flow_name=pedido}]"
+        event = self.listener._parse_line(raw, platform="android")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_name, "screen_view")
+        self.assertEqual(event.tag, "FA")
+        self.assertEqual(event.params.get("flow_name"), "pedido")
+        self.assertEqual(event.params.get("ga_screen_name"), "app:home")
+
+    def test_parse_ios_log_line(self):
+        raw = "2026-09-04 09:30:15.123456-0300 Default [FirebaseAnalytics] Logging event: origin=app, name=screen_view, params={ ga_screen = \"app:home\"; ga_screen_class = \"HomeController\"; flow_name = \"pedido\"; }"
+        event = self.listener._parse_line(raw, platform="ios")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_name, "screen_view")
+        self.assertEqual(event.tag, "iOS (Firebase)")
+        self.assertEqual(event.platform, "ios")
+        self.assertEqual(event.params.get("ga_screen"), "app:home")
+        self.assertEqual(event.params.get("ga_screen_class"), "HomeController")
+        self.assertEqual(event.params.get("flow_name"), "pedido")
+
+    # Saida real de `log stream --style compact` para o log do Xcode com -FIRDebugEnabled.
+    IOS_DEBUG_RECORD = (
+        "2026-09-30 10:22:01.482 Df MeuApp[4321:1a2b3c] [com.google.utilities.logger:FirebaseAnalytics] "
+        "10.22.1 - [FirebaseAnalytics][I-ACS023073] Debug mode is enabled. Marking event as debug and real-time. "
+        "Event name, parameters: interaction_pedido_avulso, {\n"
+        "    component = button;\n"
+        "    detail = \"click:ir-para-o-saldo-da-conta\";\n"
+        "    flow_name = pedido-avulso;\n"
+        "    ga_debug (_dbg) = 1;\n"
+        "    ga_event_origin (_o) = app;\n"
+        "    ga_realtime (_r) = 1;\n"
+        "    ga_screen (_sn) = app:pedidos:avulso:sucesso;\n"
+        "    ga_screen_class (_sc) = LoginNavigationController;\n"
+        "    ga_screen_id (_si) = -3365154693535786272;\n"
+        "    insurance = 1;\n"
+        "    screen_name = app:pedido:avulso:sucesso;\n"
+        "}"
+    )
+
+    def test_parse_ios_registro_debug_mode(self):
+        event = self.listener._parse_ios_record(self.IOS_DEBUG_RECORD)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_name, "interaction_pedido_avulso")
+        self.assertEqual(event.platform, "ios")
+        self.assertEqual(event.tag, "iOS (Firebase)")
+        self.assertEqual(event.time_str, "10:22:01.482")
+        self.assertEqual(event.params["component"], "button")
+        self.assertEqual(event.params["detail"], "click:ir-para-o-saldo-da-conta")
+        self.assertEqual(event.params["ga_debug"], "1")
+        self.assertEqual(event.params["ga_screen_id"], "-3365154693535786272")
+        self.assertEqual(event.params["screen_name"], "app:pedido:avulso:sucesso")
+        self.assertEqual(len(event.params), 11)
+
+    def test_parse_ios_nome_curto_e_parametro_aninhado(self):
+        record = (
+            "2026-09-30 10:22:02.000 Df MeuApp[1:2] 10.22.1 - [FirebaseAnalytics][I-ACS023072] "
+            "Event logged. Event name, event params: purchase (_p), {\n"
+            "    items = (\n"
+            "        {\n"
+            "            \"item_id\" = sku1;\n"
+            "        }\n"
+            "    );\n"
+            "    value = 10;\n"
+            "}"
+        )
+        event = self.listener._parse_ios_record(record)
+        self.assertEqual(event.event_name, "purchase")
+        self.assertEqual(event.params["value"], "10")
+        self.assertIn("sku1", event.params["items"])
+
+    def test_parse_ios_ignora_logs_que_nao_sao_evento(self):
+        ignorados = [
+            "2026-09-30 10:22:00.000 Df MeuApp[1:2] 10.22.1 - [FirebaseAnalytics][I-ACS023007] Analytics v.10.22.1 started",
+            "2026-09-30 10:22:00.000 Df MeuApp[1:2] 10.22.1 - [FirebaseAnalytics][I-ACS023051] "
+            "Logging event: origin, name, params: app, screen_view (_vs), {\n    ga_screen (_sn) = home;\n}",
+        ]
+        for record in ignorados:
+            self.assertIsNone(self.listener._parse_ios_record(record))
+
+    def test_ios_estagios_do_mesmo_evento_viram_um_so(self):
+        logged = self.IOS_DEBUG_RECORD.replace(
+            "[I-ACS023073] Debug mode is enabled. Marking event as debug and real-time. Event name, parameters:",
+            "[I-ACS023072] Event logged. Event name, event params:",
+        )
+        self.assertIsNotNone(self.listener._parse_ios_record(self.IOS_DEBUG_RECORD))
+        self.assertIsNone(self.listener._parse_ios_record(logged))
+        # Segundo toque no mesmo botao: evento novo, tambem com dois estagios.
+        self.assertIsNotNone(self.listener._parse_ios_record(self.IOS_DEBUG_RECORD))
+        self.assertIsNone(self.listener._parse_ios_record(logged))
+
+    def test_assembler_fecha_registro_sem_esperar_o_proximo(self):
+        from mobaile.adapters.analytics_logcat import IOSLogRecordAssembler
+
+        assembler = IOSLogRecordAssembler()
+        linhas = [
+            'Filtering the log data using "composedMessage CONTAINS \\"I-ACS\\""\n',
+            "Timestamp               Ty Process[PID:TID]\n",
+            *[linha + "\n" for linha in self.IOS_DEBUG_RECORD.split("\n")],
+        ]
+        saidas = [assembler.feed(linha) for linha in linhas]
+        # So a ultima linha ("}") completa o registro.
+        self.assertEqual([len(s) for s in saidas[:-1]], [0] * (len(linhas) - 1))
+        self.assertEqual(saidas[-1], [self.IOS_DEBUG_RECORD])
+
+        # Registro de uma linha so fecha na hora.
+        simples = "2026-09-30 10:22:00.000 Df MeuApp[1:2] [I-ACS023007] Analytics started\n"
+        self.assertEqual(assembler.feed(simples), [simples.rstrip("\n")])
+
+    def test_stream_ios_de_ponta_a_ponta(self):
+        import io
+        from unittest.mock import MagicMock
+
+        recebidos = []
+        self.listener.add_event_callback(recebidos.append)
+        self.listener.active_platform = "ios"
+        self.listener.active_source = "ios_simulator"
+        self.listener._is_running = True
+        self.listener._proc = MagicMock()
+        self.listener._proc.stdout = io.StringIO("Timestamp  Ty Process\n" + self.IOS_DEBUG_RECORD + "\n")
+
+        self.listener._stream_reader()
+
+        self.assertEqual(len(recebidos), 1)
+        self.assertEqual(recebidos[0].event_name, "interaction_pedido_avulso")
+        self.assertEqual(len(self.listener.events_history), 1)
+
+    def test_start_ios_usa_log_stream_do_simulador(self):
+        from unittest.mock import patch
+
+        with patch("subprocess.Popen") as popen, patch("threading.Thread"):
+            self.assertTrue(self.listener.start(platform="ios", device_id="ABCD-1234"))
+        cmd = popen.call_args[0][0]
+        self.assertEqual(cmd[:4], ["xcrun", "simctl", "spawn", "ABCD-1234"])
+        self.assertIn("--level", cmd)
+        self.assertEqual(cmd[cmd.index("--level") + 1], "debug")
+        self.assertIn('eventMessage CONTAINS "I-ACS"', cmd)
+
+    # ------------------------------------------------ iPhone fisico (por cabo)
+
+    def _linha_do_filho(self, message: str) -> str:
+        import json
+
+        return json.dumps({"time": "2026-10-01 10:22:01.482", "process": "MeuApp", "pid": 321, "message": message})
+
+    def test_iphone_fisico_linha_json_vira_evento(self):
+        message = self.IOS_DEBUG_RECORD.split(" ", 5)[5]  # so a mensagem, sem cabecalho do log stream
+        recebidos = []
+        self.listener.add_event_callback(recebidos.append)
+        self.listener._handle_device_line('{"status": "ready"}\n')
+        self.listener._handle_device_line(self._linha_do_filho(message) + "\n")
+
+        self.assertTrue(self.listener._device_ready.is_set())
+        self.assertEqual(len(recebidos), 1)
+        evento = recebidos[0]
+        self.assertEqual(evento.event_name, "interaction_pedido_avulso")
+        self.assertEqual(evento.time_str, "10:22:01.482")
+        self.assertEqual(evento.params["flow_name"], "pedido-avulso")
+        self.assertIn("MeuApp[321]", evento.raw_log)
+
+    def _start_fisico_com_saida(self, saida: str):
+        import io
+        from unittest.mock import MagicMock, patch
+
+        proc = MagicMock()
+        proc.stdout = io.StringIO(saida)
+        with patch("subprocess.Popen", return_value=proc) as popen, \
+             patch("mobaile.adapters.ios_device_log.is_available", return_value=True):
+            resultado = self.listener.start(platform="ios", device_id="00008020-000000000000001A", ios_physical=True)
+        return resultado, popen
+
+    def test_start_iphone_fisico_roda_o_filho_e_espera_ficar_pronto(self):
+        resultado, popen = self._start_fisico_com_saida('{"status": "ready"}\n')
+        self.assertTrue(resultado)
+        cmd = popen.call_args[0][0]
+        self.assertEqual(cmd[1:5], ["-m", "mobaile.adapters.ios_device_log", "stream", "00008020-000000000000001A"])
+        self.assertIn("PYTHONPATH", popen.call_args[1]["env"])
+        self.assertEqual(self.listener.active_source, "ios_device")
+        self.listener.stop()
+
+    def test_start_iphone_fisico_bloqueado_vira_erro_com_a_mensagem(self):
+        from mobaile.domain.errors import AdapterError
+
+        with self.assertRaises(AdapterError) as ctx:
+            self._start_fisico_com_saida('{"error": "Desbloqueie o iPhone e tente de novo."}\n')
+        self.assertIn("Desbloqueie", ctx.exception.message)
+        self.assertFalse(self.listener.is_running())
+
+    def test_start_iphone_fisico_filho_morre_sem_aviso_nao_espera_o_prazo(self):
+        import time as _time
+
+        from mobaile.domain.errors import AdapterError
+
+        inicio = _time.monotonic()
+        with self.assertRaises(AdapterError):
+            self._start_fisico_com_saida("")
+        self.assertLess(_time.monotonic() - inicio, 5)
+
+    def test_start_iphone_fisico_sem_pymobiledevice3(self):
+        from unittest.mock import patch
+
+        from mobaile.domain.errors import AdapterError
+
+        with patch("mobaile.adapters.ios_device_log.is_available", return_value=False), \
+             self.assertRaises(AdapterError) as ctx:
+            self.listener.start(platform="ios", device_id="00008020-000000000000001A", ios_physical=True)
+        self.assertIn("pip install pymobiledevice3", ctx.exception.detail)
+
+    def test_export_tsv_and_json(self):
+        ev = AnalyticsEvent(
+            id=1,
+            timestamp=1788487587.0,
+            time_str="22:06:24.732",
+            tag="FA-SVC",
+            event_name="Consent_Device",
+            params={"ga_screen": "consent_device", "flow": "onboarding"},
+            raw_log="sample log line",
+        )
+        self.listener.events_history.append(ev)
+
+        tsv = self.listener.export_as_tsv()
+        self.assertIn("Consent_Device", tsv)
+        self.assertIn("consent_device", tsv)
+        self.assertIn("\t", tsv)
+
+        json_out = self.listener.export_as_json()
+        self.assertIn('"event_name": "Consent_Device"', json_out)
+        self.assertIn('"ga_screen": "consent_device"', json_out)
+
+
+    def test_parse_logcat_firebase_analytics_tag(self):
+        raw = "09-03 15:20:10.500 V/FirebaseAnalytics: Logging event: button_clicked, Bundle[{id=btn_submit}]"
+        event = self.listener._parse_line(raw, platform="android")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_name, "button_clicked")
+        self.assertEqual(event.tag, "FirebaseAnalytics")
+        self.assertEqual(event.params.get("id"), "btn_submit")
+
+    def test_parse_logcat_event_recorded(self):
+        raw = "09-03 15:20:11.200 V/FA-SVC: Event recorded: Event{appId='com.test', name='purchase_complete', params=Bundle[{value=100}]}"
+        event = self.listener._parse_line(raw, platform="android")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_name, "purchase_complete")
+        self.assertEqual(event.params.get("value"), "100")
+
+    def test_setup_props_configura_debug_mode_e_buffer(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.adb.get_current_package = lambda _dev: "com.exemplo.app"
+            res = self.listener.setup_props("dev123")
+            self.assertTrue(res)
+
+            executed_cmds = [" ".join(c[0][0]) for c in mock_run.call_args_list]
+            self.assertTrue(any("debug.firebase.analytics.app com.exemplo.app" in cmd for cmd in executed_cmds))
+            self.assertTrue(any("logcat -G 8M" in cmd for cmd in executed_cmds))
+            self.assertTrue(any("log.tag.FirebaseAnalytics VERBOSE" in cmd for cmd in executed_cmds))
+
+
+class TestEscutaQueNaoMorre(unittest.TestCase):
+    """MEL-6: uma linha estranha nao mata a thread de leitura (a escuta ficava muda com a flag ligada)."""
+
+    MENSAGEM = TestAnalyticsListener.IOS_DEBUG_RECORD.split(" ", 5)[5]
+
+    def setUp(self):
+        self.listener = FirebaseAnalyticsListener()
+        self.recebidos = []
+        self.listener.add_event_callback(self.recebidos.append)
+
+    def _linha_valida(self) -> str:
+        import json
+
+        return json.dumps({"time": "2026-10-01 10:22:01.482", "process": "MeuApp", "pid": 321, "message": self.MENSAGEM})
+
+    def _ler(self, source: str, saida: str) -> None:
+        import io
+        from unittest.mock import MagicMock
+
+        self.listener.active_platform = "ios"
+        self.listener.active_source = source
+        self.listener._is_running = True
+        self.listener._proc = MagicMock()
+        self.listener._proc.stdout = io.StringIO(saida)
+        self.listener._stream_reader()
+
+    def test_json_que_nao_e_objeto_nao_mata_a_leitura_do_iphone(self):
+        # "1" e JSON valido, mas nao e objeto: `"status" in 1` levantava TypeError.
+        self._ler("ios_device", "1\n" + '["lista"]\n' + self._linha_valida() + "\n")
+        self.assertEqual([e.event_name for e in self.recebidos], ["interaction_pedido_avulso"])
+
+    def test_excecao_numa_linha_nao_derruba_as_seguintes(self):
+        from unittest.mock import patch
+
+        original = self.listener._parse_ios_record
+        chamadas = []
+
+        def parser(record):
+            chamadas.append(record)
+            if len(chamadas) == 1:
+                raise ValueError("registro que o parser nao esperava")
+            return original(record)
+
+        with patch.object(self.listener, "_parse_ios_record", side_effect=parser):
+            self._ler("ios_device", self._linha_valida() + "\n" + self._linha_valida() + "\n")
+        self.assertEqual(len(chamadas), 2)
+        self.assertEqual(len(self.recebidos), 1)
+
+    def test_popen_troca_byte_fora_de_utf8_em_vez_de_levantar(self):
+        from unittest.mock import patch
+
+        with patch("subprocess.Popen") as popen, patch("threading.Thread"):
+            self.assertTrue(self.listener.start(platform="ios", device_id="ABCD-1234"))
+        self.assertEqual(popen.call_args[1].get("errors"), "replace")
+
+
+class TestFilaDeEventosLimitada(unittest.TestCase):
+    """COD-1: sem consumidor (caso do app nativo), a fila nao cresce sem fim."""
+
+    def _evento(self, n: int) -> AnalyticsEvent:
+        return AnalyticsEvent(id=n, timestamp=0.0, time_str="", tag="FA", event_name=f"e{n}")
+
+    def test_fila_tem_limite_e_descarta_o_mais_antigo(self):
+        from mobaile.adapters.analytics_logcat import MAX_HISTORY
+
+        listener = FirebaseAnalyticsListener()
+        limite = listener.event_queue.maxsize
+        self.assertGreater(limite, 0, "fila de eventos sem limite")
+        self.assertLessEqual(limite, MAX_HISTORY * 2)
+        for n in range(limite + 10):
+            listener._emit(self._evento(n))
+        self.assertEqual(listener.event_queue.qsize(), limite)
+        self.assertEqual(listener.event_queue.get_nowait().id, 10)
+        # O historico (o que o RPC le) nao depende da fila.
+        self.assertEqual(listener.events_history[-1].id, limite + 9)
+
+
+LIMPEZA_FIREBASE =["shell", "setprop", "debug.firebase.analytics.app", ".none."]
+
+
+class TestAnalyticsDesfazDebugDoFirebase(unittest.TestCase):
+    """COD-2: o `stop` desfaz o `debug.firebase.analytics.app` no aparelho em que foi ligado."""
+
+    LIMPEZA = LIMPEZA_FIREBASE
+
+    def setUp(self):
+        self.listener = FirebaseAnalyticsListener()
+        self.listener.adb.adb_path = "/falso/adb"
+
+    def _limpezas(self, mock_run) -> list[list[str]]:
+        return [c[0][0] for c in mock_run.call_args_list if c[0][0][-4:] == self.LIMPEZA]
+
+    def test_stop_desfaz_no_aparelho_em_que_ligou(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.stop()
+        self.assertEqual(self._limpezas(mock_run), [["/falso/adb", "-s", "emulator-5554", *self.LIMPEZA]])
+
+    def test_segundo_stop_nao_repete(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.stop()
+            self.listener.stop()
+        self.assertEqual(len(self._limpezas(mock_run)), 1)
+
+    def test_ligar_em_outro_aparelho_desliga_no_anterior(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            self.listener.setup_props("R58M123", package_name="com.exemplo.app")
+            self.listener.stop()
+        self.assertEqual(
+            self._limpezas(mock_run),
+            [["/falso/adb", "-s", "emulator-5554", *self.LIMPEZA], ["/falso/adb", "-s", "R58M123", *self.LIMPEZA]],
+        )
+
+    def test_sem_app_em_debug_nao_mexe_no_aparelho(self):
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.adb.get_current_package = lambda _dev: None
+            self.listener.setup_props("emulator-5554")
+            self.listener.stop()
+        self.assertEqual(self._limpezas(mock_run), [])
+
+    def test_falha_do_adb_na_limpeza_nao_quebra_o_stop(self):
+        import subprocess
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_run:
+            self.listener.setup_props("emulator-5554", package_name="com.exemplo.app")
+            mock_run.side_effect = subprocess.TimeoutExpired("adb", 5)
+            self.listener.stop()
+        self.assertFalse(self.listener.is_running())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,48 @@
+name: Relato pelo app
+description: Relato rápido enviado por Ajuda › Relatar um Problema… no Mo baile.
+title: "[bug] "
+labels: ["bug", "triagem", "origem-app"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por relatar. O Mo baile é um **produto em desenvolvimento** e
+        cada relato ajuda a corrigir mais rápido.
+
+        **Este relato é público.** Não inclua senhas, tokens, CPF, e-mails, dados
+        de clientes nem tráfego de produção. Para anexar capturas, vídeos ou logs,
+        arraste os arquivos para o campo "Anexos" abaixo (o app abriu a pasta com
+        eles no Finder).
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu
+      description: Mensagem de erro ou comportamento observado.
+    validations:
+      required: true
+  - type: textarea
+    id: fez
+    attributes:
+      label: O que você fez
+      placeholder: |
+        1. Conectei o aparelho
+        2. Abri a Rede HTTP
+  - type: textarea
+    id: esperava
+    attributes:
+      label: O que você esperava
+  - type: input
+    id: area
+    attributes:
+      label: Em que parte aconteceu
+      placeholder: "Rede HTTP"
+  - type: textarea
+    id: ambiente
+    attributes:
+      label: Informações do ambiente
+      description: Versão do Mo baile e do macOS, modelo do Mac, aparelho. Só o que você quis compartilhar.
+  - type: textarea
+    id: anexos
+    attributes:
+      label: Anexos
+      description: Arraste aqui as capturas, vídeos ou logs da pasta do relato.

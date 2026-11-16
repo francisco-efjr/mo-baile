@@ -1,0 +1,278 @@
+"""Regressao das falhas encontradas na auditoria.
+
+Cada teste aqui corresponde a um vetor concreto que existia no codigo antes da
+reorganizacao. Se algum voltar a passar como "aceito", a falha voltou.
+"""
+
+import json
+import os
+import stat
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from mobaile.domain.errors import InvalidInputError
+from mobaile.security import (
+    MAX_INPUT_TEXT,
+    build_adb_input_text_args,
+    parse_untrusted_xml,
+    quote_for_device_shell,
+    redact_body,
+    redact_headers,
+    secure_runtime_dir,
+    validate_coordinate,
+    validate_device_id,
+    validate_integer,
+    validate_keycode,
+    validate_number,
+    validate_port,
+    write_executable_script,
+)
+
+
+class TestValidacaoDeSerial(unittest.TestCase):
+    """O serial vem de `adb devices` e de `adb connect`: e entrada externa."""
+
+    def test_aceita_formatos_reais(self):
+        for valido in ("emulator-5554", "R58N12ABCDE", "192.168.0.10:5555",
+                       "00008030-001A2C3D4E5F6G7H", "ce0417a1b2c3d4e5"):
+            with self.subTest(serial=valido):
+                self.assertEqual(validate_device_id(valido), valido)
+
+    def test_recusa_metacaracteres_e_quebras(self):
+        for invalido in (
+            "emulator-5554; rm -rf /",
+            'emulator-5554"; import os',
+            "emulator\n5554",
+            "../../etc/passwd",
+            "$(id)",
+            "`id`",
+            "",
+            "a" * 200,
+        ):
+            with self.subTest(serial=invalido), self.assertRaises(InvalidInputError):
+                validate_device_id(invalido)
+
+
+class TestEscapingDeEntradaNoDispositivo(unittest.TestCase):
+    """`adb shell input text` roda no sh do aparelho: quoting nao e opcional."""
+
+    def test_texto_vira_argumento_unico_com_aspas_simples(self):
+        args = build_adb_input_text_args("ola mundo")
+        self.assertEqual(args[0], "shell")
+        self.assertEqual(len(args), 2, "o comando remoto precisa ir como string unica")
+        self.assertEqual(args[1], "input text 'ola%smundo'")
+
+    def test_metacaracteres_ficam_dentro_das_aspas(self):
+        for payload in ("a; rm -rf /", "$(id)", "`id`", "a && reboot", "a | nc host 1234", "a > /sdcard/x"):
+            with self.subTest(payload=payload):
+                comando = build_adb_input_text_args(payload)[1]
+                corpo = comando[len("input text "):]
+                self.assertTrue(corpo.startswith("'") and corpo.endswith("'"))
+                # Nenhuma aspa simples solta no meio: seria fuga do quoting.
+                self.assertNotIn("'", corpo[1:-1].replace("'\\''", ""))
+
+    def test_aspa_simples_e_escapada_corretamente(self):
+        self.assertEqual(quote_for_device_shell("it's"), "'it'\\''s'")
+
+    def test_texto_gigante_e_recusado(self):
+        with self.assertRaises(InvalidInputError):
+            build_adb_input_text_args("a" * (MAX_INPUT_TEXT + 1))
+
+    def test_caractere_de_controle_e_recusado(self):
+        with self.assertRaises(InvalidInputError):
+            build_adb_input_text_args("linha1\nlinha2")
+
+
+class TestValidacaoNumerica(unittest.TestCase):
+    def test_coordenadas(self):
+        self.assertEqual(validate_coordinate(10), 10)
+        self.assertEqual(validate_coordinate(10.7), 10)
+        for invalida in (-1, 999999, "10", None, True, float("nan"), float("inf")):
+            with self.subTest(valor=invalida), self.assertRaises(InvalidInputError):
+                validate_coordinate(invalida)
+
+    def test_numero_e_inteiro_dos_parametros_do_rpc(self):
+        self.assertEqual(validate_number(0.5, "fps", minimum=0.1, maximum=60), 0.5)
+        self.assertEqual(validate_integer(200, "limit", minimum=1, maximum=1000), 200)
+        self.assertEqual(validate_integer(3.0, "limit", minimum=1, maximum=1000), 3)
+        for invalido in ("5", None, True, float("nan"), float("inf"), -1, 10**400, 3.5):
+            with self.subTest(valor=invalido), self.assertRaises(InvalidInputError) as ctx:
+                validate_integer(invalido, "limit", minimum=1, maximum=1000)
+            self.assertIn("limit", ctx.exception.message)
+
+    def test_keycode_e_porta(self):
+        self.assertEqual(validate_keycode(224), 224)
+        self.assertEqual(validate_port(8082), 8082)
+        for invalido in (-1, 70000, "8082", None, True):
+            with self.subTest(valor=invalido), self.assertRaises(InvalidInputError):
+                validate_port(invalido)
+
+
+class TestParsingDeXML(unittest.TestCase):
+    """A hierarquia vem do app sob teste: XML de origem nao confiavel."""
+
+    BILLION_LAUGHS = (
+        '<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">'
+        '<!ENTITY lol2 "&lol;&lol;&lol;&lol;">]><hierarchy>&lol2;</hierarchy>'
+    )
+    XXE = (
+        '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+        "<hierarchy>&xxe;</hierarchy>"
+    )
+
+    def test_doctype_e_recusado(self):
+        for nome, doc in (("billion laughs", self.BILLION_LAUGHS), ("xxe", self.XXE)):
+            with self.subTest(vetor=nome), self.assertRaises(InvalidInputError):
+                parse_untrusted_xml(doc)
+
+    def test_hierarquia_normal_continua_funcionando(self):
+        root = parse_untrusted_xml('<hierarchy rotation="0"><node text="Continuar"/></hierarchy>')
+        self.assertEqual(root.tag, "hierarchy")
+        self.assertEqual(root[0].attrib["text"], "Continuar")
+
+    def test_xml_malformado_devolve_none_sem_excecao(self):
+        self.assertIsNone(parse_untrusted_xml("<a><b>"))
+        self.assertIsNone(parse_untrusted_xml(""))
+
+
+class TestRedacao(unittest.TestCase):
+    def test_json_redige_aspas_escapadas_e_valores_nao_textuais(self):
+        body = json.dumps({
+            "password": 'prefixo"segredo-sintetico',
+            "cpf": 12345678901,
+            "token": {"value": "token-sintetico"},
+            "items": [{"senha": "senha-sintetica", "name": "produto"}],
+        })
+        redacted = redact_body(body)
+        for secret in ("segredo-sintetico", "12345678901", "token-sintetico", "senha-sintetica"):
+            self.assertNotIn(secret, redacted)
+        self.assertEqual(json.loads(redacted)["items"][0]["name"], "produto")
+
+    def test_json_truncado_nao_vaza_o_final_do_segredo(self):
+        redacted = redact_body('{"user":"bella","password":"segredo-sintetico')
+        self.assertNotIn("segredo-sintetico", redacted)
+        self.assertIn('"user":"bella"', redacted)
+
+    def test_chaves_json_camel_case_e_unicode_sao_redigidas(self):
+        redacted = redact_body('{"accessToken":"token-sintetico","\\u0070assword":"senha-sintetica"}')
+        self.assertNotIn("token-sintetico", redacted)
+        self.assertNotIn("senha-sintetica", redacted)
+
+    def test_formulario_redige_chaves_codificadas(self):
+        redacted = redact_body("user=bella&%70assword=segredo-sintetico&token=token-sintetico")
+        self.assertNotIn("segredo-sintetico", redacted)
+        self.assertNotIn("token-sintetico", redacted)
+        self.assertIn("user=bella", redacted)
+
+    def test_location_e_referer_nao_vazam_tokens_na_url(self):
+        redacted = redact_headers({
+            "Location": "https://usuario:senha-sintetica@example.test/callback?access_token=token-sintetico&next=home",
+            "Referer": "https://example.test/?client_secret=segredo-sintetico",
+        })
+        for value in redacted.values():
+            self.assertNotIn("senha-sintetica", value)
+            self.assertNotIn("token-sintetico", value)
+            self.assertNotIn("segredo-sintetico", value)
+        self.assertIn("next=home", redacted["Location"])
+
+    def test_opt_out_explicito_preserva_corpo_original(self):
+        body = '{"password":"segredo-sintetico"}'
+        with patch.dict(os.environ, {"MOBAILE_REDACT": "0"}):
+            self.assertEqual(redact_body(body), body)
+
+    def test_headers_de_credencial(self):
+        redigidos = redact_headers({
+            "Authorization": "Bearer token-do-cliente",
+            "Cookie": "session=abc",
+            "Accept": "application/json",
+        })
+        self.assertNotIn("token-do-cliente", redigidos["Authorization"])
+        self.assertNotIn("session=abc", redigidos["Cookie"])
+        self.assertEqual(redigidos["Accept"], "application/json", "header inocente nao muda")
+
+    def test_campos_sensiveis_no_corpo(self):
+        saida = redact_body('{"user":"bella","password":"1234","cpf":"000.000.000-00","total":42}')
+        self.assertNotIn("1234", saida)
+        self.assertNotIn("000.000.000-00", saida)
+        self.assertIn('"user":"bella"', saida, "campo inocente preservado")
+        self.assertIn('"total":42', saida)
+
+    def test_corpo_nao_json_passa_intacto(self):
+        self.assertEqual(redact_body("texto solto"), "texto solto")
+
+
+class TestArtefatoExecutavel(unittest.TestCase):
+    def test_diretorio_e_arquivo_com_permissao_restrita(self):
+        caminho = write_executable_script("print('ok')", filename="teste_permissao.py")
+        try:
+            self.assertEqual(stat.S_IMODE(os.stat(caminho).st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE(os.stat(secure_runtime_dir()).st_mode), 0o700)
+            self.assertNotIn(os.getcwd(), str(caminho), "artefato nao vai para a raiz do projeto")
+        finally:
+            os.unlink(caminho)
+
+
+
+class TestPastaDeLogs(unittest.TestCase):
+    """`logs_dir()`: log de diagnostico pode conter URL, nome de tela e caminho
+    do usuario. A pasta nasce so para o dono e nao segue symlink plantado."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="mobaile-logs-")
+        self.addCleanup(self._tmp.cleanup)
+        self.raiz = self._tmp.name
+
+    @staticmethod
+    def _logs_dir():
+        # Importado aqui: a funcao e nova e o resto do modulo nao depende dela.
+        from mobaile.security import logs_dir
+
+        return logs_dir()
+
+    def test_respeita_a_variavel_e_cria_com_0700(self):
+        alvo = os.path.join(self.raiz, "a", "logs")
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": alvo}):
+            pasta = self._logs_dir()
+        self.assertEqual(str(pasta), alvo)
+        self.assertTrue(os.path.isdir(alvo))
+        self.assertEqual(stat.S_IMODE(os.stat(alvo).st_mode), 0o700)
+
+    def test_pasta_que_ja_existia_frouxa_e_fechada(self):
+        alvo = os.path.join(self.raiz, "logs")
+        os.mkdir(alvo, 0o755)
+        os.chmod(alvo, 0o755)
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": alvo}):
+            self._logs_dir()
+        self.assertEqual(stat.S_IMODE(os.stat(alvo).st_mode), 0o700)
+
+    def test_recusa_symlink(self):
+        destino = os.path.join(self.raiz, "de-outro")
+        os.mkdir(destino, 0o755)
+        os.chmod(destino, 0o755)
+        atalho = os.path.join(self.raiz, "logs")
+        os.symlink(destino, atalho)
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": atalho}), self.assertRaises(OSError):
+            self._logs_dir()
+        self.assertEqual(stat.S_IMODE(os.stat(destino).st_mode), 0o755, "destino nao e tocado")
+
+    def test_recusa_arquivo_no_lugar_da_pasta(self):
+        alvo = os.path.join(self.raiz, "logs")
+        with open(alvo, "w", encoding="utf-8"):
+            pass
+        with patch.dict(os.environ, {"MOBAILE_LOG_DIR": alvo}), self.assertRaises(OSError):
+            self._logs_dir()
+
+    def test_padrao_no_macos_e_fora_dele(self):
+        sem_variavel = {k: v for k, v in os.environ.items() if k != "MOBAILE_LOG_DIR"}
+        with patch.dict(os.environ, sem_variavel, clear=True), \
+             patch("pathlib.Path.home", return_value=Path(self.raiz)):
+            with patch("sys.platform", "darwin"):
+                self.assertEqual(self._logs_dir(), Path(self.raiz) / "Library" / "Logs" / "Mo baile")
+            with patch("sys.platform", "linux"):
+                self.assertEqual(self._logs_dir(), Path(self.raiz) / ".mobaile" / "logs")
+
+
+if __name__ == "__main__":
+    unittest.main()
