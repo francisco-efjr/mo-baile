@@ -5,6 +5,15 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.24.1] - 2026-11-16
+
+### Corrigido
+
+- CI do repositório público: o `ruff` fica fixo na 0.16.6 (uma versão nova
+  trouxe regra nova e reprovava código que não mudou), e a conferência das
+  fixtures ignora o tamanho em bytes do checklist em HTML, que muda com a pasta
+  temporária de cada sistema (Mac × Linux). Nada muda no app.
+
 ## [3.24.0] - 2026-11-16
 
 Liberação pública: o Mo baile passa a se apresentar como produto em

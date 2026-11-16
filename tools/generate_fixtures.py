@@ -704,6 +704,13 @@ def check(destination: pathlib.Path) -> int:
         print("Rode 'make fixtures' e faca o commit.", file=sys.stderr)
         return 1
     atual, gerado = _normalizar(atual), _normalizar(gerado)
+    # O checklist em HTML traz a pasta dos prints, que fica num temporário
+    # (`/var/folders/...` no Mac, `/tmp/...` no Linux): o tamanho em bytes muda
+    # com o sistema, sem mudar o contrato. O resto do payload continua conferido.
+    for dados in (atual, gerado):
+        resultado = (dados.get("report.checklist_export") or {}).get("result")
+        if isinstance(resultado, dict):
+            resultado.pop("bytes", None)
     if _render(atual) == _render(gerado):
         print(f"fixtures em dia: {_nome(destination)}")
         return 0
