@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mobaile-engine"
+version = "3.24.0"
+description = "Motor headless de inspecao, automacao e interceptacao mobile do Mo baile"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Francisco Edson Ferreira Junior" }]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "Pillow>=10.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+# Somente para a escuta passiva de toques no macOS. O motor sobe sem isso.
+macos = ["pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'"]
+# Tagueamento de iPhone fisico por cabo. Sem isso, so o simulador.
+ios-device = ["pymobiledevice3>=11.0"]
+# Flows no formato do Maestro (flow.maestro_*). Sem isso, so esses metodos recusam.
+maestro = ["PyYAML>=6.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.4.0",
+    "bandit>=1.7.0",
+    "pip-audit>=2.7.0",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+# O front SwiftUI sobe este comando e conversa por stdin/stdout.
+mobaile-engine = "mobaile.rpc.server:serve"
+# Relatório e Analytics no navegador, para quem não tem macOS (ADR 0007).
+mobaile-web = "mobaile.web.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mobaile*"]
+
+[tool.setuptools.package-data]
+# HTML do Relatório: design system, ícones, ícone do app e Motion embutidos.
+"mobaile.services.report" = ["html/*"]
+# Página, JS e CSS do front web local (sem CDN).
+"mobaile.web" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: exercita socket/porta local, mais lento que o unitario",
+    "requires_device: precisa de aparelho ou simulador conectado (pulado em CI)",
+]
+
+[tool.coverage.run]
+source = ["src/mobaile"]
+branch = true

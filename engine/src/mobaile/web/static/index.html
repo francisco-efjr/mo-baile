@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Mo baile no navegador</title>
+<link rel="stylesheet" href="/static/design_system.css">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body class="mb-root">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <h1>Mo baile <span>no navegador</span></h1>
+  <p class="aviso" role="note">
+    <strong>Produto em desenvolvimento: pode conter bugs.</strong>
+    <a href="https://github.com/francisco-efjr/mo-baile/issues/new?template=bug.yml" target="_blank" rel="noopener noreferrer">Relatar um problema</a>
+  </p>
+</header>
+
+<p id="sem-chave" class="mb-inline-error erro-geral" role="alert" hidden>
+  Esta página precisa da chave da sessão. Abra o endereço completo que o terminal mostrou (o que termina em <code>#t=…</code>).
+</p>
+
+<div class="abas" role="tablist" aria-label="Áreas">
+  <button type="button" role="tab" id="aba-relatorio" aria-controls="painel-relatorio" aria-selected="true">Relatório</button>
+  <button type="button" role="tab" id="aba-analytics" aria-controls="painel-analytics" aria-selected="false" tabindex="-1">Analytics</button>
+</div>
+
+<main id="conteudo" tabindex="-1">
+  <section id="painel-relatorio" role="tabpanel" aria-labelledby="aba-relatorio">
+    <h2 class="sr">Relatório</h2>
+    <p class="explica">Audita o tagueamento: cruza a spec da demanda com o log do Firebase e mostra o que está OK, divergente ou não disparou.</p>
+    <form id="form-relatorio" class="formulario">
+      <div class="campo">
+        <label for="spec">Spec da demanda (JSON)</label>
+        <input id="spec" name="spec" type="file" accept=".json,application/json" required>
+      </div>
+      <div class="campo">
+        <label for="log">Log do Firebase</label>
+        <input id="log" name="log" type="file" accept=".json,.txt,.log" required aria-describedby="log-dica">
+        <small id="log-dica">O JSON exportado pelo Mo baile ou um logcat salvo em texto.</small>
+      </div>
+      <div class="campo">
+        <label for="plataforma">Plataforma</label>
+        <select id="plataforma" name="plataforma">
+          <option value="">A que está na spec</option>
+          <option value="android">Android</option>
+          <option value="ios">iOS</option>
+        </select>
+      </div>
+      <div class="campo campo--acao">
+        <button class="mb-btn mb-btn--default mb-btn--large" type="submit">Auditar</button>
+      </div>
+    </form>
+    <p id="status-relatorio" class="status" role="status" aria-live="polite"></p>
+
+    <div id="resultado" hidden>
+      <h3>Resumo</h3>
+      <dl id="resumo" class="tiles"></dl>
+      <p id="log-stats" class="nota"></p>
+      <div id="downloads" class="acoes" aria-label="Baixar o relatório"></div>
+      <h3>Pedem ação</h3>
+      <ul id="pendencias" class="pendencias"></ul>
+      <h3>Relatório completo</h3>
+      <iframe id="visor" title="Relatório interativo gerado pelo motor" sandbox="allow-scripts"></iframe>
+    </div>
+  </section>
+
+  <section id="painel-analytics" role="tabpanel" aria-labelledby="aba-analytics" hidden>
+    <h2 class="sr">Analytics</h2>
+    <p class="explica">Lista os eventos do Firebase Analytics de um logcat salvo. Nesta versão, só Android e só arquivo (sem escuta ao vivo).</p>
+    <form id="form-analytics" class="formulario">
+      <div class="campo campo--largo">
+        <label for="logcat">Logcat salvo</label>
+        <input id="logcat" name="logcat" type="file" accept=".txt,.log,.json" required aria-describedby="logcat-dica">
+        <small id="logcat-dica">Por exemplo: <code>adb logcat -v time -s FA FA-SVC &gt; logcat.txt</code>. Também aceita o JSON exportado.</small>
+      </div>
+      <div class="campo campo--acao">
+        <button class="mb-btn mb-btn--default mb-btn--large" type="submit">Ler eventos</button>
+      </div>
+    </form>
+    <p id="status-analytics" class="status" role="status" aria-live="polite"></p>
+
+    <div id="eventos" hidden>
+      <div class="acoes">
+        <button type="button" class="mb-btn mb-btn--large" id="baixar-tsv">Baixar TSV</button>
+        <button type="button" class="mb-btn mb-btn--large" id="baixar-json">Baixar JSON</button>
+      </div>
+      <div class="tabela" tabindex="0" role="region" aria-labelledby="legenda-eventos">
+        <table>
+          <caption id="legenda-eventos"></caption>
+          <thead><tr><th scope="col">Hora</th><th scope="col">Evento</th><th scope="col">Origem</th><th scope="col">Parâmetros</th></tr></thead>
+          <tbody id="linhas"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

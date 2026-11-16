@@ -1,0 +1,77 @@
+/* Mo baile no navegador. Tokens e botões vêm do design_system.css do Relatório;
+   aqui só o layout da página. Corpo maior que no app: é página web, não janela. */
+/* Classe do design system com `display` não pode vencer o atributo `hidden`. */
+[hidden] { display: none !important; }
+html { background: var(--bg-window); }
+body.mb-root {
+  margin: 0 auto; max-width: 1180px; padding: 0 16px 48px;
+  font-size: 15px; line-height: 1.5; user-select: text; cursor: auto;
+  background: var(--bg-window); color: var(--label-primary);
+}
+body.mb-root :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; box-shadow: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pular { position: absolute; left: 16px; top: -48px; padding: 8px 12px; background: var(--bg-content); border-radius: var(--radius-field); }
+.pular:focus { top: 8px; }
+code { font-family: var(--font-mono); font-size: .92em; background: var(--fill-secondary); padding: 1px 4px; border-radius: var(--radius-chip); }
+
+.topo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; padding: 24px 0 12px; }
+.topo h1 { margin: 0; font-size: 26px; line-height: 32px; font-family: var(--font-display); }
+.topo h1 span { color: var(--label-secondary); font-weight: var(--weight-regular); }
+.aviso { margin: 0; padding: 8px 12px; border-radius: var(--radius-field); background: var(--warning-tint); color: var(--label-primary); }
+.aviso a { margin-left: 6px; text-decoration: underline; }
+.erro-geral { margin: 0 0 16px; font-size: 15px; }
+
+.abas { display: flex; gap: 4px; border-bottom: 1px solid var(--separator-strong); margin: 8px 0 20px; }
+.abas [role=tab] {
+  appearance: none; border: 0; background: transparent; font: inherit; color: var(--label-secondary);
+  padding: 10px 16px; border-bottom: 3px solid transparent; margin-bottom: -1px; cursor: pointer;
+}
+.abas [role=tab][aria-selected=true] { color: var(--label-primary); border-bottom-color: var(--accent); font-weight: var(--weight-semibold); }
+
+.explica { margin: 0 0 16px; color: var(--label-secondary); max-width: 70ch; }
+.formulario { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; padding: 16px; border-radius: var(--radius-card); background: var(--bg-content); box-shadow: var(--shadow-card); }
+.campo { display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
+.campo--largo { flex: 1 1 420px; }
+.campo label { font-weight: var(--weight-semibold); }
+.campo small { color: var(--label-secondary); font-size: 13px; }
+.campo input[type=file], .campo select { font: inherit; color: inherit; }
+.campo select { padding: 4px 8px; border-radius: var(--radius-field); border: 1px solid var(--separator-strong); background: var(--bg-field); }
+.formulario .mb-btn { font-size: 15px; height: 34px; padding: 0 20px; }
+
+.status { min-height: 1.5em; margin: 12px 0; }
+.status--erro { color: var(--destructive); font-weight: var(--weight-semibold); }
+h3 { margin: 28px 0 10px; font-size: 17px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 0; }
+.tile { padding: 12px 14px; border-radius: var(--radius-card); background: var(--bg-content); box-shadow: var(--shadow-card); border-left: 4px solid var(--separator-strong); }
+.tile dt { color: var(--label-secondary); font-size: 13px; }
+.tile dd { margin: 2px 0 0; font-size: 24px; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.tile--ok { border-left-color: var(--success); }
+.tile--erro { border-left-color: var(--destructive); }
+.tile--aviso { border-left-color: var(--warning-fill); }
+.nota { color: var(--label-secondary); font-size: 13px; }
+
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.acoes .mb-btn { font-size: 14px; height: 32px; }
+
+.pendencias { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pendencias li { padding: 8px 12px; border-radius: var(--radius-field); background: var(--bg-content); box-shadow: var(--shadow-card); }
+.pendencias strong { margin-left: 8px; }
+.divergencia { margin: 4px 0 0; color: var(--label-secondary); font-size: 13px; white-space: pre-wrap; }
+.selo { display: inline-block; padding: 1px 8px; border-radius: var(--radius-capsule); font-size: 12px; font-weight: var(--weight-semibold); }
+.selo--error { background: var(--danger-tint); color: var(--destructive); }
+.selo--missing { background: var(--warning-tint); color: var(--warning); }
+
+#visor { width: 100%; height: 80vh; border: 1px solid var(--separator-strong); border-radius: var(--radius-card); background: var(--bg-content); }
+
+.tabela { overflow: auto; max-height: 70vh; border-radius: var(--radius-card); background: var(--bg-content); box-shadow: var(--shadow-card); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+caption { text-align: left; padding: 10px 12px; color: var(--label-secondary); }
+th, td { text-align: left; padding: 6px 12px; border-top: 1px solid var(--separator); vertical-align: top; }
+thead th { position: sticky; top: 0; background: var(--bg-content-alt); }
+.parametros { font-family: var(--font-mono); font-size: 13px; word-break: break-word; }
+
+@media (max-width: 640px) {
+  .campo { min-width: 100%; }
+  .topo h1 { font-size: 22px; }
+}

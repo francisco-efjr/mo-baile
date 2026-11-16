@@ -1,0 +1,59 @@
+/* Checklist dos prints do Figma — o que muda em relação ao relatório.
+   Vem depois de design_system.css e report.css: só tokens e classes .mb-*,
+   a mesma casca (toolbar de vidro, barra lateral, resumo com anel e tiles). */
+
+.ck-intro{margin-top:var(--space-6);max-width:72ch;color:var(--label-secondary);font-size:var(--text-callout);line-height:var(--lh-callout)}
+.ck-meta__key{color:var(--label-tertiary)}
+.ck-code{font-family:var(--font-mono);font-size:.92em;padding:0 4px;border-radius:var(--radius-chip);background:var(--fill-secondary);color:var(--label-primary);overflow-wrap:anywhere}
+
+.ck-card{margin-bottom:var(--space-6);padding:var(--padding-group-box);border-radius:var(--radius-card);background:var(--bg-group);
+  box-shadow:inset 0 0 0 .5px var(--separator);transition:opacity var(--motion-crossfade)}
+[data-contrast="high"] .ck-card{box-shadow:inset 0 0 0 1px var(--separator-strong)}
+.ck-card__head{display:flex;align-items:baseline;gap:var(--space-4);margin-bottom:var(--space-4)}
+.ck-card__title{flex:1;min-width:0;font-size:var(--text-title-3);line-height:var(--lh-title-3);font-weight:var(--weight-semibold);overflow-wrap:anywhere}
+.ck-card__title .ck-code{font-weight:var(--weight-regular);color:var(--label-secondary)}
+.ck-card.is-complete .ck-card__count{background:var(--success-tint, color-mix(in srgb,var(--success) 18%,transparent));color:var(--success)}
+
+.ck-label{font-size:var(--text-subheadline);font-weight:var(--weight-semibold);color:var(--label-tertiary);margin:var(--space-5) 0 var(--space-3)}
+.ck-card > .ck-label:first-of-type{margin-top:0}
+.ck-p{font-size:var(--text-body);line-height:var(--lh-body);margin:var(--space-3) 0}
+.ck-list{margin:0;padding:0 0 0 18px;font-size:var(--text-callout);line-height:var(--lh-callout);color:var(--label-secondary)}
+.ck-list li{margin:2px 0}
+
+.ck-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ck-item{display:flex;align-items:flex-start;gap:8px;padding:5px var(--space-4);margin:0 calc(-1 * var(--space-4));border-radius:var(--radius-sidebar-item);
+  font-size:var(--text-body);line-height:var(--lh-body);cursor:pointer;transition:background-color var(--motion-hover)}
+.ck-item:hover{background:var(--fill-tertiary)}
+.ck-item .mb-check__box{margin-top:3px;cursor:pointer}
+.ck-item .mb-check__box .mb-icon{opacity:0;transition:opacity var(--motion-hover)}
+.ck-item .mb-check__box[aria-checked="true"] .mb-icon{opacity:1}
+.ck-item__text{flex:1;min-width:0;overflow-wrap:anywhere}
+.ck-item.is-done .ck-item__text{color:var(--label-tertiary);text-decoration:line-through;text-decoration-color:var(--label-quaternary)}
+.ck-item.is-done .ck-code{color:var(--label-tertiary)}
+.ck-item--warn:not(.is-done){background:color-mix(in srgb,var(--warning-fill) 10%,transparent)}
+.ck-badge{display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 6px;margin-right:6px;vertical-align:1px;border-radius:var(--radius-capsule);
+  font-size:var(--text-footnote);font-weight:var(--weight-semibold);color:var(--warning-text, var(--label-secondary));background:color-mix(in srgb,var(--warning-fill) 22%,transparent)}
+.ck-badge .mb-icon{color:var(--warning)}
+.ck-item.is-done .ck-badge{opacity:.6}
+
+.ck-ring .rp-ring__seg{transition:stroke-dasharray var(--spring-snappy-duration) var(--spring-snappy-ease)}
+
+@media print{
+  .ck-body .ck-section,.ck-body .ck-card,.ck-body .ck-item{display:block!important}
+  .ck-item{display:flex!important;break-inside:avoid}
+  .ck-card{break-inside:avoid-page}
+  .ck-item--warn:not(.is-done){background:none}
+}
+.ck-bug{flex:none;width:16px;height:16px;margin-top:3px;display:inline-grid;place-items:center;border-radius:4px;border:1px solid var(--label-quaternary);background:transparent;color:transparent;cursor:pointer;padding:0}
+.ck-item:hover .ck-bug{color:var(--label-tertiary)}
+.ck-bug[aria-pressed="true"]{background:var(--destructive);border-color:var(--destructive);color:#fff}
+.ck-item.is-bug{background:var(--danger-tint)}
+.ck-item.is-bug .ck-item__text{color:var(--destructive)}
+.ck-copy{display:inline-grid;place-items:center;vertical-align:middle;margin-left:6px;width:20px;height:20px;padding:0;border-radius:5px;border:1px solid var(--label-quaternary);background:var(--fill-tertiary);color:var(--label-secondary);cursor:pointer}
+.ck-copy:hover{color:var(--accent);border-color:var(--accent)}
+@media print{.ck-copy{display:none}.ck-bug:not([aria-pressed="true"]){visibility:hidden}}
+.ck-test{margin-top:var(--space-8,24px)}
+.ck-test__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-4,10px) var(--space-6,16px);margin-top:var(--space-4,10px)}
+.ck-field{display:flex;flex-direction:column;gap:4px;font-size:var(--text-footnote);color:var(--label-secondary)}
+.ck-field .mb-field{width:100%}
+@media print{.ck-field .mb-field{box-shadow:none;padding:0;height:auto}}

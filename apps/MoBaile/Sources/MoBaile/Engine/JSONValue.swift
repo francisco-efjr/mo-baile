@@ -1,0 +1,83 @@
+import Foundation
+
+/// Valor JSON dinamico, usado apenas nos parametros de chamada ao motor.
+///
+/// Existe para que a montagem de parametros seja verificada pelo compilador em
+/// vez de virar `[String: Any]` com `JSONSerialization` e conversao em tempo de
+/// execucao. As respostas nao passam por aqui: cada uma decodifica direto no
+/// seu tipo concreto (ver `EngineDTO.swift`).
+enum JSONValue: Codable, Equatable, Sendable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case null
+    case array([JSONValue])
+    case object([String: JSONValue])
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .int(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .double(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Valor JSON nao suportado.")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
+    }
+}
+
+extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
+    init(stringLiteral value: String) { self = .string(value) }
+    init(integerLiteral value: Int) { self = .int(value) }
+    init(booleanLiteral value: Bool) { self = .bool(value) }
+}
+
+extension JSONValue {
+    /// JSON compacto com as chaves em ordem: o mesmo texto a cada leitura, para
+    /// editar e comparar.
+    var jsonText: String {
+        if case .string(let text) = self { return text }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(self) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Valor de tipo livre (parametro de analytics) como texto de tabela.
+    var displayText: String {
+        switch self {
+        case .string(let text): return text
+        case .int(let number): return String(number)
+        case .double(let number): return String(number)
+        case .bool(let flag): return flag ? "true" : "false"
+        case .null: return ""
+        case .array, .object:
+            guard let data = try? JSONEncoder().encode(self) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+    }
+}

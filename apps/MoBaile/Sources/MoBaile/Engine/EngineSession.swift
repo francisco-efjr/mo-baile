@@ -1,0 +1,2472 @@
+import AppKit
+import Foundation
+import Observation
+
+/// Coordenador entre o motor e o estado da interface.
+///
+/// Este objeto e a peca que faltava na aplicacao: antes existiam servicos
+/// escritos em Swift e um `AppState` cheio de campos, mas nada ligava um ao
+/// outro. Nenhum servico chegava a ser instanciado, entao a janela mostrava
+/// apenas o estado vazio.
+///
+/// Responsabilidades, e so estas:
+/// 1. subir e derrubar o motor;
+/// 2. traduzir intencao da interface em chamada do contrato;
+/// 3. aplicar notificacao do motor no `AppState`.
+///
+/// Regra de disciplina: as telas falam com esta classe, nunca com o
+/// `EngineClient`. Assim o dia em que o transporte mudar (socket unix para os
+/// quadros, por exemplo) nenhuma tela precisa saber.
+/// Fases da abertura do app (ver `EngineSession.launchPhase`).
+enum LaunchPhase: Equatable, Sendable {
+    case startingEngine, scanning, ready, failed
+}
+
+/// Saúde do motor, como a faixa global da janela mostra (FLU-2).
+enum EngineStatus: Equatable, Sendable {
+    /// Primeira subida, ainda sem resposta. O splash cobre esta fase.
+    case starting
+    case running
+    /// A supervisão está subindo outro motor depois de uma queda.
+    case restarting(String)
+    /// Reinício pedido pela pessoa (faixa ou paleta) em andamento (R-03).
+    case restartRequested
+    /// O motor não está no ar e ninguém vai tentar de novo sozinho.
+    case stopped(String)
+}
+
+@MainActor
+@Observable
+final class EngineSession {
+    private(set) var isConnected = false
+    private(set) var lastError: String?
+    private(set) var engineInfo: EngineDTO.EngineInfo?
+
+    /// Estado real do ambiente, medido pelo motor. Alimenta a tela de estado
+    /// vazio, que antes desenhava indicadores escritos no codigo.
+    private(set) var diagnostics: EngineDTO.Diagnostics?
+    private(set) var simulators: [EngineDTO.Simulator] = []
+    private(set) var avds: [String] = []
+    private(set) var lastScan: Date?
+    private(set) var isBooting = false
+
+    /// O que está instalado (`setup.check`), para a tela Início. `nil` antes
+    /// da primeira checagem ou com o motor fora do ar.
+    private(set) var setup: EngineDTO.Setup?
+    /// Tela Início (`home.summary`). Relido quando o motor avisa `home.changed`.
+    private(set) var home: EngineDTO.HomeSummary?
+    private(set) var lastSetupCheck: Date?
+
+    /// Resultado do handshake: versão do motor e tabela de métodos.
+    private(set) var hello: EngineDTO.Hello?
+
+    /// A supervisão está tentando subir outro motor (ver `recover`).
+    private(set) var isRecovering = false
+
+    /// Reinício pedido pela pessoa em andamento (R-03).
+    private(set) var isRestartingOnRequest = false
+
+    /// Algum reinício em andamento, da supervisão ou pedido. A faixa e a
+    /// paleta usam para não oferecer outro por cima.
+    var isRestarting: Bool { isRecovering || isRestartingOnRequest }
+
+    /// O que a faixa "Motor parado" mostra. Conectado vence tudo: um erro de
+    /// chamada qualquer também grava `lastError` e não é motor parado.
+    var engineStatus: EngineStatus {
+        // O pedido vence o "conectado": no começo do reinício o motor antigo
+        // ainda responde, mas já vai ser parado.
+        if isRestartingOnRequest { return .restartRequested }
+        if isConnected { return .running }
+        if isRecovering { return .restarting(state.statusMessage) }
+        if let lastError { return .stopped(lastError) }
+        return .starting
+    }
+
+    /// Em que ponto da abertura o app está. O splash acompanha isto e só sai
+    /// quando o motor respondeu e a primeira varredura de aparelhos e do
+    /// ambiente terminou (ou quando a subida falhou, para o erro aparecer na
+    /// janela).
+    var launchPhase: LaunchPhase {
+        if lastScan != nil { return .ready }
+        if isConnected { return .scanning }
+        if lastError != nil { return .failed }
+        return .startingEngine
+    }
+
+    /// Versão do contrato que esta interface fala (ver `docs/PROTOCOLO_RPC.md`).
+    nonisolated static let protocolVersion = 2
+
+    /// Como o front se apresenta no `engine.hello`.
+    ///
+    /// Rodando pelo `swift run` não há Info.plist, e a versão fica `dev`:
+    /// inventar um número faria o log do motor afirmar uma versão que não
+    /// existe.
+    nonisolated static let clientName = "MoBaile/"
+        + ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev")
+
+    /// Quanto esperar entre tentativas de reinício, e quantas aceitar.
+    struct RestartPolicy {
+        /// Espera antes de cada tentativa. Crescente para não martelar um
+        /// ambiente quebrado (adb travado, Python sem dependência) em laço.
+        var delays: [Double] = [0.5, 1, 2]
+        /// Tentativas aceitas dentro de `window`. Passou disso, a queda é
+        /// sistemática e reiniciar de novo só esconderia o problema.
+        var maxAttempts = 3
+        var window: TimeInterval = 60
+    }
+
+    private let state: AppState
+    private let makeClient: @MainActor () async throws -> any EngineCalling
+    private let restartPolicy: RestartPolicy
+    private var client: (any EngineCalling)?
+    private var notificationTask: Task<Void, Never>?
+    private var frameTask: Task<Void, Never>?
+    private var terminationTask: Task<Void, Never>?
+    private var daemonTask: Task<Void, Never>?
+    private var hierarchyRefreshTask: Task<Void, Never>?
+    private var restartTask: Task<Void, Never>?
+    /// Única subida em voo, da abertura (`connect`) ou do reinício pedido.
+    /// Quem chega com uma em andamento espera por ela em vez de subir outro
+    /// motor (R-03: dois reinícios seguidos deixavam dois motores vivos).
+    private var connectTask: Task<Void, Never>?
+    private var manualRestartTask: Task<Void, Never>?
+    /// Muda a cada supervisão nova e a cada `disconnect()`. Uma supervisão
+    /// cancelada que termina depois só limpa `isRecovering` se ainda for a
+    /// atual.
+    private var recoveryGeneration = 0
+    private var restartAttempts: [Date] = []
+    private var watchingDevices = false
+
+    /// Muda sempre que o espelho é limpo. A decodificação do quadro agora
+    /// acontece fora do MainActor, e um quadro que termine de decodificar
+    /// depois da troca de aparelho não pode repintar a moldura com a tela do
+    /// aparelho anterior.
+    private var frameGeneration = 0
+    /// Só a leitura de hierarquia mais recente pode substituir a árvore.
+    /// Duas leituras concorrentes podem terminar fora da ordem em que começaram.
+    private var hierarchyRequestGeneration = 0
+    private var recordingOperationInProgress = false
+    private var recordingStateGeneration = 0
+
+    /// Token de progresso da operação longa em andamento. Progresso com outro
+    /// token é de uma chamada que já terminou ou estourou o prazo, e não pode
+    /// sobrescrever a mensagem da atual.
+    private var activeProgressToken: String?
+    /// Janela principal visível (PERF-1). Oculta, coberta ou minimizada, o
+    /// espelho pausa no motor e a releitura automática da hierarquia espera.
+    private(set) var windowVisible = true
+    /// O que este motor sabe do pedido de pausa; zera a cada motor novo.
+    private var streamPauseSent = false
+    private var pauseTask: Task<Void, Never>?
+    /// `stream.resume` que falhou com a janela à vista é repetido nestes
+    /// intervalos (R4); sem isso a moldura ficava parada até a janela sumir e
+    /// voltar. Interno para o teste encurtar.
+    var resumeRetryDelays: [UInt64] = [500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000]
+    private var resumeRetryTask: Task<Void, Never>?
+    /// Uma `stream.settled` chegou com a janela oculta: relê ao voltar.
+    private var hierarchyStale = false
+    /// Sinais do Mac para o perfil de desempenho (PERF-4).
+    private let perfSensors = PerfSensors()
+    /// Onde a parte de animação do perfil é aplicada. Injetável (R6): o teste
+    /// passa a sua e não mexe na compartilhada.
+    @ObservationIgnored var motionPolicy: MotionPolicy = .shared
+    private var progressSequence = 0
+    /// Doctor da aba Execução em voo, para cancelar ao trocar de projeto ou
+    /// de interpretador (revisão FR-02).
+    private var doctorTask: Task<Void, Never>?
+
+    convenience init(
+        state: AppState,
+        restartPolicy: RestartPolicy = RestartPolicy(),
+        resolve: @escaping @Sendable () throws -> EngineConfiguration = { try EngineLocator.resolve() }
+    ) {
+        self.init(state: state, restartPolicy: restartPolicy) {
+            // A sonda do Python é síncrona e pode levar até 3 s por candidato:
+            // fora do MainActor, o splash e a janela seguem respondendo (R-04).
+            let configuracao = try await Task.detached(priority: .userInitiated) {
+                try resolve()
+            }.value
+            return EngineClient(configuration: configuracao)
+        }
+    }
+
+    /// `makeClient` fabrica um motor novo a cada conexão e a cada reinício.
+    /// Um processo que morreu não é reaproveitado: estado interno pela metade
+    /// (buffer, pendências, tabela) é exatamente o que um reinício quer zerar.
+    init(
+        state: AppState,
+        restartPolicy: RestartPolicy = RestartPolicy(),
+        makeClient: @escaping @MainActor () async throws -> any EngineCalling
+    ) {
+        self.state = state
+        self.restartPolicy = restartPolicy
+        self.makeClient = makeClient
+    }
+
+    /// Injeta um motor pronto. Só o teste usa: em produção o cliente nasce
+    /// dentro de `connect()`, junto com o processo do motor.
+    init(state: AppState, client: any EngineCalling) {
+        self.state = state
+        self.restartPolicy = RestartPolicy()
+        self.makeClient = { throw EngineError.notRunning }
+        self.client = client
+        self.isConnected = true
+        // Teste: política de animação própria, longe da do app (R6).
+        self.motionPolicy = MotionPolicy()
+    }
+
+    // MARK: - Ciclo de vida
+
+    /// Sobe o motor, se ainda não houver um. Idempotente: com uma subida ou uma
+    /// supervisão em andamento, espera por ela e não sobe outro.
+    func connect() async {
+        if let connectTask {
+            await connectTask.value
+            return
+        }
+        if let restartTask {
+            await restartTask.value
+            return
+        }
+        guard client == nil else { return }
+        let tarefa = Task { await self.performConnect() }
+        connectTask = tarefa
+        await tarefa.value
+        if connectTask == tarefa { connectTask = nil }
+    }
+
+    private func performConnect() async {
+        restartAttempts.removeAll()
+        do {
+            let client = try await launch()
+            install(client)
+
+            let info: EngineDTO.EngineInfo = try await client.call("engine.info")
+            engineInfo = info
+            isConnected = true
+            lastError = nil
+            applyDaemonStatus(from: info)
+            state.statusMessage = "Motor \(info.version) conectado"
+            await applyStreamPause()
+            await syncPerf()
+            await refreshDevices()
+            await startWatchingDevices()
+            await refreshEnvironment()
+            startWatchingDaemons()
+        } catch {
+            report(error)
+        }
+    }
+
+    func disconnect() async {
+        // Primeiro a supervisão: o encerramento pedido pelo usuário nunca pode
+        // ser lido como queda e disparar reinício.
+        restartTask?.cancel()
+        restartTask = nil
+        recoveryGeneration += 1
+        isRecovering = false
+        stopBackgroundWork()
+        try? await client?.callIgnoringResult("devices.watch_stop")
+        await client?.stop()
+        client = nil
+        watchingDevices = false
+        isConnected = false
+        state.streamActive = false
+        state.proxyRunning = false
+        state.analyticsListenerActive = false
+    }
+
+    /// Reinício pedido pela pessoa, pela faixa "Motor parado" ou pela paleta.
+    ///
+    /// É o mesmo ciclo de vida da janela: `disconnect()` cancela a supervisão
+    /// e para o motor atual, se houver, e `connect()` sobe um novo, com a
+    /// contagem de tentativas zerada. Não há um segundo caminho de subida.
+    ///
+    /// Idempotente (R-03): um segundo pedido com um reinício em andamento só
+    /// espera o primeiro. Uma subida da abertura em voo termina antes de ser
+    /// parada, e uma supervisão em voo é cancelada e aguardada, para nunca
+    /// haver dois motores subindo ao mesmo tempo.
+    func restartEngine() async {
+        if let manualRestartTask {
+            await manualRestartTask.value
+            return
+        }
+        let tarefa = Task { await self.performRestart() }
+        manualRestartTask = tarefa
+        await tarefa.value
+        if manualRestartTask == tarefa { manualRestartTask = nil }
+    }
+
+    private func performRestart() async {
+        isRestartingOnRequest = true
+        defer { isRestartingOnRequest = false }
+        state.statusMessage = "Reiniciando o motor…"
+        if let connectTask { await connectTask.value }
+        let supervisao = restartTask
+        await disconnect()
+        // Cancelada pelo `disconnect()`; se estava no meio de uma subida, para
+        // o motor que subiu antes de voltar.
+        await supervisao?.value
+        // Quem pediu o reinício pode ter acabado de instalar o que faltava (ou
+        // desinstalado algo): a sonda do Python roda de novo (R-02).
+        PythonProbe.clearCache()
+        lastError = nil
+        state.statusMessage = "Reiniciando o motor…"
+        await connect()
+    }
+
+    /// Sobe um motor novo e faz o handshake antes de qualquer outra chamada.
+    ///
+    /// O cliente só é devolvido depois do `engine.hello`: um motor de outra
+    /// versão do protocolo é parado aqui mesmo, sem chegar a receber chamada
+    /// que ele entenderia de outro jeito.
+    private func launch() async throws -> any EngineCalling {
+        let client = try await makeClient()
+        try await client.start()
+        do {
+            try await handshake(with: client)
+        } catch {
+            await client.stop()
+            throw error
+        }
+        return client
+    }
+
+    private func handshake(with client: any EngineCalling) async throws {
+        let versao = Self.protocolVersion
+        let resposta: EngineDTO.Hello
+        do {
+            resposta = try await client.call("engine.hello", params: [
+                "protocol_version": .int(versao),
+                "client": .string(Self.clientName),
+            ])
+        } catch EngineError.engine(let code, let message) where code == "incompatible_protocol" {
+            // A mensagem do motor já cita as duas versões; o complemento diz o
+            // que fazer.
+            throw EngineError.incompatibleProtocol(
+                "Motor incompatível com esta versão do Mo baile. \(message) Atualize o app e o motor juntos."
+            )
+        } catch EngineError.engine(let code, _) where code == "rpc_-32601" {
+            // Motor anterior ao handshake não conhece `engine.hello`.
+            throw EngineError.incompatibleProtocol(
+                "Motor incompatível com esta versão do Mo baile: o app usa o protocolo \(versao) "
+                    + "e o motor, o protocolo 1. Atualize o motor."
+            )
+        }
+        guard resposta.protocolVersion == versao else {
+            throw EngineError.incompatibleProtocol(
+                "Motor incompatível com esta versão do Mo baile: o app usa o protocolo \(versao) "
+                    + "e o motor \(resposta.engineVersion), o protocolo \(resposta.protocolVersion). "
+                    + "Atualize o app e o motor juntos."
+            )
+        }
+        hello = resposta
+        await client.useMethodTable(resposta.methods)
+        await client.useLogPath(resposta.logPath)
+    }
+
+    private func install(_ client: any EngineCalling) {
+        self.client = client
+        streamPauseSent = false
+        notificationTask = Task { [weak self] in
+            for await notification in client.notifications {
+                guard !Task.isCancelled else { return }
+                await self?.handle(notification)
+            }
+        }
+        // Laço próprio para os quadros: decodificar um quadro não pode atrasar
+        // um evento de rede, e um evento lento não pode segurar o espelho.
+        frameTask = Task { [weak self] in
+            for await frame in client.frames {
+                guard !Task.isCancelled else { return }
+                await self?.handle(frame)
+            }
+        }
+        terminationTask = Task { [weak self] in
+            for await status in client.terminations {
+                guard !Task.isCancelled else { return }
+                self?.engineTerminated(client, status: status)
+            }
+        }
+    }
+
+    private func stopBackgroundWork() {
+        // Chamadas já em andamento podem devolver depois do encerramento.
+        frameGeneration += 1
+        hierarchyRequestGeneration += 1
+        for task in [notificationTask, frameTask, terminationTask, daemonTask, hierarchyRefreshTask] {
+            task?.cancel()
+        }
+        notificationTask = nil
+        frameTask = nil
+        terminationTask = nil
+        daemonTask = nil
+        hierarchyRefreshTask = nil
+    }
+
+    // MARK: - Supervisao do motor
+
+    /// O que o front sabe no instante da queda e usa para restaurar.
+    private struct RestoreSnapshot {
+        let device: String?
+        let streamWasActive: Bool
+        let watchingDevices: Bool
+        let proxyWasRunning: Bool
+        /// Recursos que caíram junto e ficam desligados, em texto para o usuário.
+        let lost: [String]
+    }
+
+    /// O motor morreu sem ninguém ter pedido.
+    ///
+    /// Antes, a queda deixava a janela desconectada até alguém reabrir o app.
+    /// Agora a sessão sobe outro motor e devolve o que dá para devolver pelo
+    /// estado do front: aparelho, detecção automática e espelho.
+    private func engineTerminated(_ dead: any EngineCalling, status: Int32) {
+        guard let client, client === dead else { return }
+
+        var lost: [String] = []
+        if state.proxyRunning { lost.append("proxy") }
+        if state.analyticsListenerActive { lost.append("analytics") }
+        if state.passiveListening { lost.append("escuta passiva") }
+        if state.screenRecording { lost.append("gravação de tela") }
+        let snapshot = RestoreSnapshot(
+            device: state.selectedDevice,
+            streamWasActive: state.streamActive,
+            watchingDevices: watchingDevices,
+            proxyWasRunning: state.proxyRunning,
+            lost: lost
+        )
+
+        stopBackgroundWork()
+        self.client = nil
+        watchingDevices = false
+        isConnected = false
+
+        // Tudo isto vivia dentro do processo que morreu. Deixar ligado na tela
+        // seria afirmar um proxy, uma escuta e uma gravação que não existem.
+        state.streamActive = false
+        state.fps = 0
+        state.proxyRunning = false
+        state.daemonStatus.proxy = .off
+        state.analyticsListenerActive = false
+        state.daemonStatus.fa = .off
+        state.passiveListening = false
+        state.screenRecording = false
+        if state.runState == .running { state.runState = .failed }
+        doctorTask?.cancel()
+        executionLostWithEngine()
+
+        restartTask?.cancel()
+        // Já marca aqui: entre a queda e o início da tarefa, a faixa diria
+        // "parado" por um instante.
+        recoveryGeneration += 1
+        let geracao = recoveryGeneration
+        isRecovering = true
+        restartTask = Task { [weak self] in
+            await self?.recover(after: status, restoring: snapshot, generation: geracao)
+        }
+    }
+
+    private func recover(after status: Int32, restoring snapshot: RestoreSnapshot, generation: Int) async {
+        // Só a supervisão atual desmarca: uma cancelada que termina depois de
+        // outra começar não pode dizer à faixa que ninguém está reiniciando.
+        defer {
+            if recoveryGeneration == generation {
+                isRecovering = false
+                restartTask = nil
+            }
+        }
+        // `hello` ainda é o do motor que caiu: é o log dele que conta a queda.
+        var motivo = EngineError.processTerminated(status, logPath: hello?.logPath).localizedDescription
+        while !Task.isCancelled {
+            // A janela conta tentativas, com ou sem sucesso: um motor que sobe e
+            // cai de novo logo depois também esgota o limite, em vez de ficar
+            // reiniciando para sempre.
+            let agora = Date()
+            restartAttempts.removeAll { agora.timeIntervalSince($0) > restartPolicy.window }
+            guard restartAttempts.count < restartPolicy.maxAttempts else {
+                let mensagem = "O motor caiu e não voltou depois de \(restartPolicy.maxAttempts) tentativas "
+                    + "de reinício. \(motivo) Use Reiniciar Motor para tentar de novo."
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            }
+            let tentativa = restartAttempts.count
+            restartAttempts.append(agora)
+            state.statusMessage = "\(motivo) Reiniciando o motor "
+                + "(tentativa \(tentativa + 1) de \(restartPolicy.maxAttempts))…"
+
+            let espera = restartPolicy.delays[min(tentativa, restartPolicy.delays.count - 1)]
+            try? await Task.sleep(nanoseconds: UInt64(espera * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
+            let novo: any EngineCalling
+            do {
+                novo = try await launch()
+            } catch EngineError.incompatibleProtocol(let mensagem) {
+                // Tentar de novo não muda a versão do motor no disco.
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            } catch EngineError.pythonUnsuitable(let mensagem) {
+                // Nem instala o Python que falta.
+                lastError = mensagem
+                state.statusMessage = mensagem
+                return
+            } catch {
+                motivo = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                continue
+            }
+            // `disconnect()` durante a subida: o motor novo não é de ninguém.
+            guard !Task.isCancelled else {
+                await novo.stop()
+                return
+            }
+
+            install(novo)
+            isConnected = true
+            lastError = nil
+            await restore(snapshot)
+            guard !Task.isCancelled else { return }
+
+            var mensagem = "Motor reiniciado depois de uma queda."
+            if !snapshot.lost.isEmpty {
+                mensagem += " Desligados na queda, religue se precisar: \(snapshot.lost.joined(separator: ", "))."
+            }
+            state.statusMessage = mensagem
+            return
+        }
+    }
+
+    /// Devolve o que o front consegue reconstruir sozinho.
+    ///
+    /// Proxy, analytics e escuta passiva ficam de fora de propósito. O proxy
+    /// mexe na rede do aparelho e a escuta grava passos no código: religar sem
+    /// o usuário ver seria agir em nome dele, possivelmente num aparelho que
+    /// ele já trocou.
+    private func restore(_ snapshot: RestoreSnapshot) async {
+        guard let client else { return }
+        await applyStreamPause()
+        await syncPerf()
+        if let device = snapshot.device {
+            let sessao = try? await client.call(
+                "session.select_device",
+                params: ["platform": .string(state.platform.rawValue), "device_id": .string(device)],
+                as: EngineDTO.SessionState.self
+            )
+            state.selectedDevice = sessao?.deviceId
+            if sessao?.deviceId != nil {
+                // O motor morto pode ter deixado o aparelho Android apontando
+                // para um proxy que não existe mais, ou seja, sem rede.
+                // `proxy.stop` desfaz essa configuração; não religa nada.
+                if snapshot.proxyWasRunning {
+                    try? await client.callIgnoringResult("proxy.stop")
+                }
+                await refreshDeviceSize()
+                if snapshot.streamWasActive {
+                    await startStream()
+                } else {
+                    await refreshFrame()
+                }
+            } else {
+                clearFrame()
+                state.hierarchyElements = []
+                state.selectedElement = nil
+            }
+        }
+        if snapshot.watchingDevices {
+            await startWatchingDevices()
+        }
+        startWatchingDaemons()
+    }
+
+    // MARK: - Estado dos servicos do rodape
+
+    /// Mantém WDA, ADB, proxy e analytics do rodapé refletindo a realidade.
+    ///
+    /// Antes, `applyDaemonStatus` rodava uma única vez, na conexão, e só mexia
+    /// em dois dos quatro indicadores. Depois disso o rodapé congelava: subir o
+    /// WDA, ligar o proxy ou perder o adb não mudava nada na tela, e o painel
+    /// que existe para dizer o que está de pé passava a afirmar o que estava de
+    /// pé um minuto atrás.
+    private func startWatchingDaemons() {
+        daemonTask?.cancel()
+        daemonTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshDaemonStatus()
+                // 5 s equilibra: rápido o bastante para o indicador não mentir,
+                // espaçado o bastante para não pesar — `wda.status` faz duas
+                // consultas HTTP com timeout próprio.
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
+    }
+
+    func refreshDaemonStatus() async {
+        guard let client else { return }
+
+        if let info: EngineDTO.EngineInfo = try? await client.call("engine.info") {
+            engineInfo = info
+            state.daemonStatus.adb = info.adbAvailable ? .ok : .error
+            state.daemonStatus.proxy = info.proxy.running ? .ok : .off
+            state.proxyRunning = info.proxy.running
+            state.scrcpyAvailable = info.scrcpyAvailable
+        }
+
+        if let wda: EngineDTO.WDAStatus = try? await client.call("wda.status") {
+            state.daemonStatus.wda = wda.wdaRunning ? .ok : (wda.appiumRunning ? .warn : .off)
+        }
+
+        await refreshScreenRecordingState()
+
+        state.daemonStatus.fa = state.analyticsListenerActive ? .ok : .off
+    }
+
+    // MARK: - Dispositivos
+
+    func refreshDevices() async {
+        guard let client else { return }
+        do {
+            let list: EngineDTO.DeviceList = try await client.call(
+                "devices.list", params: ["platform": .string(state.platform.rawValue)]
+            )
+            state.availableDevices = list.devices.map { (id: $0.id, name: $0.name) }
+            state.daemonStatus.adb = state.platform == .android
+                ? (list.devices.isEmpty ? .warn : .ok)
+                : state.daemonStatus.adb
+
+            // Selecao automatica quando ha exatamente um alvo: o caso comum e
+            // um simulador ou um aparelho, e obrigar a escolha nao ajuda.
+            if state.selectedDevice == nil, let first = list.devices.first(where: { $0.ready }) {
+                await select(deviceID: first.id)
+            } else if list.devices.isEmpty {
+                state.selectedDevice = nil
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Liga a deteccao automatica no motor.
+    ///
+    /// A partir daqui o aparelho aparece sozinho ao ser plugado: o motor empurra
+    /// `device.changed` e a interface reage. Nao ha polling deste lado.
+    private func startWatchingDevices() async {
+        guard let client else { return }
+        if (try? await client.callIgnoringResult("devices.watch_start")) != nil {
+            watchingDevices = true
+        }
+    }
+
+    // MARK: - Ambiente
+
+    /// Relê diagnóstico, simuladores e emuladores.
+    func refreshEnvironment() async {
+        guard let client else { return }
+        await refreshSetup()
+        diagnostics = try? await client.call("diagnostics.check", as: EngineDTO.Diagnostics.self)
+        // Lista de simuladores falha em Mac sem Xcode; o diagnóstico já explica
+        // isso, então aqui a falha vira lista vazia e não erro na tela.
+        simulators = (try? await client.call("simulators.list", as: EngineDTO.SimulatorList.self))?.simulators ?? []
+        avds = (try? await client.call("emulators.list", as: EngineDTO.AvdList.self))?.avds ?? []
+        lastScan = Date()
+    }
+
+    /// Relê só o que está instalado. É barato (o motor só procura arquivos):
+    /// a tela Início chama toda vez que o app volta ao primeiro plano, que é
+    /// quando a pessoa termina uma instalação no Terminal.
+    func refreshSetup() async {
+        guard let client else { return }
+        if let novo = try? await client.call("setup.check", as: EngineDTO.Setup.self) {
+            setup = novo
+        }
+        lastSetupCheck = Date()
+        await refreshHome()
+    }
+
+    /// Relê o que a tela Início mostra. O motor avisa por `home.changed`
+    /// quando muda (aparelho chegou, recente novo); não há polling.
+    func refreshHome() async {
+        guard let client else { return }
+        if let novo = try? await client.call("home.summary", as: EngineDTO.HomeSummary.self) {
+            home = novo
+        }
+    }
+
+    /// Reabre um item de "Continuar de onde parou". Arquivo que sumiu sai da
+    /// lista: o motor não confere sozinho, porque os caminhos costumam estar em
+    /// ~/Documents e conferir faria o macOS pedir acesso à pasta a cada abertura.
+    func openRecent(_ item: EngineDTO.HomeRecent) async {
+        guard FileManager.default.fileExists(atPath: item.path) else {
+            state.statusMessage = "\(item.title) não existe mais e saiu da lista"
+            _ = try? await client?.callIgnoringResult("home.forget_recent", params: ["path": .string(item.path)])
+            await refreshHome()
+            return
+        }
+        let url = URL(fileURLWithPath: item.path)
+        switch item.kind {
+        case "report":
+            state.selectedStepID = nil
+            state.workspaceTab = .report
+            await openReportSpec(at: url)
+        case "page_object":
+            state.selectedStepID = nil
+            state.workspaceTab = .pageObjects
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        default:
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    /// Liga um alvo desligado, ou passa a usar um que já está ligado.
+    func useTarget(_ alvo: EngineDTO.HomeTarget) async {
+        if !alvo.running {
+            if alvo.appPlatform == .ios {
+                await bootSimulator(udid: alvo.id)
+            } else {
+                await bootEmulator(name: alvo.id)
+            }
+            return
+        }
+        if state.platform != alvo.appPlatform {
+            state.platform = alvo.appPlatform
+        }
+        await select(deviceID: alvo.id)
+        await refreshDevices()
+        await refreshHome()
+    }
+
+    /// Liga um simulador e traz a janela do Simulator para a frente.
+    ///
+    /// Sem `udid`, o motor escolhe o primeiro disponível. É o caso de quem só
+    /// quer começar a trabalhar e não tem preferência.
+    func bootSimulator(udid: String? = nil) async {
+        guard let client, !isBooting else { return }
+        isBooting = true
+        defer { isBooting = false }
+
+        state.statusMessage = "Iniciando simulador…"
+        defer { activeProgressToken = nil }
+        do {
+            var params: [String: JSONValue] = ["progress_token": beginProgress(for: "simulators.boot")]
+            if let udid { params["udid"] = .string(udid) }
+            let result: EngineDTO.BootResult = try await client.call("simulators.boot", params: params)
+            state.statusMessage = result.message
+            state.platform = .ios
+            // O simulador leva alguns segundos até aparecer no simctl.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await refreshEnvironment()
+            await refreshDevices()
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Abre um token de progresso para a operação longa que vai começar.
+    ///
+    /// O motor emite `$/progress` com este token enquanto trabalha, e a
+    /// mensagem vai para a barra de status, o mesmo lugar onde o texto fixo de
+    /// "Iniciando…" já aparecia. Minutos compilando o WDA com uma frase só
+    /// pareciam travamento.
+    private func beginProgress(for method: String) -> JSONValue {
+        progressSequence += 1
+        let token = "\(method)-\(progressSequence)"
+        activeProgressToken = token
+        return .string(token)
+    }
+
+    /// Pede ao Appium que suba o WebDriverAgent.
+    ///
+    /// Na primeira execução o Appium compila o WDA, o que leva minutos. Por
+    /// isso a chamada tem timeout generoso na tabela do motor e aqui a
+    /// interface mostra o progresso que ele emite em vez de parecer travada.
+    func startWDA() async {
+        guard let client, !isBooting else { return }
+        isBooting = true
+        defer { isBooting = false }
+
+        state.statusMessage = "Preparando WebDriverAgent pelo Appium. Na primeira vez isso compila o WDA e demora."
+        defer { activeProgressToken = nil }
+        do {
+            let result: EngineDTO.WDAStartResult = try await client.call(
+                "wda.start", params: ["progress_token": beginProgress(for: "wda.start")]
+            )
+            state.statusMessage = result.message
+            state.daemonStatus.wda = .ok
+            await refreshEnvironment()
+            await refreshHierarchy()
+        } catch {
+            state.daemonStatus.wda = .error
+            report(error)
+        }
+    }
+
+    func bootEmulator(name: String? = nil) async {
+        guard let client, !isBooting else { return }
+        isBooting = true
+        defer { isBooting = false }
+
+        state.statusMessage = "Iniciando emulador…"
+        defer { activeProgressToken = nil }
+        do {
+            var params: [String: JSONValue] = ["progress_token": beginProgress(for: "emulators.boot")]
+            if let name { params["name"] = .string(name) }
+            let result: EngineDTO.AvdBootResult = try await client.call("emulators.boot", params: params)
+            state.statusMessage = "Emulador \(result.name) iniciando…"
+            state.platform = .android
+            await refreshEnvironment()
+        } catch {
+            report(error)
+        }
+    }
+
+    func select(deviceID: String?) async {
+        guard let client else { return }
+        do {
+            var params: [String: JSONValue] = ["platform": .string(state.platform.rawValue)]
+            params["device_id"] = deviceID.map { JSONValue.string($0) } ?? .null
+            let session: EngineDTO.SessionState = try await client.call("session.select_device", params: params)
+            state.selectedDevice = session.deviceId
+            state.hierarchyElements = []
+            state.selectedElement = nil
+            clearFrame()
+            if session.deviceId != nil {
+                await activateDevice()
+            } else {
+                await stopStream()
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Tudo que um alvo recém-disponível precisa: medida, primeiro quadro,
+    /// árvore e espelho ao vivo.
+    ///
+    /// Existe como rotina única porque havia dois caminhos até aqui — escolher
+    /// no menu e o aparelho aparecer sozinho pelo detector — e só o primeiro
+    /// ligava o espelho. Pelo segundo, que é o caminho comum de quem pluga o
+    /// aparelho, chegava **um** quadro e a moldura congelava nele: a tela do
+    /// app seguia mudando e o espelho continuava mostrando a de minutos atrás,
+    /// até alguém clicar em "Atualizar".
+    private func activateDevice() async {
+        await refreshDeviceSize()
+        await refreshFrame()
+        await refreshHierarchy()
+        // Ajustes › Geral › "Iniciar o espelho automaticamente".
+        if state.autoStartStream {
+            await startStream()
+        }
+    }
+
+    func switchPlatform(to platform: Platform) async {
+        state.platform = platform
+        state.selectedDevice = nil
+        await select(deviceID: nil)
+        await refreshDevices()
+        await refreshEnvironment()
+    }
+
+    /// Le a resolucao real do alvo.
+    ///
+    /// E o numero que a projecao do espelho usa para converter clique em
+    /// coordenada. Errar aqui desloca todo o overlay e faz o toque repassado
+    /// cair no lugar errado.
+    private func refreshDeviceSize() async {
+        guard let client else { return }
+        guard let size = try? await client.call("screen.size", as: EngineDTO.ScreenSize.self) else { return }
+        state.deviceSize = CGSize(width: size.width, height: size.height)
+    }
+
+    // MARK: - Espelho
+
+    func startStream() async {
+        guard let client, state.selectedDevice != nil else { return }
+        do {
+            // Cadência, largura e qualidade vêm do perfil de desempenho do motor
+            // (PERF-3): o completo repete os 6 fps e 900 px de antes.
+            try await client.callIgnoringResult("stream.start")
+            state.streamActive = true
+        } catch {
+            report(error)
+        }
+    }
+
+    func stopStream() async {
+        guard let client else { return }
+        try? await client.callIgnoringResult("stream.stop")
+        state.streamActive = false
+        state.fps = 0
+    }
+
+    // MARK: - Janela oculta (PERF-1)
+
+    /// A janela principal ficou visível ou deixou de estar.
+    ///
+    /// Oculta, a pausa espera `pauseDelayNanoseconds`: alternar de app por um
+    /// instante não deve parar e religar a captura. Visível, retoma na hora e
+    /// relê a hierarquia que ficou para trás. Quem decide se a pausa vale com
+    /// flow ou escuta passiva ligados é o motor (`kept_for`).
+    func setWindowVisible(_ visible: Bool, pauseDelayNanoseconds: UInt64 = 1_000_000_000) async {
+        guard visible != windowVisible else { return }
+        windowVisible = visible
+        pauseTask?.cancel()
+        pauseTask = nil
+        resumeRetryTask?.cancel()
+        resumeRetryTask = nil
+        guard !visible else {
+            await applyStreamPause()
+            if hierarchyStale {
+                hierarchyStale = false
+                debouncedRefreshHierarchy()
+            }
+            return
+        }
+        pauseTask = Task { [weak self] in
+            if pauseDelayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: pauseDelayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.applyStreamPause()
+        }
+        await pauseTask?.value
+    }
+
+    /// Manda ao motor o pedido que corresponde à janela, só quando muda. A
+    /// retomada que falha com a janela visível é repetida com recuo curto.
+    private func applyStreamPause() async {
+        if await sendStreamPauseIfNeeded() || !windowVisible { return }
+        resumeRetryTask?.cancel()
+        resumeRetryTask = Task { [weak self] in
+            for atraso in self?.resumeRetryDelays ?? [] {
+                try? await Task.sleep(nanoseconds: atraso)
+                guard !Task.isCancelled, let self, self.windowVisible else { return }
+                if await self.sendStreamPauseIfNeeded() { return }
+            }
+        }
+    }
+
+    /// Verdadeiro quando o motor já sabe o pedido atual (ou não há motor).
+    private func sendStreamPauseIfNeeded() async -> Bool {
+        guard let client else { return true }
+        let pausar = !windowVisible
+        guard pausar != streamPauseSent else { return true }
+        streamPauseSent = pausar
+        if (try? await client.callIgnoringResult(pausar ? "stream.pause" : "stream.resume")) != nil { return true }
+        // Motor sem o método, fora do ar ou com a fila presa.
+        streamPauseSent = !pausar
+        return false
+    }
+
+    // MARK: - Perfil de desempenho (PERF-4)
+
+    /// Manda a preferência e os sinais ao motor e passa a observar o Mac.
+    private func syncPerf() async {
+        perfSensors.start { [weak self] in
+            Task { await self?.sendPerfSignals() }
+        }
+        await setPerfPreference(state.perf.preference)
+        await sendPerfSignals()
+    }
+
+    /// Sinais do Mac para o motor. Sem resposta dele, o freio local liga a
+    /// parte visual do leve até a próxima resposta.
+    func sendPerfSignals() async {
+        guard let client else { return }
+        do {
+            let status: EngineDTO.PerfStatus = try await client.call("perf.signals", params: perfSensors.current.params)
+            applyPerf(status)
+        } catch {
+            state.perf.semMotor = true
+            motionPolicy.reduced = state.perf.reducesMotion
+        }
+    }
+
+    /// Ajustes › Desempenho e a paleta. A escolha fica guardada e vale na hora.
+    func setPerfPreference(_ preferencia: PerfPreference) async {
+        state.perf.preference = preferencia
+        preferencia.store()
+        guard let client else { return }
+        if let status = try? await client.call(
+            "perf.set_preference", params: ["preference": .string(preferencia.rawValue)], as: EngineDTO.PerfStatus.self
+        ) {
+            applyPerf(status)
+        }
+    }
+
+    /// Qualquer resposta do motor (sinais, preferência ou `perf.profile`)
+    /// prova que ele está vivo: o freio local sai aqui (R2).
+    private func applyPerf(_ status: EngineDTO.PerfStatus) {
+        state.perf.semMotor = false
+        state.perf.profile = status.profile
+        state.perf.reason = status.reason
+        state.perf.vidro = status.knobs.vidro
+        state.perf.animacoes = status.knobs.animacoes
+        motionPolicy.reduced = state.perf.reducesMotion
+    }
+
+    // MARK: - Scrcpy (Espelho Nativo 60 FPS)
+
+    func startScrcpy() async {
+        guard let client, state.selectedDevice != nil else { return }
+        do {
+            let res: EngineDTO.ScrcpyStatus = try await client.call("scrcpy.start", params: [
+                "fps": .int(60),
+                "max_size": .int(1080),
+                "always_on_top": .bool(true),
+            ])
+            state.scrcpyRunning = res.running
+            state.statusMessage = res.running ? "Espelho scrcpy 60 FPS ativo" : "Falha ao iniciar scrcpy"
+        } catch {
+            report(error)
+        }
+    }
+
+    func stopScrcpy() async {
+        guard let client else { return }
+        do {
+            let res: EngineDTO.ScrcpyStatus = try await client.call("scrcpy.stop")
+            state.scrcpyRunning = res.running
+            state.statusMessage = "Espelho scrcpy encerrado"
+        } catch {
+            report(error)
+        }
+    }
+
+    func toggleScrcpy() async {
+        if state.scrcpyRunning {
+            await stopScrcpy()
+        } else {
+            await startScrcpy()
+        }
+    }
+
+    func captureNow() async {
+        await refreshFrame()
+        await refreshHierarchy()
+    }
+
+    /// Captura um quadro isolado, sem mexer na hierarquia.
+    ///
+    /// Existe separado de `captureNow` porque a seleção de dispositivo precisa
+    /// de um quadro inicial: antes disso, conectar deixava a hierarquia cheia e
+    /// o espelho vazio até alguém ligar o streaming ou clicar em "Forçar
+    /// Captura". Quem abre a ferramenta com um aparelho conectado espera ver a
+    /// tela, não uma moldura preta.
+    func refreshFrame() async {
+        guard let client else { return }
+        // A geração é lida antes de pedir a captura: a troca de aparelho que
+        // acontecer enquanto o motor captura é justamente a que invalida o
+        // resultado. Lida depois, ela já seria a nova e deixaria passar a tela
+        // do aparelho anterior.
+        let geracao = frameGeneration
+        do {
+            let frame: EngineDTO.Frame = try await client.call("screen.capture", params: ["max_width": .int(900)])
+            let image = await Task.detached(priority: .userInitiated) { frame.image }.value
+            if let image, mayPublish(frame, generation: geracao) {
+                state.currentFrame = image
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    private func clearFrame() {
+        frameGeneration += 1
+        state.currentFrame = nil
+    }
+
+    /// Um quadro só vai para a moldura se ainda for do aparelho em uso.
+    ///
+    /// Sem aparelho selecionado, nenhum quadro vale: é o estado de moldura
+    /// vazia. Com aparelho, o `device_id` do quadro tem de bater com ele —
+    /// um quadro de A que termina de chegar depois da troca para B pintava a
+    /// tela de A sob o nome de B. Motor anterior ao campo não manda
+    /// `device_id`, e aí só a geração protege.
+    private func mayPublish(_ frame: EngineDTO.Frame, generation: Int) -> Bool {
+        guard generation == frameGeneration, let selecionado = state.selectedDevice else { return false }
+        return frame.deviceId == nil || frame.deviceId == selecionado
+    }
+
+    /// Lê o envelope e decodifica o PNG fora do MainActor.
+    ///
+    /// O quadro tem centenas de KB de base64. Decodificar o JSON e o PNG na
+    /// main thread custava cerca de 7 ms por quadro, tempo em que a janela
+    /// não respondia a clique nem desenhava. Só a publicação volta ao MainActor.
+    nonisolated private static func decodeFrameNotification(
+        _ payload: Data
+    ) async -> (frame: EngineDTO.Frame, image: NSImage)? {
+        await Task.detached(priority: .userInitiated) {
+            guard let frame = try? JSONDecoder().decode(NotificationEnvelope<EngineDTO.Frame>.self, from: payload).params,
+                  let image = frame.image else { return nil }
+            return (frame, image)
+        }.value
+    }
+
+    // MARK: - Hierarquia
+
+    func refreshHierarchy() async {
+        guard let client else { return }
+        hierarchyRequestGeneration += 1
+        let requestGeneration = hierarchyRequestGeneration
+        let deviceGeneration = frameGeneration
+        let deviceID = state.selectedDevice
+        let platform = state.platform
+        do {
+            let dump: EngineDTO.HierarchyDump = try await client.call("hierarchy.dump")
+            guard !Task.isCancelled,
+                  requestGeneration == hierarchyRequestGeneration,
+                  deviceGeneration == frameGeneration,
+                  deviceID == state.selectedDevice,
+                  platform == state.platform else { return }
+            state.hierarchyElements = dump.elements.map { $0.toModel() }
+            state.daemonStatus.wda = state.platform == .ios ? .ok : state.daemonStatus.wda
+        } catch let error as EngineError {
+            guard !Task.isCancelled,
+                  requestGeneration == hierarchyRequestGeneration,
+                  deviceGeneration == frameGeneration else { return }
+            // Hierarquia indisponivel e rotina durante transicao de tela: nao
+            // vale interromper o usuario com dialogo.
+            if case .engine = error {
+                state.statusMessage = error.localizedDescription
+            } else {
+                report(error)
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Atualiza a hierarquia sem bloquear a leitura sequencial de notificações.
+    ///
+    /// Antes, `stream.settled` chamava `await refreshHierarchy()` dentro do loop
+    /// de notificações. Num Android físico com dump lento, isso travava o consumo
+    /// de notificações por vários segundos: os quadros do espelho (`stream.frame`)
+    /// empilhavam no buffer e a tela congelava até alguém clicar em "Atualizar".
+    /// Com a chamada desacoplada e debounced, o espelho flui livre.
+    func debouncedRefreshHierarchy(delayNanoseconds: UInt64 = 150_000_000) {
+        hierarchyRefreshTask?.cancel()
+        hierarchyRefreshTask = Task { [weak self] in
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.refreshHierarchy()
+        }
+    }
+
+    func selectElement(at point: CGPoint) async {
+        guard let client else { return }
+        do {
+            let lookup: EngineDTO.ElementLookup = try await client.call(
+                "hierarchy.element_at",
+                params: ["x": .int(Int(point.x)), "y": .int(Int(point.y))]
+            )
+            state.selectedElement = lookup.element?.toModel()
+        } catch {
+            report(error)
+        }
+    }
+
+    // MARK: - Interacao
+
+    func tap(at point: CGPoint) async {
+        guard let client else { return }
+        do {
+            try await client.callIgnoringResult("input.tap", params: ["x": .int(Int(point.x)), "y": .int(Int(point.y))])
+        } catch {
+            report(error)
+            return
+        }
+
+        // Com o espelho ao vivo ligado, quem avisa que a tela parou de mudar é
+        // o `stream.settled`, e reler aqui seria trabalho repetido.
+        //
+        // Desligado, ninguém avisa: a moldura e a hierarquia ficavam paradas no
+        // estado anterior ao toque. Isso não é só visual — o passo gravado logo
+        // depois é resolvido contra a árvore velha, então o toque navega a tela
+        // e a gravação aponta para o elemento que não está mais lá.
+        guard !state.streamActive else { return }
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        await refreshFrame()
+        await refreshHierarchy()
+    }
+
+    /// Grava o passo e toca no aparelho.
+    ///
+    /// O toque faz parte da gravacao: um fluxo so avanca navegando por ele, e
+    /// com os modos separados era preciso alternar entre "Gravar passo" e
+    /// "Repassar toque" a cada clique — vinte passos viravam quarenta trocas de
+    /// modo. A interface Tk sempre tratou as duas coisas como independentes.
+    func record(at point: CGPoint) async {
+        guard let client else { return }
+        do {
+            let strategy = state.locatorStrategy.engineName
+            let recorded: EngineDTO.RecordedStep = try await client.call(
+                "codegen.record",
+                params: ["x": .int(Int(point.x)), "y": .int(Int(point.y)), "strategy": .string(strategy)]
+            )
+            state.selectedElement = recorded.element.toModel()
+
+            // O motor já devolve a linha do Page Object e o bloco da ação em
+            // `codegen.record`, mas ninguém escrevia nos dois editores:
+            // `actionsCode` e `locatorsCode` nasciam vazios e só eram limpos.
+            // Na prática, gravar um passo não aparecia em lugar nenhum da tela,
+            // que é o ciclo inteiro do produto falhando em silêncio.
+            //
+            // Acrescentar a cada gravação é o que a interface Tk faz, e as duas
+            // precisam produzir o mesmo arquivo.
+            state.locatorsCode += recorded.objectCode + "\n"
+            state.actionsCode += recorded.actionCode + "\n"
+
+            state.statusMessage = "Gravado: \(recorded.varName)"
+            await refreshSteps()
+        } catch {
+            report(error)
+            return
+        }
+
+        // Grava primeiro, toca depois: a gravacao resolve o elemento contra a
+        // arvore da tela atual, e o toque e o que a leva para a proxima.
+        await tap(at: point)
+    }
+
+    // MARK: - Escuta passiva
+
+    /// Passa a gravar o que a pessoa faz direto no aparelho, sem o espelho.
+    ///
+    /// No Android o motor lê `/dev/input`; no simulador iOS observa o clique
+    /// sobre a janela do Simulator. Em iPhone físico não há como observar
+    /// toque, e o motor recusa com explicação.
+    func startPassive() async {
+        guard let client, !state.passiveListening else { return }
+        do {
+            let inicio: EngineDTO.PassiveState = try await client.call("passive.start")
+            state.passiveListening = true
+            state.statusMessage = "Gravando o que você fizer no aparelho (\(inicio.screen[0])×\(inicio.screen[1]))"
+        } catch {
+            state.passiveListening = false
+            report(error)
+        }
+    }
+
+    func stopPassive() async {
+        guard let client else { return }
+        defer { state.passiveListening = false }
+        try? await client.callIgnoringResult("passive.stop")
+        state.statusMessage = "Escuta do aparelho desligada"
+    }
+
+    // MARK: - Gravacao de video da tela
+
+    /// Grava video da tela pelo motor: `screenrecord` no Android, `simctl io`
+    /// no iOS. Qual das duas ferramentas usar e decisao do motor.
+    func startScreenRecording() async {
+        guard let client, !state.screenRecording, !recordingOperationInProgress else { return }
+        recordingStateGeneration += 1
+        recordingOperationInProgress = true
+        defer { recordingOperationInProgress = false }
+        do {
+            let inicio: EngineDTO.RecordingState = try await client.call("recording.start")
+            state.screenRecording = inicio.recording
+            state.screenRecordingPath = inicio.path
+            if let limite = inicio.limitSeconds {
+                state.statusMessage = "Gravando a tela (limite de \(limite)s no Android)"
+            } else {
+                state.statusMessage = "Gravando a tela"
+            }
+        } catch {
+            report(error)
+            await refreshScreenRecordingState(afterOperation: true)
+        }
+    }
+
+    func stopScreenRecording() async {
+        guard let client, !recordingOperationInProgress else { return }
+        recordingStateGeneration += 1
+        recordingOperationInProgress = true
+        defer { recordingOperationInProgress = false }
+        do {
+            let fim: EngineDTO.RecordingResult = try await client.call("recording.stop")
+            state.screenRecording = fim.recording
+            state.screenRecordingPath = fim.path
+            if let caminho = fim.path {
+                state.statusMessage = "Video salvo: \(caminho)"
+            }
+        } catch {
+            report(error)
+            // Timeout não prova que a operação terminou. Consulte o motor e
+            // mantenha o último estado conhecido se ele também não responder.
+            await refreshScreenRecordingState(afterOperation: true)
+        }
+    }
+
+    private func refreshScreenRecordingState(afterOperation: Bool = false) async {
+        guard let client, afterOperation || !recordingOperationInProgress else { return }
+        let generation = recordingStateGeneration
+        guard let recording = try? await client.call("recording.status", as: EngineDTO.RecordingState.self),
+              generation == recordingStateGeneration,
+              self.client === client else { return }
+        state.screenRecording = recording.recording
+        if let path = recording.path { state.screenRecordingPath = path }
+    }
+
+    func refreshSteps() async {
+        guard let client else { return }
+        do {
+            let list: EngineDTO.StepList = try await client.call("codegen.steps")
+            state.steps = list.steps.map { $0.toModel() }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Grava os dois arquivos do Page Object.
+    ///
+    /// O conteúdo enviado é o dos editores, e não o que o motor tem guardado:
+    /// os campos são editáveis, então o que está na tela é o que vale, inclusive
+    /// ajuste feito à mão depois de gravar.
+    func saveCode() async {
+        guard let client else { return }
+        do {
+            let (acoes, locators) = (state.actionsCode, state.locatorsCode)
+            let resultado: EngineDTO.SaveResult = try await client.call(
+                "codegen.save",
+                params: [
+                    "actions_code": .string(acoes),
+                    "locators_code": .string(locators),
+                ]
+            )
+            state.codigoSalvo = CodigoSalvo(acoes: acoes, locators: locators, em: Date(), caminho: resultado.paths.first)
+            state.statusMessage = "Salvo em \(resultado.directory)"
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Chamada avulsa para quem guarda o resultado no próprio estado (a árvore
+    /// Projeto, `EngineDTO+Workspace.swift`). Sem motor, `notRunning`.
+    func chamarMotor<R: Decodable & Sendable>(_ metodo: String, params: [String: JSONValue] = [:]) async throws -> R {
+        guard let client else { throw EngineError.notRunning }
+        return try await client.call(metodo, params: params)
+    }
+
+    /// Grava os passos como flow do Maestro em `~/Documents/Mo baile/flows/`
+    /// e devolve o caminho, para quem chamou revelar no Finder.
+    ///
+    /// O texto digitado não vai para o arquivo: vira `${VARIAVEL}`, e o status
+    /// diz quais o flow pede, porque sem elas em `env` ele não roda.
+    func exportMaestroFlow() async -> String? {
+        guard let client, !state.steps.isEmpty else { return nil }
+        do {
+            let resultado: EngineDTO.MaestroExport = try await client.call(
+                "flow.maestro_export",
+                params: ["save": .bool(true), "name": .string(engineInfo?.pageObjectsKey ?? "fluxo")]
+            )
+            guard let caminho = resultado.path else { return nil }
+            let arquivo = "flows/\(URL(fileURLWithPath: caminho).lastPathComponent)"
+            state.statusMessage = resultado.variables.isEmpty
+                ? "Flow salvo em \(arquivo)"
+                : "Flow salvo em \(arquivo) · pede \(resultado.variables.joined(separator: ", ")) em env"
+            return caminho
+        } catch {
+            report(error)
+            return nil
+        }
+    }
+
+    // MARK: - Execucao de fluxo
+
+    /// Roda os passos gravados no aparelho.
+    ///
+    /// O serviço existia no motor e era testado, mas só a interface Tk o usava:
+    /// o front nativo não tinha como rodar automação. O andamento chega por
+    /// `flow.step` (passo atual) e `flow.log` (linha a linha). Com a opção dos
+    /// Ajustes ligada, o motor abre o app gravado do zero antes do primeiro passo.
+    func runFlow() async {
+        guard let client, !state.steps.isEmpty else { return }
+        state.runLog.removeAll()
+        state.currentRunStep = 0
+        state.runStepTotal = 0
+        state.runSource = .recordedSteps
+        state.runStartedAt = Date()
+        state.runState = .running
+        do {
+            let params: [String: JSONValue] = FlowRunOptions.launchApp ? ["launch_app": .bool(true)] : [:]
+            let inicio: EngineDTO.FlowRun = try await client.call("flow.run", params: params)
+            state.statusMessage = "Executando \(inicio.steps) passo(s)…"
+        } catch {
+            state.runState = .failed
+            report(error)
+        }
+    }
+
+    /// Roda um flow do Maestro (`.yaml`) no aparelho, pelo runner do motor e
+    /// sem rede. O andamento chega pelos mesmos `flow.step`/`flow.log`/`flow.finished`.
+    func runMaestroFlow(at url: URL) async {
+        guard let client else { return }
+        state.runLog.removeAll()
+        state.currentRunStep = 0
+        state.runStepTotal = 0
+        state.runSource = .maestro
+        state.runStartedAt = Date()
+        state.runState = .running
+        do {
+            try await client.callIgnoringResult("flow.maestro_run", params: ["path": .string(url.path)])
+            state.statusMessage = "Rodando \(url.lastPathComponent)…"
+        } catch {
+            state.runState = .failed
+            report(error)
+        }
+    }
+
+    func stopFlow() async {
+        guard let client, state.runState == .running else { return }
+        try? await client.callIgnoringResult("flow.stop")
+        state.statusMessage = "Interrupção pedida"
+    }
+
+    func clearSteps() async {
+        guard let client else { return }
+        do {
+            try await client.callIgnoringResult("codegen.reset")
+            state.clearSteps()
+        } catch {
+            report(error)
+        }
+    }
+
+    // MARK: - Rede
+
+    /// Liga a janela correlacionada de um passo: Rede e Analytics passam a
+    /// mostrar só o que caiu em volta do toque.
+    func correlate(step: AutomationStep) async {
+        guard let client else { return }
+        do {
+            let resultado: EngineDTO.Correlation = try await client.call(
+                "session.correlate", params: ["step_num": .int(step.stepNum)]
+            )
+            state.correlation = resultado
+            state.statusMessage = "Passo \(step.stepNum): \(resultado.requests.count) requisições e \(resultado.events.count) eventos na janela"
+        } catch {
+            state.correlation = nil
+            report(error)
+        }
+    }
+
+    /// "Por que não vejo tráfego?": pede o diagnóstico ao motor e abre o popover.
+    func diagnoseTraffic() async {
+        guard let client else { return }
+        do {
+            let resultado: EngineDTO.TrafficDiagnosis = try await client.call("proxy.diagnose")
+            state.trafficDiagnosis = resultado
+            state.trafficDiagnosisPresented = true
+            state.statusMessage = resultado.summary
+        } catch {
+            report(error)
+        }
+    }
+
+    func toggleProxy() async {
+        guard let client else { return }
+        do {
+            if state.proxyRunning {
+                let result: EngineDTO.ProxyState = try await client.call("proxy.stop")
+                state.proxyRunning = result.running
+                state.daemonStatus.proxy = .off
+            } else {
+                let result: EngineDTO.ProxyState = try await client.call(
+                    "proxy.start", params: ["configure_device": .bool(true)]
+                )
+                state.proxyRunning = result.running
+                state.daemonStatus.proxy = result.running ? .ok : .error
+                if result.deviceConfigured == false && state.platform == .android {
+                    state.statusMessage = "Proxy no ar, mas o aparelho nao aceitou a configuracao automatica."
+                }
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Tráfego HTTPS do app em debug, sem proxy nem certificado. O motor lê o
+    /// log da plataforma da sessão e entrega cada requisição como `proxy.event`:
+    /// no iPhone, o `CFNETWORK_DIAGNOSTICS` pelo cabo; no Android, o log do
+    /// `HttpLoggingInterceptor` do OkHttp pelo logcat, que convive com o
+    /// debugger do Android Studio.
+    func toggleDebugNet() async {
+        guard let client else { return }
+        do {
+            if state.debugNetActive {
+                let result: EngineDTO.NetlogState = try await client.call("netlog.stop")
+                state.debugNetActive = result.running
+            } else {
+                let result: EngineDTO.NetlogState = try await client.call("netlog.start")
+                state.debugNetActive = result.running
+                if result.running {
+                    state.statusMessage = result.source == "okhttp_logcat"
+                        ? "Lendo o tráfego do app pelo logcat. O build de debug precisa do HttpLoggingInterceptor do OkHttp."
+                        : "Lendo o tráfego do iPhone. O app precisa rodar com CFNETWORK_DIAGNOSTICS=3."
+                }
+            }
+        } catch {
+            state.debugNetActive = false
+            report(error)
+        }
+    }
+
+    func clearTraffic() async {
+        guard let client else { return }
+        do {
+            try await client.callIgnoringResult("proxy.clear")
+            state.clearHTTPTraffic()
+        } catch {
+            report(error)
+        }
+    }
+
+    // MARK: - Analytics
+
+    func toggleAnalytics() async {
+        guard let client else { return }
+        do {
+            if state.analyticsListenerActive {
+                let result: EngineDTO.AnalyticsState = try await client.call("analytics.stop")
+                state.analyticsListenerActive = result.running
+                state.daemonStatus.fa = .off
+            } else {
+                var params: [String: JSONValue] = [:]
+                if state.platform == .ios {
+                    params["ios_source"] = .string(state.analyticsIOSSource.rpcValue)
+                }
+                let result: EngineDTO.AnalyticsState = try await client.call("analytics.start", params: params)
+                state.analyticsListenerActive = result.running
+                state.daemonStatus.fa = result.running ? .ok : .error
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Atualiza os iPhones por cabo que podem servir de origem no iOS.
+    func refreshAnalyticsIOSDevices() async {
+        guard let client else { return }
+        do {
+            let list: EngineDTO.IOSPhysicalDeviceList = try await client.call("analytics.ios_devices")
+            state.analyticsIOSDeviceHint = list.available ? nil : list.hint
+            state.analyticsIOSDevices = list.devices.map {
+                IOSPhysicalDevice(udid: $0.udid, name: $0.name, iosVersion: $0.iosVersion, problem: $0.problem)
+            }
+            // O iPhone escolhido foi desconectado: volta ao automatico em vez
+            // de deixar a escuta apontando para um aparelho que nao existe.
+            if case .device(let udid) = state.analyticsIOSSource,
+               !state.analyticsIOSDevices.contains(where: { $0.udid == udid }) {
+                state.analyticsIOSSource = .auto
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    func clearAnalytics() async {
+        guard let client else { return }
+        do {
+            try await client.callIgnoringResult("analytics.clear")
+            state.clearAnalyticsEvents()
+        } catch {
+            report(error)
+        }
+    }
+
+    // MARK: - Relatório
+
+    /// Abre a spec-modelo e mostra o resumo, sem auditar ainda. Trocar de spec
+    /// descarta o relatório da anterior: os números eram de outra spec.
+    func openReportSpec(at url: URL) async {
+        guard let client, state.reportOperation == nil else { return }
+        state.reportOperation = .loadingSpec
+        state.reportError = nil
+        defer { state.reportOperation = nil }
+        do {
+            let payload: EngineDTO.ReportSpecPayload = try await client.call(
+                "report.spec", params: ["path": .string(url.path)]
+            )
+            let spec = payload.toModel()
+            if state.reportSpec?.path != spec.path {
+                state.report = nil
+                state.selectedReportResultID = nil
+                state.selectedReportExtraID = nil
+                state.reportLastExport = nil
+                state.reportPlatform = nil
+            }
+            state.reportSpec = spec
+            state.statusMessage = "Spec \(spec.fileName) aberta: \(spec.variants) validações"
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Audita a spec contra o log escolhido: os eventos que a escuta capturou
+    /// ou um arquivo exportado. O motor relê a spec do disco a cada auditoria.
+    func runReport() async {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return }
+        var params: [String: JSONValue] = [
+            "spec_path": .string(spec.path),
+            "source": .string(state.reportLogSource.rpcValue),
+            "progress_token": beginProgress(for: "report.audit"),
+        ]
+        if case .file(let url) = state.reportLogSource {
+            params["log_path"] = .string(url.path)
+        }
+        if let plataforma = state.reportPlatform {
+            params["platform"] = .string(plataforma.rawValue)
+        }
+        state.reportOperation = .auditing
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportAuditPayload = try await client.call("report.audit", params: params)
+            let relatorio = payload.toModel()
+            state.report = relatorio
+            state.reportSpec = relatorio.spec
+            state.reportLastExport = nil
+            if let id = state.selectedReportResultID, !relatorio.results.contains(where: { $0.id == id }) {
+                state.selectedReportResultID = nil
+            }
+            state.selectedReportExtraID = nil
+            let taxa = relatorio.summary.complianceRate.formatted(.number.precision(.fractionLength(1)))
+            state.statusMessage = "Auditoria concluída: \(relatorio.summary.ok) de \(relatorio.summary.total) OK (\(taxa)%)"
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Grava o board Excalidraw, o HTML, o Markdown e o TSV do último
+    /// relatório. Sem pasta, o motor usa `~/Documents/Mo baile/Relatórios`.
+    @discardableResult
+    func exportReport(to directory: URL?, info: ReportExportInfo = ReportExportInfo()) async -> ReportExport? {
+        guard let client, state.report != nil, state.reportOperation == nil else { return nil }
+        var params: [String: JSONValue] = ["progress_token": beginProgress(for: "report.export")]
+        if let directory {
+            params["directory"] = .string(directory.path)
+        }
+        let campos = info.params
+        if !campos.isEmpty {
+            params["info"] = .object(campos)
+        }
+        state.reportOperation = .exporting
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportExportPayload = try await client.call("report.export", params: params)
+            let exportado = payload.toModel()
+            state.reportLastExport = exportado
+            state.statusMessage = "Relatório exportado em \((exportado.directory as NSString).lastPathComponent)"
+            return exportado
+        } catch {
+            reportFailure(error)
+            return nil
+        }
+    }
+
+    /// OCR dos prints dos cards do Figma. O rascunho da spec é gravado e aberto
+    /// na sheet de revisão; ele só vira a spec da aba quando a pessoa escolhe.
+    func importReportPrints(from folder: URL, projeto: String?, platform: Platform) async {
+        guard let client, state.reportOperation == nil else { return }
+        var params: [String: JSONValue] = [
+            "prints_dir": .string(folder.path),
+            "platform": .string(platform.rawValue),
+            "progress_token": beginProgress(for: "report.import"),
+        ]
+        if let projeto, !projeto.trimmingCharacters(in: .whitespaces).isEmpty {
+            params["projeto"] = .string(projeto)
+        }
+        state.reportOperation = .importing
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportImportPayload = try await client.call("report.import", params: params)
+            let importado = payload.toModel()
+            state.reportImport = importado
+            let duvidas = importado.doubtsTotal == 1 ? "1 ponto" : "\(importado.doubtsTotal) pontos"
+            state.statusMessage = "Rascunho da spec gravado: \(duvidas) para conferir"
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Grava o checklist (`.checklist.md`) em HTML no padrão do design system e
+    /// abre no navegador. O Markdown é a fonte: o que foi marcado nele vai junto.
+    @discardableResult
+    func exportReportChecklist(at checklist: URL, open: Bool = true) async -> ReportChecklistExport? {
+        await exportChecklist(params: ["checklist_path": .string(checklist.path)], open: open)
+    }
+
+    /// Checklist da spec aberta, sem painel: o motor usa o `.checklist.md` ao
+    /// lado da spec ou gera um da própria spec. Não precisa de log nem de auditoria.
+    @discardableResult
+    func exportReportChecklist(forSpec spec: String, open: Bool = true) async -> ReportChecklistExport? {
+        await exportChecklist(params: ["spec_path": .string(spec)], open: open)
+    }
+
+    private func exportChecklist(params: [String: JSONValue], open: Bool) async -> ReportChecklistExport? {
+        guard let client, state.reportOperation == nil else { return nil }
+        state.reportOperation = .exportingChecklist
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportChecklistExportPayload = try await client.call(
+                "report.checklist_export", params: params
+            )
+            let exportado = payload.toModel()
+            state.statusMessage = "Checklist exportado em \(exportado.name) · \(exportado.done) de \(exportado.total) feitos"
+            if open { Exporters.openFile(exportado.path) }
+            return exportado
+        } catch {
+            reportFailure(error)
+            return nil
+        }
+    }
+
+    /// Usa o rascunho importado como a spec da aba.
+    func useImportedSpec() async {
+        guard let importado = state.reportImport else { return }
+        state.reportImport = nil
+        await openReportSpec(at: URL(fileURLWithPath: importado.specPath))
+    }
+
+    /// O card como está no JSON da spec, para o formulário do inspector.
+    func loadReportCard(_ index: Int) async -> ReportCardDraft? {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return nil }
+        state.reportError = nil
+        do {
+            let payload: EngineDTO.ReportCardPayload = try await client.call(
+                "report.card", params: ["spec_path": .string(spec.path), "card_index": .int(index)]
+            )
+            return payload.toModel()
+        } catch {
+            reportFailure(error)
+            return nil
+        }
+    }
+
+    /// Grava o card editado na spec e audita de novo, se já havia auditoria.
+    ///
+    /// A linha escolhida continua a mesma validação (card, fluxo e variação):
+    /// o `id` dos resultados é a posição, e mudar as variações desloca as linhas.
+    @discardableResult
+    func saveReportCard(_ draft: ReportCardDraft) async -> Bool {
+        guard let client, let spec = state.reportSpec, state.reportOperation == nil else { return false }
+        let card: JSONValue
+        do {
+            card = try draft.rpcCard()
+        } catch {
+            state.reportError = error.localizedDescription
+            return false
+        }
+        let anterior = state.selectedReportResult
+        state.reportOperation = .savingCard
+        state.reportError = nil
+        do {
+            let payload: EngineDTO.ReportCardUpdatePayload = try await client.call(
+                "report.card_update",
+                params: ["spec_path": .string(spec.path), "card_index": .int(draft.cardIndex), "card": card]
+            )
+            state.reportSpec = payload.spec.toModel()
+        } catch {
+            endReportOperation()
+            reportFailure(error)
+            return false
+        }
+        endReportOperation()
+        if state.report != nil {
+            await runReport()
+            if let anterior, let resultados = state.report?.results {
+                let mesmoCard = resultados.filter { $0.cardIndex == anterior.cardIndex && $0.flow == anterior.flow }
+                state.selectedReportResultID = (mesmoCard.first { $0.variation == anterior.variation } ?? mesmoCard.first)?.id
+            }
+        }
+        state.statusMessage = "Card \(draft.cardIndex + 1) gravado em \(spec.fileName)"
+        return true
+    }
+
+    /// Abre a spec inteira no editor do app. Vale também para o rascunho da
+    /// importação que ainda não valida: o motor devolve os cards e o que corrigir.
+    func openReportSpecEditor(path: String) async {
+        guard let client, state.reportOperation == nil else { return }
+        state.reportOperation = .loadingSpec
+        state.reportError = nil
+        defer { endReportOperation() }
+        do {
+            let payload: EngineDTO.ReportCardsPayload = try await client.call(
+                "report.cards", params: ["spec_path": .string(path)]
+            )
+            state.reportSpecEditor = payload.toModel()
+        } catch {
+            reportFailure(error)
+        }
+    }
+
+    /// Grava de uma vez os cards alterados no editor. Se a spec gravada é a da
+    /// aba, o resumo é atualizado e a auditoria roda de novo; se a aba não
+    /// tinha spec (rascunho da importação), a spec gravada passa a ser a dela.
+    @discardableResult
+    func saveReportSpecEditor() async -> Bool {
+        guard let client, let editor = state.reportSpecEditor, state.reportOperation == nil else { return false }
+        let alterados = editor.dirtyCards
+        guard !alterados.isEmpty else { return true }
+        var cards: [JSONValue] = []
+        for card in alterados {
+            do {
+                cards.append(.object(["card_index": .int(card.cardIndex), "card": try card.rpcCard()]))
+            } catch {
+                state.reportError = "Card \(card.cardIndex + 1): \(error.localizedDescription)"
+                return false
+            }
+        }
+        state.reportOperation = .savingCard
+        state.reportError = nil
+        let spec: ReportSpec
+        do {
+            let payload: EngineDTO.ReportCardsUpdatePayload = try await client.call(
+                "report.cards_update", params: ["spec_path": .string(editor.path), "cards": .array(cards)]
+            )
+            state.reportSpecEditor = payload.cards.toModel()
+            spec = payload.spec.toModel()
+        } catch {
+            endReportOperation()
+            reportFailure(error)
+            return false
+        }
+        endReportOperation()
+        if state.reportSpec?.path == spec.path {
+            state.reportSpec = spec
+            if state.report != nil { await runReport() }
+        } else if state.reportSpec == nil {
+            await openReportSpec(at: URL(fileURLWithPath: spec.path))
+        }
+        let quantos = alterados.count == 1 ? "1 card gravado" : "\(alterados.count) cards gravados"
+        state.statusMessage = "\(quantos) em \(spec.fileName)"
+        return true
+    }
+
+    private func endReportOperation() {
+        state.reportOperation = nil
+        state.reportProgressMessage = nil
+    }
+
+    /// Erro da aba fica em linha, perto de onde aconteceu, e na barra de status.
+    private func reportFailure(_ error: Error) {
+        if let engineError = error as? EngineError, engineError == .cancelled { return }
+        report(error)
+        state.reportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    // MARK: - Execução (projeto do dono, B1)
+
+    /// Primeira leitura da aba: projetos já abertos e a execução em andamento
+    /// (se o app abriu com uma rodando, ou o motor reiniciou). Abre o projeto
+    /// mais recente, que é o que o dono deixou aberto da última vez.
+    ///
+    /// Roda no `.task` da view: sair da aba cancela. Por isso a volta confere
+    /// o que ficou pela metade (projeto sem análise, sem doctor) e refaz
+    /// (revisão FR-01), em vez de só olhar o `run.status`.
+    func loadExecution() async {
+        let ex = state.execution
+        guard client != nil else { return }
+        if !ex.loadedOnce {
+            ex.operation = .loading
+            do {
+                let lista: EngineDTO.ProjectList = try await chamarMotor("project.list")
+                ex.operation = nil
+                ex.projects = lista.projects
+                ex.loadedOnce = true
+            } catch {
+                ex.operation = nil
+                executionLoadFailure(error)
+                return
+            }
+            if ex.currentProjectID == nil, let recente = ex.projects.first {
+                ex.select(recente)
+            }
+        }
+        await refreshRunStatus()
+        guard !Task.isCancelled, ex.currentProjectID != nil, ex.operation == nil else { return }
+        if ex.inspection == nil {
+            await inspectProject()
+        }
+        if ex.inspection != nil, ex.doctor == nil, !ex.doctorRunning, !Task.isCancelled {
+            await runDoctor()
+        }
+    }
+
+    /// Projeto pode ser trocado ou esquecido: nada rodando nem começando
+    /// (revisão FR-03).
+    private var executionProjectFree: Bool {
+        let ex = state.execution
+        return client != nil && !ex.isRunning && !ex.starting && ex.operation == nil
+    }
+
+    /// Abre uma pasta (Abrir Projeto… ou um recente). O motor valida a pasta e
+    /// devolve o item do registro; em seguida vêm o `main` resumido e o doctor.
+    func openProject(path: String) async {
+        let ex = state.execution
+        guard executionProjectFree else { return }
+        ex.operation = .opening
+        ex.error = nil
+        // O doctor do projeto anterior ocupa a fila `project` do motor por até
+        // 3 min: cancelado, o motor para entre checagens (revisão FR-02).
+        await cancelDoctor()
+        do {
+            let aberto: EngineDTO.ProjectOpened = try await chamarMotor("project.open", params: ["path": .string(path)])
+            ex.operation = nil
+            ex.loadedOnce = true
+            ex.select(aberto.project)
+            state.statusMessage = "Projeto \(aberto.project.name) aberto"
+        } catch {
+            ex.operation = nil
+            executionFailure(error)
+            return
+        }
+        await inspectProject()
+        await runDoctor()
+    }
+
+    /// Tira o projeto da lista. Nada na pasta do projeto é apagado.
+    func forgetCurrentProject() async {
+        let ex = state.execution
+        guard let projeto = ex.currentProject, executionProjectFree else { return }
+        await cancelDoctor()
+        do {
+            let _: EngineDTO.ProjectForgotten = try await chamarMotor(
+                "project.forget", params: ["project_id": .string(projeto.id)]
+            )
+            ex.forgetCurrent()
+            ex.lastResult = nil
+            ex.clearConsole()
+            state.statusMessage = "\(projeto.name) saiu da lista. A pasta do projeto não foi tocada."
+        } catch {
+            executionFailure(error)
+        }
+    }
+
+    func inspectProject() async {
+        let ex = state.execution
+        guard let id = ex.currentProjectID else { return }
+        ex.operation = .inspecting
+        defer { ex.operation = nil }
+        do {
+            let leitura: EngineDTO.ProjectInspection = try await chamarMotor(
+                "project.inspect", params: ["project_id": .string(id)]
+            )
+            guard ex.currentProjectID == id else { return }
+            ex.inspection = leitura
+            ex.upsertKeepingOrder(leitura.project)
+        } catch {
+            executionFailure(error)
+        }
+    }
+
+    /// Escolha manual do interpretador (`.string`) ou volta à detecção
+    /// (`.null`). Devolve o mesmo que o inspect, e o doctor é refeito com o
+    /// interpretador novo.
+    func configureInterpreter(_ interpretador: JSONValue) async {
+        let ex = state.execution
+        guard let id = ex.currentProjectID, ex.operation == nil, !ex.isRunning, !ex.starting else { return }
+        ex.operation = .configuring
+        ex.error = nil
+        await cancelDoctor()
+        do {
+            let leitura: EngineDTO.ProjectInspection = try await chamarMotor(
+                "project.configure", params: ["project_id": .string(id), "interpreter": interpretador]
+            )
+            ex.operation = nil
+            guard ex.currentProjectID == id else { return }
+            ex.inspection = leitura
+            ex.upsertKeepingOrder(leitura.project)
+            state.statusMessage = leitura.interpreter.isManual
+                ? "Interpretador escolhido: \(leitura.interpreter.path ?? "")"
+                : "Interpretador volta a ser o detectado"
+        } catch {
+            ex.operation = nil
+            executionFailure(error)
+            return
+        }
+        await runDoctor()
+    }
+
+    /// Pré-requisitos do projeto, com o progresso do motor (uma mensagem por
+    /// checagem) no lugar do texto fixo.
+    ///
+    /// O doctor em andamento é cancelado e refeito: depois de trocar o
+    /// projeto ou o interpretador, o resultado tem de ser do estado novo, e
+    /// não o do doctor que já estava na fila (revisão FR-02).
+    func runDoctor() async {
+        await cancelDoctor()
+        guard let id = state.execution.currentProjectID else { return }
+        let tarefa = Task { [weak self] in
+            guard let self else { return }
+            await self.performDoctor(projectID: id)
+        }
+        doctorTask = tarefa
+        await tarefa.value
+        if doctorTask == tarefa { doctorTask = nil }
+    }
+
+    /// Cancela o doctor em voo (o cliente avisa o motor com
+    /// `$/cancelRequest`) e espera ele soltar o estado.
+    func cancelDoctor() async {
+        guard let tarefa = doctorTask else { return }
+        tarefa.cancel()
+        await tarefa.value
+        if doctorTask == tarefa { doctorTask = nil }
+    }
+
+    private func performDoctor(projectID id: String) async {
+        let ex = state.execution
+        progressSequence += 1
+        let token = "project.doctor-\(progressSequence)"
+        ex.doctorToken = token
+        ex.doctorRunning = true
+        ex.doctorProgress = "Conferindo o projeto…"
+        defer {
+            if ex.doctorToken == token {
+                ex.doctorRunning = false
+                ex.doctorProgress = nil
+                ex.doctorToken = nil
+            }
+        }
+        var params: [String: JSONValue] = ["project_id": .string(id), "progress_token": .string(token)]
+        if let alvo = ex.targetDeviceID { params["device_id"] = .string(alvo) }
+        do {
+            let resultado: EngineDTO.ProjectDoctor = try await chamarMotor("project.doctor", params: params)
+            guard !Task.isCancelled, ex.currentProjectID == id else { return }
+            ex.doctor = resultado
+        } catch {
+            guard !Task.isCancelled else { return }
+            executionFailure(error)
+        }
+    }
+
+    /// Relê o projeto e monta o pedido de confiança com a análise de agora:
+    /// o motor grava a impressão do que roda no momento em que o dono
+    /// confirma, e o diálogo tem de mostrar exatamente isso (revisão FR-05).
+    private func freshTrustRequest(message: String?, then: ExecutionTrustRequest.Then) async -> ExecutionTrustRequest? {
+        await cancelDoctor()
+        await inspectProject()
+        guard let leitura = state.execution.inspection else { return nil }
+        return ExecutionTrustRequest(leitura, message: message, then: then)
+    }
+
+    /// "Confiar no projeto e verificar": abre o mesmo diálogo do Rodar.
+    func requestTrustForDoctor() async {
+        let ex = state.execution
+        guard ex.inspection != nil, ex.operation == nil, !ex.isRunning, !ex.starting else { return }
+        if let pedido = await freshTrustRequest(message: nil, then: .verify) {
+            ex.confirmation = .trust(pedido)
+        }
+    }
+
+    /// O dono confirmou o diálogo. Recebe o pedido, e não lê do estado: o
+    /// sheet já fechou (e zerou `confirmation`) quando esta tarefa roda.
+    func confirmExecutionDialog(_ pedido: ExecutionConfirmation) async {
+        state.execution.confirmation = nil
+        switch pedido {
+        case .trust(let confianca):
+            switch confianca.then {
+            case .run:
+                await startRun(trusted: true)
+            case .verify:
+                await trustProject(confianca.projectId)
+            }
+        case .unknownHub(_, let confiou):
+            await startRun(trusted: confiou, allowUnknownHub: true)
+        }
+    }
+
+    /// `project.trust` e o doctor de novo, agora com as checagens que
+    /// esperavam a confiança.
+    func trustProject(_ id: String) async {
+        let ex = state.execution
+        ex.operation = .trusting
+        do {
+            let confiado: EngineDTO.ProjectTrusted = try await chamarMotor(
+                "project.trust", params: ["project_id": .string(id)]
+            )
+            ex.operation = nil
+            if let projeto = confiado.project { ex.upsertKeepingOrder(projeto) } else { ex.markTrusted(id) }
+            state.statusMessage = "Projeto marcado como confiável"
+        } catch {
+            ex.operation = nil
+            executionFailure(error)
+            return
+        }
+        await runDoctor()
+    }
+
+    /// Roda o `main` do projeto. O console chega por `run.log` e o fim por
+    /// `run.finished`. Projeto ainda não confiável abre o diálogo e repete com
+    /// `trusted: true`; hub que o motor não conseguiu provar local pede
+    /// confirmação e repete com `allow_unknown_hub: true`.
+    func startRun(trusted: Bool = false, allowUnknownHub: Bool = false) async {
+        let ex = state.execution
+        guard let leitura = ex.inspection, !ex.isRunning, !ex.starting, ex.operation == nil else { return }
+        ex.starting = true
+        ex.adoptedRunId = nil
+        ex.error = nil
+        ex.lastResult = nil
+        ex.clearConsole()
+        var params: [String: JSONValue] = [
+            "project_id": .string(leitura.project.id),
+            "record_video": .bool(ex.recordVideo),
+        ]
+        if let alvo = ex.targetDeviceID { params["device_id"] = .string(alvo) }
+        if trusted { params["trusted"] = .bool(true) }
+        if allowUnknownHub { params["allow_unknown_hub"] = .bool(true) }
+        do {
+            let inicio: EngineDTO.RunStarted = try await chamarMotor("run.start", params: params)
+            ex.starting = false
+            if trusted { ex.markTrusted(leitura.project.id) }
+            // Execução que falha na hora pode terminar antes desta resposta:
+            // o `run.finished` já chegou, e ela não volta a "rodando".
+            guard ex.lastResult?.runId != inicio.runId else { return }
+            ex.adoptedRunId = nil
+            ex.activeRun = ActiveRun(
+                runId: inicio.runId, projectId: inicio.projectId ?? leitura.project.id,
+                startedAt: inicio.startedAt.map { Date(timeIntervalSince1970: $0) } ?? Date(),
+                folder: inicio.folder, deviceId: inicio.deviceId, videoWarning: inicio.video?.warning
+            )
+            state.statusMessage = "Rodando \(leitura.project.name)…"
+        } catch let EngineError.engine(code, message) where code == "project_not_trusted" {
+            ex.starting = false
+            if let pedido = await freshTrustRequest(message: message, then: .run) {
+                ex.confirmation = .trust(pedido)
+            }
+        } catch let EngineError.engine(code, message) where code == "hub_unknown" {
+            ex.starting = false
+            ex.confirmation = .unknownHub(message: message, trusted: trusted)
+        } catch {
+            ex.starting = false
+            executionFailure(error)
+        }
+    }
+
+    /// Para a execução: o motor manda SIGINT, SIGTERM e SIGKILL ao grupo, e o
+    /// `run.finished` chega depois com `cancelled`. A mensagem vai antes da
+    /// chamada: a resposta pode chegar depois do fim (revisão FR-08).
+    func stopRun() async {
+        let ex = state.execution
+        guard ex.isRunning, !ex.stopping else { return }
+        ex.stopping = true
+        state.statusMessage = "Parando a execução…"
+        do {
+            let parada: EngineDTO.RunStopped = try await chamarMotor("run.stop")
+            if !parada.running && !parada.stopped {
+                // Já tinha acabado e o aviso se perdeu.
+                ex.activeRun = nil
+                ex.stopping = false
+            }
+        } catch {
+            ex.stopping = false
+            executionFailure(error)
+        }
+    }
+
+    /// `run.status`: acerta o "rodando" com o motor (um aviso perdido, um
+    /// motor que reiniciou e levou a execução junto).
+    func refreshRunStatus() async {
+        let ex = state.execution
+        guard !ex.starting, let status: EngineDTO.RunStatus = try? await chamarMotor("run.status"),
+              !ex.starting else { return }
+        if let ativa = status.run, status.running {
+            if ex.activeRun?.runId != ativa.runId {
+                ex.activeRun = ActiveRun(
+                    runId: ativa.runId, projectId: ativa.projectId,
+                    startedAt: ativa.startedAt.map { Date(timeIntervalSince1970: $0) } ?? Date(),
+                    folder: ativa.folder, deviceId: ativa.deviceId, videoWarning: nil
+                )
+            }
+            ex.stopping = ativa.stopping
+        } else if ex.activeRun != nil {
+            ex.activeRun = nil
+            ex.stopping = false
+            if let ultimo = status.last { ex.lastResult = ultimo }
+        } else if ex.lastResult == nil, let ultimo = status.last {
+            ex.lastResult = ultimo
+        }
+    }
+
+    /// A linha ou o fim é da execução desta aba? Com a execução conhecida,
+    /// só o `run_id` dela; durante o `run.start`, adota o primeiro que chegar
+    /// (o `run.log`/`run.finished` pode vir antes da resposta, D-F8). Sem
+    /// `run_id` (motor anterior), aceita (revisão FR-07).
+    private func acceptsRun(_ runId: String?) -> Bool {
+        let ex = state.execution
+        guard let runId else { return true }
+        if let ativa = ex.activeRun { return ativa.runId == runId }
+        guard ex.starting else { return false }
+        if let adotado = ex.adoptedRunId { return adotado == runId }
+        ex.adoptedRunId = runId
+        return true
+    }
+
+    private func applyRunFinished(_ fim: EngineDTO.RunFinished) {
+        let ex = state.execution
+        ex.lastResult = fim
+        ex.activeRun = nil
+        ex.stopping = false
+        let resumo = ExecutionResultSummary(fim)
+        state.statusMessage = resumo.message.map { "\(resumo.title): \($0)" } ?? "Execução: \(resumo.title.lowercased())"
+        // Quem usa leitor de tela e está no console não vê o banner.
+        AccessibilityNotification.Announcement("Execução: \(resumo.title)").post()
+    }
+
+    /// Queda do motor: a execução morreu junto (ou ficou órfã). A aba não
+    /// pode continuar dizendo "rodando" (revisão FR-04).
+    private func executionLostWithEngine() {
+        let ex = state.execution
+        ex.starting = false
+        ex.stopping = false
+        ex.adoptedRunId = nil
+        ex.doctorRunning = false
+        ex.doctorProgress = nil
+        ex.doctorToken = nil
+        guard let ativa = ex.activeRun else { return }
+        ex.activeRun = nil
+        ex.lastResult = EngineDTO.RunFinished(
+            runId: ativa.runId, status: "indeterminate", folder: ativa.folder,
+            message: "O motor encerrou durante a execução. Confira o console.log na pasta da execução.",
+            durationS: Date().timeIntervalSince(ativa.startedAt)
+        )
+    }
+
+    /// Erro da aba fica em linha e na barra de status. `invalid_input` e
+    /// `device_busy` trazem a mensagem do motor, que já diz o que fazer.
+    private func executionFailure(_ error: Error) {
+        if let engineError = error as? EngineError, engineError == .cancelled { return }
+        state.execution.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        report(error)
+    }
+
+    /// A primeira leitura não acusa motor fora do ar (a faixa já faz isso),
+    /// só erro do próprio motor.
+    private func executionLoadFailure(_ error: Error) {
+        if case EngineError.engine(_, let message) = error {
+            state.execution.error = message
+        }
+    }
+
+    // MARK: - Notificacoes do motor
+
+    private struct NotificationEnvelope<Payload: Decodable>: Decodable {
+        let params: Payload
+    }
+
+    private func decodeParams<Payload: Decodable>(_ notification: EngineNotification, as type: Payload.Type) -> Payload? {
+        try? JSONDecoder().decode(NotificationEnvelope<Payload>.self, from: notification.payload).params
+    }
+
+    /// Interno, e não privado, para o teste poder entregar uma notificação
+    /// do jeito que o motor entrega.
+    func handle(_ notification: EngineNotification) async {
+        switch notification.method {
+        case "stream.frame":
+            let geracao = frameGeneration
+            guard let (frame, image) = await Self.decodeFrameNotification(notification.payload),
+                  mayPublish(frame, generation: geracao) else { return }
+            state.currentFrame = image
+            // As métricas chegam dentro do próprio quadro. Antes daqui saía um
+            // `stream.stats`, ou seja, uma ida e volta completa por quadro, e o
+            // laço de notificações ficava parado esperando a resposta enquanto
+            // os quadros seguintes se empilhavam.
+            if let fps = frame.fps { state.fps = Int(fps.rounded()) }
+            if let captureMs = frame.captureMs { state.latencyMs = Int(captureMs.rounded()) }
+
+        case "home.changed":
+            await refreshHome()
+
+        case "device.changed":
+            struct Change: Decodable {
+                let platform: String
+                let deviceId: String?
+                enum CodingKeys: String, CodingKey {
+                    case platform
+                    case deviceId = "device_id"
+                }
+            }
+            guard let change = decodeParams(notification, as: Change.self) else { return }
+            if state.selectedDevice != change.deviceId {
+                state.hierarchyElements = []
+                state.selectedElement = nil
+                clearFrame()
+            }
+            state.selectedDevice = change.deviceId
+            if change.deviceId != nil {
+                // A ativação vem antes de reler a lista de propósito. O aviso é
+                // autoridade sobre a chegada; a lista, não. Um `devices.list`
+                // que volte vazio por um instante — o que acontece de verdade
+                // com USB instável — zerava o alvo recém-anunciado, e o espelho
+                // não chegava a ser ligado.
+                await activateDevice()
+                state.statusMessage = "Dispositivo conectado"
+            } else {
+                await stopStream()
+                if state.scrcpyRunning {
+                    await stopScrcpy()
+                }
+                state.scrcpyRunning = false
+                state.hierarchyElements = []
+                state.selectedElement = nil
+                clearFrame()
+                state.statusMessage = "Dispositivo desconectado"
+            }
+            await refreshDevices()
+
+        case "passive.step":
+            guard let passo = decodeParams(notification, as: EngineDTO.RecordedStep.self) else { return }
+            // Mesmo destino do clique no espelho: o passo tem de aparecer no
+            // código, que é o ponto inteiro da escuta passiva.
+            state.selectedElement = passo.element.toModel()
+            state.locatorsCode += passo.objectCode + "\n"
+            state.actionsCode += passo.actionCode + "\n"
+            state.statusMessage = "Gravado do aparelho: \(passo.varName)"
+            await refreshSteps()
+
+        case "passive.skipped":
+            struct Pulado: Decodable { let reason: String }
+            guard let motivo = decodeParams(notification, as: Pulado.self) else { return }
+            state.statusMessage = "Toque não virou passo: \(motivo.reason)"
+            if motivo.reason.contains("hierarquia") {
+                debouncedRefreshHierarchy(delayNanoseconds: 0)
+            }
+
+        case "flow.log":
+            struct Linha: Decodable { let line: String }
+            guard let payload = decodeParams(notification, as: Linha.self) else { return }
+            appendRunLog(LogLine(timestamp: Date(), prefix: "RUN", message: payload.line))
+
+        case "run.log":
+            // Aceita antes da resposta do `run.start` (as primeiras linhas
+            // podem chegar antes dela), mas só da execução desta aba.
+            guard let payload = decodeParams(notification, as: EngineDTO.RunLogLine.self),
+                  acceptsRun(payload.runId) else { return }
+            state.execution.appendConsole(payload.line)
+
+        case "run.finished":
+            guard let payload = decodeParams(notification, as: EngineDTO.RunFinished.self),
+                  acceptsRun(payload.runId) else { return }
+            applyRunFinished(payload)
+
+        case "flow.step":
+            // O passo atual vem do motor, nos dois runners. Antes saía de uma
+            // regex sobre o log, que só casava na linha de falha.
+            // Só durante a execução: um aviso atrasado, já depois do fim, não
+            // move o destaque da execução que terminou.
+            guard state.runState == .running,
+                  let passo = decodeParams(notification, as: EngineDTO.FlowStep.self) else { return }
+            state.currentRunStep = passo.index
+            state.runStepTotal = passo.total
+
+        case "flow.finished":
+            guard let payload = decodeParams(notification, as: EngineDTO.FlowFinished.self) else { return }
+            state.statusMessage = payload.message
+            let prefixo: String
+            if payload.cancelled {
+                // Parar não é falhar (D-A): volta ao ocioso, com a parada no log.
+                state.runState = .idle
+                prefixo = "STOP"
+            } else {
+                state.runState = payload.success ? .passed : .failed
+                prefixo = payload.success ? "PASS" : "FAIL"
+            }
+            appendRunLog(LogLine(timestamp: Date(), prefix: prefixo, message: payload.message))
+
+        case "$/progress":
+            guard let progresso = decodeParams(notification, as: EngineDTO.Progress.self) else { return }
+            // O doctor tem token próprio: roda junto com outras operações.
+            if let doctor = state.execution.doctorToken, progresso.token == .string(doctor) {
+                state.execution.doctorProgress = progresso.message
+                return
+            }
+            guard let ativo = activeProgressToken, progresso.token == .string(ativo) else { return }
+            if let percent = progresso.percent {
+                state.statusMessage = "\(progresso.message) (\(Int(percent.rounded()))%)"
+            } else {
+                state.statusMessage = progresso.message
+            }
+            if ativo.hasPrefix("report.") {
+                state.reportProgressMessage = progresso.message
+            }
+
+        case "stream.settled":
+            // Tela parou de mudar: relê a hierarquia de forma desacoplada para
+            // não travar a recepção contínua dos quadros do espelho. Com a
+            // janela oculta ninguém vê a árvore: relê quando ela voltar. A
+            // escuta passiva grava do aparelho e segue relendo.
+            if windowVisible || state.passiveListening {
+                debouncedRefreshHierarchy()
+            } else {
+                hierarchyStale = true
+            }
+
+        case "perf.profile":
+            guard let status = decodeParams(notification, as: EngineDTO.PerfStatus.self) else { return }
+            applyPerf(status)
+
+        case "proxy.event":
+            guard let event = decodeParams(notification, as: EngineDTO.NetworkEventPayload.self) else { return }
+            state.httpRequests.append(event.toModel())
+            trimTraffic()
+
+        case "analytics.event":
+            guard let event = decodeParams(notification, as: EngineDTO.AnalyticsEventPayload.self) else { return }
+            state.analyticsEvents.append(event.toModel())
+            trimTraffic()
+
+        default:
+            break
+        }
+    }
+
+    /// A lista da interface tem teto proprio: o motor ja limita o historico
+    /// dele, mas uma sessao longa ainda acumularia milhares de linhas na tabela.
+    private func trimTraffic() {
+        let limit = 1000
+        if state.httpRequests.count > limit {
+            state.httpRequests.removeFirst(state.httpRequests.count - limit)
+        }
+        if state.analyticsEvents.count > limit {
+            state.analyticsEvents.removeFirst(state.analyticsEvents.count - limit)
+        }
+    }
+
+    /// O log da execução também tem teto: um fluxo longo (ou em laço) não
+    /// pode crescer a lista sem fim. Saem as linhas mais antigas.
+    private func appendRunLog(_ linha: LogLine) {
+        let limit = 5000
+        state.runLog.append(linha)
+        if state.runLog.count > limit {
+            state.runLog.removeFirst(state.runLog.count - limit)
+        }
+    }
+
+    // MARK: - Diagnostico
+
+    private func applyDaemonStatus(from info: EngineDTO.EngineInfo) {
+        state.daemonStatus.adb = info.adbAvailable ? .ok : .error
+        state.daemonStatus.proxy = info.proxy.running ? .ok : .off
+        state.scrcpyAvailable = info.scrcpyAvailable
+    }
+
+    private func report(_ error: Error) {
+        // Cancelamento foi pedido por alguém (prazo, tarefa, encerramento) e
+        // não é falha a mostrar.
+        if let engineError = error as? EngineError, engineError == .cancelled { return }
+        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        lastError = message
+        state.statusMessage = message
+        if let engineError = error as? EngineError, engineError.isRecoverableBySetup {
+            isConnected = false
+        }
+    }
+}

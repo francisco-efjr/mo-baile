@@ -1,0 +1,1336 @@
+{
+  "spec_version": "1.0.0",
+  "generated_at": "2026-09-04",
+  "product": {
+    "name": "Mo baile",
+    "subtitle": "Element Recorder",
+    "type": "desktop_app",
+    "platform": "macOS 13+ (Ventura, Sonoma, Sequoia), Retina",
+    "runtime": "Python 3.9+ / Tkinter + Ttk",
+    "design_language": "Apple Human Interface Guidelines (referências: Xcode 16, Instruments, Raycast, Linear, HTTP Toolkit)",
+    "reference_prototype": "Mo baile Desktop.dc.html (ids 1a, 1b, 1c, 1d, 2a, 2b)"
+  },
+  "window": {
+    "default_size": {
+      "width": 1440,
+      "height": 900
+    },
+    "min_size": {
+      "width": 1100,
+      "height": 720
+    },
+    "chrome": "traffic lights nativos; toolbar unificada (sem título de janela separado)",
+    "fixed_regions": [
+      "toolbar",
+      "status_bar"
+    ],
+    "collapsible_regions": [
+      "panel_device",
+      "panel_hierarchy",
+      "panel_workspace"
+    ]
+  },
+  "themes": {
+    "mode_source": "sistema (NSApp.effectiveAppearance / prefers-color-scheme); override manual opcional em Preferências",
+    "light": {
+      "id": "praia_light",
+      "name": "Praia (Claro)",
+      "derived_from": "paleta da ilustração de referência (azul-céu, flamingo, verde, tinta navy)",
+      "tokens": {
+        "bg_window": "#F2FAFD",
+        "bg_toolbar": "#DCF0F8",
+        "bg_panel": "#E7F5FA",
+        "bg_panel_alt": "#EDF7FB",
+        "bg_content": "#FFFFFF",
+        "bg_subtle": "#F7FCFE",
+        "bg_control": "#FFFFFF",
+        "bg_control_track": "#CBE4EE",
+        "bg_placeholder": "rgba(255,255,255,.42)",
+        "bg_terminal": "#15202B",
+        "bg_device_screen": "#A8E1F2",
+        "device_bezel": "#15202B",
+        "border": "#C3E2EE",
+        "border_subtle": "#CBE4EE",
+        "text_primary": "#17323F",
+        "text_secondary": "#5A7C8B",
+        "text_tertiary": "#7D9EAC",
+        "text_label": "#8FA9B5",
+        "text_disabled": "#A9C3CE",
+        "accent": "#E88BA5",
+        "accent_pressed": "#D9738F",
+        "accent_on": "#FFFFFF",
+        "selection_bg": "#FBE3EA",
+        "selection_border": "#EFB6C6",
+        "success": "#6BBF6A",
+        "success_text": "#3F8F4E",
+        "success_bg": "#D6EFD4",
+        "warning": "#E0B84B",
+        "warning_text": "#8A6A22",
+        "warning_bg": "#F6E7C1",
+        "danger": "#D9536F",
+        "shadow_control": "0 1px 2px rgba(23,50,63,.14)",
+        "shadow_device": "0 14px 34px rgba(23,50,63,.22)",
+        "shadow_modal": "0 32px 80px rgba(23,50,63,.28)",
+        "overlay_scrim": "rgba(23,50,63,.42)"
+      },
+      "syntax": {
+        "keyword": "#C2557A",
+        "function": "#2E7FA6",
+        "type_class": "#7B62B8",
+        "string": "#3F8F4E",
+        "number": "#C97A2E",
+        "comment": "#8FA9B5",
+        "plain": "#17323F",
+        "gutter": "#A9C3CE",
+        "gutter_bg": "#F7FCFE",
+        "file_title_actions": "#2E7FA6",
+        "file_title_locators": "#D9738F"
+      }
+    },
+    "dark": {
+      "id": "praia_dark",
+      "name": "Praia (Escuro)",
+      "derived_from": "Catppuccin Macchiato / Apple System Dark HIG",
+      "tokens": {
+        "bg_window": "#1E1E2E",
+        "bg_toolbar": "#181825",
+        "bg_panel": "#181825",
+        "bg_panel_alt": "#1E1E2E",
+        "bg_content": "#1E1E2E",
+        "bg_subtle": "#181825",
+        "bg_control": "#11111B",
+        "bg_control_track": "#313244",
+        "bg_placeholder": "#1F1F30",
+        "bg_terminal": "#0B0B12",
+        "bg_device_screen": "#151520",
+        "device_bezel": "#11111B",
+        "border": "#313244",
+        "border_subtle": "#26263A",
+        "border_strong": "#45475A",
+        "text_primary": "#CDD6F4",
+        "text_secondary": "#A6ADC8",
+        "text_tertiary": "#7F849C",
+        "text_label": "#6C7086",
+        "text_disabled": "#585B70",
+        "accent": "#89B4FA",
+        "accent_pressed": "#74A6F5",
+        "accent_on": "#11111B",
+        "selection_bg": "rgba(137,180,250,.16)",
+        "selection_border": "rgba(137,180,250,.35)",
+        "success": "#A6E3A1",
+        "success_text": "#A6E3A1",
+        "success_bg": "rgba(166,227,161,.14)",
+        "warning": "#F9E2AF",
+        "warning_text": "#F9E2AF",
+        "warning_bg": "rgba(249,226,175,.14)",
+        "danger": "#F38BA8",
+        "shadow_control": "0 1px 2px rgba(0,0,0,.35)",
+        "shadow_device": "0 12px 30px rgba(0,0,0,.45)",
+        "shadow_modal": "0 32px 80px rgba(0,0,0,.6)",
+        "overlay_scrim": "rgba(17,17,27,.62)"
+      },
+      "syntax": {
+        "keyword": "#CBA6F7",
+        "function": "#89B4FA",
+        "type_class": "#F9E2AF",
+        "string": "#A6E3A1",
+        "number": "#FAB387",
+        "comment": "#6C7086",
+        "plain": "#CDD6F4",
+        "gutter": "#45475A",
+        "gutter_bg": "#181825",
+        "file_title_actions": "#89B4FA",
+        "file_title_locators": "#94E2D5"
+      }
+    },
+    "platform_identity": {
+      "ios": "#0A84FF",
+      "android": "#34C759"
+    },
+    "traffic_lights": {
+      "close": "#FF5F57",
+      "minimize": "#FEBC2E",
+      "zoom": "#28C840"
+    }
+  },
+  "typography": {
+    "families": {
+      "ui": [
+        "SF Pro Text",
+        "-apple-system",
+        "BlinkMacSystemFont",
+        "Helvetica Neue"
+      ],
+      "mono": [
+        "SF Mono",
+        "JetBrains Mono",
+        "Menlo"
+      ]
+    },
+    "styles": {
+      "app_title": {
+        "size": 13,
+        "weight": 600,
+        "tracking": "-0.01em"
+      },
+      "app_subtitle": {
+        "size": 11,
+        "weight": 400,
+        "color_token": "text_tertiary"
+      },
+      "section_label": {
+        "size": 10,
+        "weight": 600,
+        "tracking": "0.09em",
+        "transform": "uppercase",
+        "color_token": "text_tertiary"
+      },
+      "control_label": {
+        "size": 11.5,
+        "weight": 400
+      },
+      "control_label_active": {
+        "size": 11.5,
+        "weight": 590
+      },
+      "button_primary": {
+        "size": 11.5,
+        "weight": 640
+      },
+      "body_small": {
+        "size": 11,
+        "weight": 400,
+        "color_token": "text_secondary"
+      },
+      "empty_title": {
+        "size": 19,
+        "weight": 640,
+        "tracking": "-0.015em"
+      },
+      "empty_body": {
+        "size": 12.5,
+        "weight": 400,
+        "color_token": "text_tertiary"
+      },
+      "code": {
+        "family": "mono",
+        "size": 11.5,
+        "line_height": 1.85
+      },
+      "code_focus_mode": {
+        "family": "mono",
+        "size": 12.5,
+        "line_height": 1.9
+      },
+      "data_mono": {
+        "family": "mono",
+        "size": 10.5,
+        "line_height": 1.6
+      },
+      "table_header": {
+        "family": "mono",
+        "size": 9.5,
+        "weight": 600,
+        "tracking": "0.06em",
+        "color_token": "text_label"
+      },
+      "table_row": {
+        "family": "mono",
+        "size": 11
+      },
+      "status_bar": {
+        "family": "mono",
+        "size": 10,
+        "color_token": "text_secondary"
+      },
+      "terminal": {
+        "family": "mono",
+        "size": 10.5,
+        "line_height": 1.75
+      },
+      "badge_count": {
+        "family": "mono",
+        "size": 9,
+        "weight": 600
+      },
+      "overlay_tag": {
+        "family": "mono",
+        "size": 8.5,
+        "weight": 600
+      }
+    },
+    "minimum_ui_size": 10
+  },
+  "metrics": {
+    "radius": {
+      "segment_item": 6,
+      "control": 8,
+      "field": 7,
+      "card": 12,
+      "panel_card": 9,
+      "modal": 14,
+      "device_outer": 40,
+      "device_screen": 33,
+      "notch": 11,
+      "pill_badge": 5
+    },
+    "heights": {
+      "toolbar": 52,
+      "panel_header": 34,
+      "tab_bar": 40,
+      "editor_header": 30,
+      "element_details_footer": 38,
+      "status_bar": 26,
+      "modal_header": 44,
+      "modal_footer": 52,
+      "toggle_track": 20,
+      "collapsed_rail_width": 30
+    },
+    "widths": {
+      "panel_device": 376,
+      "panel_device_min": 340,
+      "panel_device_compact": 280,
+      "panel_hierarchy": 290,
+      "panel_hierarchy_min": 260,
+      "workspace_min": 520,
+      "code_gutter": 34,
+      "device_dropdown_min": 210
+    },
+    "padding": {
+      "toolbar_x": 16,
+      "panel_x": 14,
+      "editor_x": 12,
+      "table_row_y": 7,
+      "modal_x": 16
+    },
+    "gaps": {
+      "toolbar_items": 14,
+      "toolbar_group": 8,
+      "segment_items": 2,
+      "panel_stack": 9,
+      "card_grid": 14
+    },
+    "toggle": {
+      "track": [
+        34,
+        20
+      ],
+      "knob": 16
+    },
+    "dot_status": 6,
+    "type_chip": 15,
+    "tree_indent": 18
+  },
+  "components": {
+    "unified_toolbar": {
+      "fixed": true,
+      "order": [
+        "traffic_lights",
+        "app_title + app_subtitle",
+        "platform_segmented[iOS|Android]",
+        "device_dropdown (dot de status + nome + ▾)",
+        "toggle_streaming",
+        "toggle_tap_forward",
+        "spacer",
+        "button_primary_forcar_captura",
+        "divider_vertical",
+        "panel_toggle_group"
+      ],
+      "notes": "substitui as duas barras horizontais antigas (top_bar 48px + config_bar 40px). Itens secundários (Modo Passivo, Zen, Chave dos Locators, estratégia) movem-se para a barra de abas do workspace ou para o menu do app."
+    },
+    "segmented_control": {
+      "container": {
+        "padding": 2,
+        "radius": 8,
+        "bg_token": "bg_control_track"
+      },
+      "item": {
+        "padding": [
+          4,
+          13
+        ],
+        "radius": 6,
+        "label": "control_label"
+      },
+      "item_selected": {
+        "bg_token": "bg_control",
+        "label": "control_label_active",
+        "shadow_token": "shadow_control"
+      },
+      "label_wrap": "white-space: nowrap (obrigatório)"
+    },
+    "toggle_switch": {
+      "on": {
+        "track_token": "accent",
+        "knob": "#FFFFFF",
+        "knob_align": "right"
+      },
+      "off": {
+        "track_token": "bg_control_track",
+        "knob_token": "bg_control (claro: #FFFFFF)",
+        "knob_align": "left"
+      },
+      "transition": "160ms ease-out"
+    },
+    "button": {
+      "primary": {
+        "padding": [
+          6,
+          14
+        ],
+        "radius": 8,
+        "bg_token": "accent",
+        "fg_token": "accent_on",
+        "style": "button_primary"
+      },
+      "run": {
+        "padding": [
+          6,
+          14
+        ],
+        "radius": 8,
+        "bg_token": "success",
+        "fg": "#FFFFFF",
+        "label": "▶ Rodar"
+      },
+      "secondary": {
+        "padding": [
+          5,
+          11
+        ],
+        "radius": 8,
+        "border_token": "border",
+        "bg": "transparent"
+      },
+      "destructive_text": {
+        "fg_token": "danger"
+      },
+      "disabled": {
+        "bg_token": "bg_placeholder",
+        "fg_token": "text_disabled"
+      },
+      "implementation": "FluidPillButton (Canvas) — sem bezel nativo; estados hover/pressed alteram bg em ±6% de luminância"
+    },
+    "panel_toggle_group": {
+      "purpose": "ocultar/mostrar qualquer painel; padrão dos toggles de painel de IDE",
+      "position": "extremo direito da toolbar, após divisor vertical",
+      "container": {
+        "padding": 2,
+        "radius": 8,
+        "bg_token": "bg_control_track"
+      },
+      "button": {
+        "size": [
+          26,
+          22
+        ],
+        "radius": 6
+      },
+      "button_active": {
+        "bg_token": "bg_control",
+        "shadow_token": "shadow_control",
+        "glyph_token": "text_primary"
+      },
+      "button_inactive": {
+        "bg": "transparent",
+        "glyph_token": "text_label"
+      },
+      "glyph": {
+        "spec": "retângulo 13x11, borda 1.4px, raio 2.5px; barra sólida de 4px na posição do painel",
+        "variants": [
+          {
+            "id": "panel_device",
+            "bar": "left",
+            "shortcut": "⌥1"
+          },
+          {
+            "id": "panel_hierarchy",
+            "bar": "center",
+            "shortcut": "⌥2"
+          },
+          {
+            "id": "panel_workspace",
+            "bar": "right",
+            "shortcut": "⌥3"
+          }
+        ]
+      },
+      "behavior": {
+        "toggle": "clique ou atalho colapsa/expande o painel com animação de largura 180ms ease-out",
+        "collapsed_state": "painel vira trilho vertical de 30px com chevron '›' no topo, rótulo em writing-mode vertical (ex.: 'ESPELHO ⌥1') e dot de status no rodapé; clique no trilho reexpande",
+        "background_work": "colapsar o espelho NÃO pausa o streaming — status bar informa 'espelho oculto · streaming em segundo plano'",
+        "constraints": "ao menos um painel sempre visível; toolbar e status bar nunca colapsam",
+        "restore": "⌥⌘F restaura o layout padrão (todos visíveis); estado persiste entre sessões",
+        "zen_mode": "preset que desliga panel_device e panel_hierarchy de uma vez"
+      }
+    },
+    "device_mirror": {
+      "bezel": {
+        "size": [
+          258,
+          540
+        ],
+        "radius": 40,
+        "padding": 7,
+        "bg_token": "device_bezel",
+        "shadow_token": "shadow_device"
+      },
+      "screen": {
+        "radius": 33,
+        "clip": true,
+        "bg_token": "bg_device_screen"
+      },
+      "notch": {
+        "size": [
+          76,
+          20
+        ],
+        "radius": 11,
+        "bg_token": "device_bezel",
+        "align": "top-center"
+      },
+      "compact_variant": {
+        "size": [
+          186,
+          390
+        ],
+        "radius": 30,
+        "padding": 6
+      },
+      "hover_overlay": {
+        "border": "2px accent_pressed",
+        "radius": 14,
+        "halo": "0 0 0 4px accent @ 20%",
+        "fade": "120ms"
+      },
+      "hover_tag": {
+        "position": "acima do elemento",
+        "padding": [
+          2,
+          6
+        ],
+        "radius": 5,
+        "bg_token": "accent_pressed",
+        "fg": "#FFFFFF",
+        "style": "overlay_tag",
+        "content": "<id> · <hit_target>pt"
+      },
+      "click_ripple": {
+        "shape": "círculo 26px",
+        "border": "2px #FFFFFF",
+        "animation": "escala 0.6→1.0 + fade out, 300ms ease-out"
+      },
+      "device_dock": {
+        "buttons": [
+          "‹ Voltar",
+          "Home",
+          "Girar",
+          "Screenshot"
+        ],
+        "style": "secondary",
+        "align": "center",
+        "gap": 8
+      },
+      "header": {
+        "label": "ESPELHO · TEMPO REAL",
+        "right": [
+          "badge FPS (success)",
+          "atalho ⌥1"
+        ]
+      }
+    },
+    "hierarchy_tree": {
+      "search_field": {
+        "padding": [
+          5,
+          9
+        ],
+        "radius": 7,
+        "bg_token": "bg_control",
+        "border_token": "border",
+        "placeholder": "Buscar texto, ID ou XPath",
+        "shortcut_hint": "⌘F"
+      },
+      "row": {
+        "padding": [
+          4,
+          8
+        ],
+        "indent_per_level": 18,
+        "disclosure": "▾ / ▸ 8px text_label"
+      },
+      "row_selected": {
+        "bg_token": "selection_bg",
+        "border_token": "selection_border",
+        "radius": 7,
+        "weight": 600
+      },
+      "type_chip": {
+        "size": 15,
+        "radius": 4,
+        "style": "badge_count",
+        "map": {
+          "W": {
+            "meaning": "window/application",
+            "bg_token": "bg_control_track",
+            "fg_token": "text_secondary"
+          },
+          "V": {
+            "meaning": "view/container",
+            "bg_token": "bg_control_track",
+            "fg_token": "text_secondary"
+          },
+          "T": {
+            "meaning": "texto",
+            "bg_token": "warning_bg",
+            "fg_token": "warning_text"
+          },
+          "I": {
+            "meaning": "input",
+            "bg_token": "success_bg",
+            "fg_token": "success_text"
+          },
+          "B": {
+            "meaning": "botão",
+            "bg_token": "accent",
+            "fg_token": "accent_on"
+          }
+        }
+      },
+      "attributes_panel": {
+        "label": "ATRIBUTOS",
+        "action": "Copiar tudo (fg accent_pressed)",
+        "grid": "82px / 1fr, gap 5px 8px, estilo data_mono",
+        "keys": [
+          "type",
+          "name",
+          "label",
+          "bounds",
+          "center",
+          "enabled"
+        ]
+      }
+    },
+    "workspace_tab_bar": {
+      "height": 40,
+      "left": "segmented [Page Objects | Rede HTTP <badge> | Analytics <badge>]",
+      "left_secondary": "segmented estratégia [ID | XPath | Coords]",
+      "right": [
+        "Estrutura (secundário)",
+        "Split (secundário)",
+        "▶ Rodar (run)"
+      ],
+      "activity_badge": {
+        "padding": [
+          1,
+          5
+        ],
+        "radius": 5,
+        "style": "badge_count",
+        "bg_token": "bg_control_track",
+        "variants": {
+          "network": "accent",
+          "analytics": "warning_text/warning_bg"
+        },
+        "behavior": "incrementa em tempo real; zera ao limpar"
+      }
+    },
+    "code_editor": {
+      "header": {
+        "height": 30,
+        "bg_token": "bg_subtle",
+        "title": "caminho do arquivo em mono 10/600",
+        "actions": [
+          "Copiar",
+          "Salvar",
+          "Limpar (danger, só locators)"
+        ]
+      },
+      "gutter": {
+        "width": 34,
+        "align": "right",
+        "fg_token": "gutter",
+        "bg_token": "gutter_bg"
+      },
+      "body": {
+        "style": "code",
+        "padding": [
+          10,
+          12
+        ],
+        "white_space": "pre",
+        "must_have": "min-width:0 + overflow hidden no container flex; linha mais longa deve caber em ~337px por pane"
+      },
+      "panes": {
+        "actions": "pages/<feature>.py",
+        "locators": "locators/<feature>.py",
+        "modes": [
+          "lado a lado",
+          "abas"
+        ]
+      },
+      "element_details_footer": {
+        "height": 38,
+        "style": "data_mono",
+        "fields": [
+          "passo",
+          "ação",
+          "elemento",
+          "estratégia"
+        ],
+        "right": "código sincronizado (success)"
+      }
+    },
+    "http_table": {
+      "columns": [
+        {
+          "id": "method",
+          "width": 64
+        },
+        {
+          "id": "status",
+          "width": 62
+        },
+        {
+          "id": "host",
+          "width": "1fr"
+        },
+        {
+          "id": "path",
+          "width": 300
+        },
+        {
+          "id": "size",
+          "width": 84,
+          "align": "right"
+        },
+        {
+          "id": "time",
+          "width": 76,
+          "align": "right"
+        }
+      ],
+      "header": {
+        "style": "table_header",
+        "bg_token": "bg_subtle"
+      },
+      "row": {
+        "style": "table_row",
+        "padding_y": 7,
+        "separator_token": "border_subtle"
+      },
+      "row_selected": {
+        "bg_token": "selection_bg",
+        "border_token": "selection_border"
+      },
+      "method_colors": {
+        "GET": "accent",
+        "POST": "warning",
+        "PUT": "warning",
+        "DELETE": "danger",
+        "CONNECT": "syntax.string"
+      },
+      "status_colors": {
+        "2xx": "success",
+        "3xx": "warning",
+        "4xx": "danger",
+        "5xx": "danger",
+        "none": "text_tertiary"
+      },
+      "detail_panel": {
+        "split": [
+          "Request",
+          "Response"
+        ],
+        "tabs": [
+          "Headers",
+          "Body"
+        ],
+        "tab_active": "underline 1.5px accent",
+        "json_highlight": {
+          "key": "accent",
+          "string": "syntax.string",
+          "number": "syntax.number"
+        },
+        "meta_right": "<status> · <duração>"
+      },
+      "toolbar": [
+        "Status do proxy (dot + 'Proxy 8082 ativo')",
+        "Configurar proxy via ADB",
+        "Filtrar host, path ou status",
+        "Exportar HAR",
+        "Limpar tráfego (danger)"
+      ]
+    },
+    "analytics_table": {
+      "columns": [
+        "timestamp",
+        "evento",
+        "qtd_parâmetros",
+        "origem"
+      ],
+      "toolbar": [
+        "Status do listener (FA / FA-SVC)",
+        "Filtro por nome de evento",
+        "Copiar selecionado em TSV",
+        "Exportar log_obtido.json"
+      ],
+      "detail_panel": "visualizador de bundle chave/valor (grid 82px/1fr, data_mono)"
+    },
+    "correlation_card": {
+      "context": "coluna do espelho quando a aba Rede/Analytics está ativa",
+      "label": "CORRELAÇÃO",
+      "content": [
+        "ação (mono, accent)",
+        "N requisições",
+        "N eventos de analytics"
+      ],
+      "action": "Gerar asserção de contrato (secundário)"
+    },
+    "modal_flow_runner": {
+      "scrim": "overlay_scrim sobre a janela dessaturada (filter saturate .7)",
+      "panel": {
+        "width": 860,
+        "radius": 14,
+        "border_token": "border_strong",
+        "shadow_token": "shadow_modal"
+      },
+      "header": {
+        "height": 44,
+        "title": "Executar fluxo · <chave>",
+        "badge": "EM EXECUÇÃO (success_bg/success_text)",
+        "right": "pré-condições: WDA 8100 ✓ · Proxy 8082 ✓"
+      },
+      "progress": {
+        "height": 5,
+        "radius": 3,
+        "track_token": "bg_control_track",
+        "fill_token": "success",
+        "label": "passo N / M"
+      },
+      "steps_list": {
+        "width": 334,
+        "row": {
+          "padding": [
+            7,
+            10
+          ],
+          "radius": 8
+        },
+        "states": {
+          "done": {
+            "icon": "✓",
+            "icon_token": "success",
+            "bg_token": "bg_panel"
+          },
+          "running": {
+            "icon": "◐",
+            "icon_token": "accent",
+            "bg_token": "selection_bg",
+            "border_token": "selection_border",
+            "weight": 620
+          },
+          "pending": {
+            "icon": "·",
+            "fg_token": "text_tertiary",
+            "border_token": "border_subtle"
+          }
+        },
+        "row_right": "valor de input editável (mono 10, text_tertiary)",
+        "interactions": [
+          "reordenar por drag",
+          "editar valor",
+          "excluir passo"
+        ]
+      },
+      "terminal": {
+        "bg_token": "bg_terminal",
+        "radius": 10,
+        "header": [
+          ".flow_runner.py",
+          "stdout · streaming"
+        ],
+        "style": "terminal",
+        "log_prefixes": {
+          "INFO": "accent",
+          "RUN": "accent",
+          "PASS": "success",
+          "FAIL": "danger",
+          "HTTP": "warning",
+          "FA": "warning",
+          "timestamp": "text_disabled"
+        }
+      },
+      "footer": {
+        "height": 52,
+        "summary": "N aprovados · N falhas · tempo X s",
+        "actions": [
+          "Abrir log (secundário)",
+          "Interromper (danger)",
+          "Concluir (primário, habilita ao fim)"
+        ]
+      }
+    },
+    "status_bar": {
+      "fixed": true,
+      "left_items": [
+        {
+          "id": "wda",
+          "label": "WDA 8100"
+        },
+        {
+          "id": "adb",
+          "label": "ADB server"
+        },
+        {
+          "id": "proxy",
+          "label": "Proxy MITM 8082"
+        },
+        {
+          "id": "fa",
+          "label": "FA listener"
+        }
+      ],
+      "dot_colors": {
+        "ok": "success",
+        "busy": "accent",
+        "warn": "warning",
+        "error": "danger",
+        "off": "text_label"
+      },
+      "right_items": [
+        "x <n> · y <n>",
+        "<fps> fps",
+        "settle <ms> ms",
+        "latência <ms> ms"
+      ],
+      "contextual_message": "ex.: 'espelho oculto · streaming em segundo plano', 'aguardando dispositivo'"
+    },
+    "empty_state": {
+      "device_placeholder": {
+        "size": [
+          150,
+          300
+        ],
+        "radius": 30,
+        "border": "1.5px dashed text_disabled",
+        "fill": "listras diagonais 8/16px",
+        "label": "sem sinal (mono 10)"
+      },
+      "title": "Conecte um dispositivo para começar",
+      "body": "O Mo baile detecta simuladores, emuladores e aparelhos físicos automaticamente a cada 1,5 s.",
+      "diagnostic_cards": [
+        {
+          "id": "ios",
+          "title": "iOS · WebDriverAgent",
+          "dot": "platform_identity.ios",
+          "checks": [
+            "Xcode Command Line Tools",
+            "Simulador disponível",
+            "WDA porta 8100"
+          ],
+          "action_primary": "Iniciar WDA"
+        },
+        {
+          "id": "android",
+          "title": "Android · ADB",
+          "dot": "platform_identity.android",
+          "checks": [
+            "adb server (5037)",
+            "aparelho autorizado",
+            "depuração USB"
+          ],
+          "action_secondary": "adb devices"
+        }
+      ],
+      "check_icons": {
+        "ok": "✓ success",
+        "warn": "! warning",
+        "fail": "✕ danger",
+        "neutral": "· text_label"
+      },
+      "footer_note": "procurando dispositivos… · último scan hh:mm:ss"
+    }
+  },
+  "screens": [
+    {
+      "id": "1a_2a_connected_inspecting",
+      "prototype_ids": {
+        "dark": "1a",
+        "light": "2a"
+      },
+      "name": "Conectado & Inspecionando (default)",
+      "purpose": "espelhar, inspecionar hierarquia e ver o código gerado",
+      "layout": "toolbar · [espelho 376 | hierarquia 290 | workspace 1fr] · status bar",
+      "panels_visible": [
+        "panel_device",
+        "panel_hierarchy",
+        "panel_workspace"
+      ],
+      "workspace_tab": "page_objects"
+    },
+    {
+      "id": "1b_empty",
+      "prototype_ids": {
+        "dark": "1b"
+      },
+      "name": "Desconectado / Vazio",
+      "purpose": "orientar a conexão via WDA/ADB",
+      "layout": "toolbar (controles desabilitados) · empty_state centralizado · status bar",
+      "panels_visible": [
+        "panel_workspace"
+      ]
+    },
+    {
+      "id": "1c_network",
+      "prototype_ids": {
+        "dark": "1c"
+      },
+      "name": "Tráfego de Rede (proxy MITM 8082)",
+      "purpose": "inspecionar requisições disparadas pelas ações e gerar asserções",
+      "layout": "toolbar · [espelho compacto 280 + correlation_card | workspace 1fr: tabela 296 + detalhe] · status bar",
+      "workspace_tab": "network"
+    },
+    {
+      "id": "1d_flow_runner",
+      "prototype_ids": {
+        "dark": "1d"
+      },
+      "name": "Flow Runner (execução)",
+      "purpose": "executar o fluxo gravado com log em tempo real",
+      "layout": "shell dessaturado + scrim + modal 860px",
+      "modal": "modal_flow_runner"
+    },
+    {
+      "id": "2b_focus_code",
+      "prototype_ids": {
+        "light": "2b"
+      },
+      "name": "Foco no código (painéis colapsados)",
+      "purpose": "editar/ler o código gerado em largura máxima",
+      "layout": "toolbar · [trilho 30 | trilho 30 | workspace 1fr] · status bar",
+      "panels_visible": [
+        "panel_workspace"
+      ],
+      "typography_override": "code_focus_mode",
+      "note": "toolbar e status bar permanecem fixas; trilhos reexpandem por clique ou ⌥1/⌥2"
+    },
+    {
+      "id": "analytics_pending",
+      "name": "Tagueamento Analytics",
+      "status": "especificado (componentes analytics_table), tela ainda não prototipada"
+    }
+  ],
+  "interactions": [
+    {
+      "id": "hover_mirror",
+      "trigger": "mouse move sobre o espelho",
+      "result": "bounding box + tag do elemento sob o cursor",
+      "timing": "120ms fade"
+    },
+    {
+      "id": "click_mirror",
+      "trigger": "clique no espelho",
+      "result": "ripple 300ms + seleção do nó + geração de código; se tap_forward ativo, envia toque (WDA /wda/tap ou adb shell input tap)"
+    },
+    {
+      "id": "passive_capture",
+      "trigger": "toque físico no aparelho (Quartz CGEventTap / adb getevent)",
+      "result": "seleciona o nó correspondente e adiciona o passo"
+    },
+    {
+      "id": "frame_settle",
+      "trigger": "diff de frames < diff_threshold",
+      "result": "dump da hierarquia + log 'tela estável'; status bar mostra settle em ms"
+    },
+    {
+      "id": "toggle_panel",
+      "trigger": "panel_toggle_group ou ⌥1/⌥2/⌥3",
+      "result": "colapsa/expande painel (180ms), estado persistido"
+    },
+    {
+      "id": "restore_layout",
+      "trigger": "⌥⌘F",
+      "result": "layout padrão com todos os painéis"
+    },
+    {
+      "id": "tab_switch",
+      "trigger": "segmented do workspace",
+      "result": "troca Page Objects / Rede / Analytics; badges zeram só ao limpar"
+    },
+    {
+      "id": "correlate",
+      "trigger": "seleção de um passo",
+      "result": "destaca requisições e eventos disparados por ele"
+    },
+    {
+      "id": "device_watch",
+      "trigger": "polling 1,5s",
+      "result": "atualiza dropdown e dots de status; transição suave para/da empty_state"
+    },
+    {
+      "id": "splitter_drag",
+      "trigger": "arrastar divisor",
+      "result": "redimensiona respeitando larguras mínimas"
+    }
+  ],
+  "state_model": {
+    "theme": {
+      "type": "enum",
+      "values": [
+        "system",
+        "light",
+        "dark"
+      ],
+      "default": "system"
+    },
+    "platform": {
+      "type": "enum",
+      "values": [
+        "ios",
+        "android"
+      ]
+    },
+    "selected_device": "string|null",
+    "stream_active": "bool",
+    "tap_forward": "bool",
+    "passive_mode": "bool",
+    "panels": {
+      "panel_device": "bool",
+      "panel_hierarchy": "bool",
+      "panel_workspace": "bool"
+    },
+    "panel_widths": {
+      "panel_device": "int",
+      "panel_hierarchy": "int"
+    },
+    "locator_key": "string",
+    "locator_strategy": {
+      "type": "enum",
+      "values": [
+        "id",
+        "xpath",
+        "coords"
+      ]
+    },
+    "hierarchy_tree": "node[]",
+    "selected_node": "node|null",
+    "steps": "step[] (ordenável, com valor de input)",
+    "http_requests": "request[]",
+    "selected_request": "request|null",
+    "analytics_events": "event[]",
+    "daemons": {
+      "wda": "enum(ok,warn,error,off)",
+      "adb": "enum",
+      "proxy": "enum",
+      "fa": "enum"
+    },
+    "metrics": {
+      "fps": "int",
+      "settle_ms": "int",
+      "latency_ms": "int",
+      "cursor": "[x,y]"
+    },
+    "workspace_tab": {
+      "type": "enum",
+      "values": [
+        "page_objects",
+        "network",
+        "analytics"
+      ]
+    },
+    "run": {
+      "state": "enum(idle,running,passed,failed)",
+      "current_step": "int",
+      "log": "line[]"
+    },
+    "persisted": [
+      "theme",
+      "panels",
+      "panel_widths",
+      "locator_key",
+      "locator_strategy",
+      "platform"
+    ]
+  },
+  "module_mapping": {
+    "recorder/ui.py": [
+      "unified_toolbar",
+      "panel_toggle_group",
+      "workspace_split",
+      "status_bar",
+      "theme switching"
+    ],
+    "recorder/element_parser.py": [
+      "hierarchy_tree",
+      "attributes_panel"
+    ],
+    "recorder/stream_engine.py": [
+      "device_mirror",
+      "frame_settle",
+      "fps metric"
+    ],
+    "recorder/passive_listener.py": [
+      "passive_capture"
+    ],
+    "recorder/codegen.py": [
+      "code_editor content",
+      "element_details_footer"
+    ],
+    "recorder/http_viewer.py": [
+      "http_table",
+      "analytics_table",
+      "detail_panel",
+      "correlation_card"
+    ],
+    "recorder/network_interceptor.py": [
+      "proxy status",
+      "http_requests"
+    ],
+    "recorder/analytics_listener.py": [
+      "analytics_events",
+      "FA listener status"
+    ],
+    "recorder/automation_dialogs.py": [
+      "modal_flow_runner",
+      "steps_list"
+    ],
+    "recorder/flow_runner.py": [
+      "run state",
+      "terminal log"
+    ],
+    "recorder/adb_bridge.py": [
+      "configurar proxy via ADB",
+      "adb devices",
+      "input tap"
+    ],
+    "recorder/ios_bridge.py": [
+      "WDA session",
+      "wda/tap",
+      "source XML"
+    ],
+    "recorder/device_watcher.py": [
+      "device_dropdown",
+      "empty_state transitions"
+    ]
+  },
+  "implementation_notes": [
+    "Toolbar e status bar são as únicas regiões fixas; todo o resto é colapsável via panel_toggle_group.",
+    "Todo rótulo de segmented control e de botão da barra de abas precisa de nowrap — o texto não pode quebrar em 2 linhas dentro dos 40px.",
+    "Painéis de código precisam de min-width:0 e clipping; a linha mais longa deve caber em ~337px por pane no layout de 1440px.",
+    "Não usar botões nativos do Tkinter na toolbar (bezel branco); usar FluidPillButton em Canvas.",
+    "Cantos arredondados e sombras: aproximar com Canvas (create_round_rect) ou frames aninhados; nunca desenhar bordas 3D padrão do Ttk.",
+    "Tema segue o ambiente por padrão (aparência do sistema) com override manual em Preferências; trocar tema não recria widgets, apenas reaplica tokens.",
+    "Ícones: usar SF Symbols equivalentes quando disponível; caso contrário glifos geométricos simples (retângulo com barra) como especificado em panel_toggle_group.glyph.",
+    "Splash: substituir o player de vídeo (recorder/splash.py) por animação vetorial/PNG de 2,56 s conforme bloco 'splash'; encerrar assim que os daemons estiverem prontos, respeitando o mínimo de 1,4 s."
+  ],
+  "splash": {
+    "file_reference": "Mo baile Splash.dc.html (protótipo animado) + assets/mascot.png",
+    "replaces": "splash_app.mp4 (10,0 s · 1280x720 · 2,4 MB) — muito longo e sem marca",
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "background": "radial-gradient(120% 90% at 68% 18%, #B4E4F6 0%, #97D5EF 58%, #7FC7E6 100%)"
+    },
+    "total_duration_ms": 2560,
+    "budget": "≤ 5 s garantido; alvo 2,56 s. Se os daemons ficarem prontos antes, encerrar no fim da animação atual (mín. 1,4 s) — nunca esperar por tempo fixo.",
+    "performance_rules": [
+      "Animar apenas transform, opacity e clip-path (composited); nunca width/height/top/left.",
+      "will-change: transform,opacity nas 4 camadas animadas; nada mais.",
+      "Alvo 60 fps; em Tkinter/OpenCV pré-renderizar em 30 fps (77 frames) e blitar no Canvas com PhotoImage reciclado.",
+      "Mascote: um único PNG (assets/mascot.png, 580x540) transformado — não sequência de frames.",
+      "Cortar o vídeo antigo: sem decode de MP4 no boot, o que elimina o gargalo de abertura."
+    ],
+    "timeline": [
+      {
+        "t_ms": 0,
+        "dur_ms": 380,
+        "target": "stage",
+        "motion": "fade + scale 1.04→1",
+        "easing": "cubic-bezier(.16,1,.3,1)"
+      },
+      {
+        "t_ms": 80,
+        "dur_ms": 820,
+        "target": "mascote",
+        "motion": "drift x -180→0, y +26→0, scale .94→1, fade in",
+        "easing": "cubic-bezier(.16,1,.3,1)"
+      },
+      {
+        "t_ms": 900,
+        "dur_ms": 3400,
+        "target": "mascote",
+        "motion": "bob ±11px + rotação ±1,1° (loop, ease-in-out)",
+        "note": "loop de ambiente; sobrevive ao corte"
+      },
+      {
+        "t_ms": 550,
+        "dur_ms": 2100,
+        "target": "ondas (2 anéis)",
+        "motion": "scale .55→1.35 + fade out, offset 400 ms entre anéis",
+        "easing": "ease-out"
+      },
+      {
+        "t_ms": 420,
+        "dur_ms": 620,
+        "target": "wordmark 'Mo baile' 96px/700/-.045em",
+        "motion": "mask wipe clip-path inset(0 100% 0 0)→0 + x -14→0",
+        "easing": "cubic-bezier(.16,1,.3,1)"
+      },
+      {
+        "t_ms": 740,
+        "dur_ms": 420,
+        "target": "subtítulo 'ELEMENT RECORDER' + régua rosa",
+        "motion": "rise 14px + fade",
+        "easing": "cubic-bezier(.16,1,.3,1)"
+      },
+      {
+        "t_ms": 500,
+        "dur_ms": 1100,
+        "target": "shimmer",
+        "motion": "translate x -40→40 + fade, 2 repetições",
+        "easing": "ease-in-out"
+      },
+      {
+        "t_ms": 900,
+        "dur_ms": 1240,
+        "target": "barra de progresso (4px, gradiente #E88BA5→#6BBF6A)",
+        "motion": "scaleX 0→1, transform-origin left",
+        "easing": "cubic-bezier(.3,.05,.2,1)",
+        "note": "idealmente dirigida pelo progresso real do boot"
+      },
+      {
+        "t_ms": 920,
+        "dur_ms": 1300,
+        "target": "labels de boot",
+        "motion": "3 mensagens em sequência (ADB → WDA 8100 → proxy 8082) + 'pronto' em verde a 2020 ms"
+      },
+      {
+        "t_ms": 1020,
+        "dur_ms": 900,
+        "target": "sparkles (2)",
+        "motion": "scale/rotate + fade (loop)",
+        "easing": "ease-out"
+      },
+      {
+        "t_ms": 2220,
+        "dur_ms": 340,
+        "target": "stage",
+        "motion": "fade out + scale 1→1.035 (hand-off para o workspace)",
+        "easing": "cubic-bezier(.4,0,1,1)"
+      }
+    ],
+    "handoff_to_workspace": "o scale-up final encadeia com um fade-in de 200 ms da janela principal; sem tela branca entre os dois",
+    "accessibility": "respeitar prefers-reduced-motion / 'Reduzir movimento' do macOS: mostrar frame estático 400 ms e seguir",
+    "assets": [
+      {
+        "path": "assets/mascot.png",
+        "size": [
+          580,
+          540
+        ],
+        "origin": "recorte do splash_app.mp4 sobre fundo #97D5EF"
+      }
+    ]
+  }
+}

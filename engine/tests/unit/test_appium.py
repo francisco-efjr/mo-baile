@@ -1,0 +1,361 @@
+"""Subida do WebDriverAgent via Appium.
+
+O time usa Appium para gerenciar o WDA, então o botão "Iniciar WDA" pede ao
+Appium em vez de compilar o WDA por conta própria.
+"""
+
+import os
+import stat
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import requests
+
+from mobaile.adapters.appium import AppiumBridge
+from mobaile.domain.errors import InvalidInputError, ToolNotFoundError
+
+
+def resposta(status=200, payload=None, texto=""):
+    r = MagicMock(spec=requests.Response)
+    r.status_code = status
+    r.json.return_value = payload if payload is not None else {}
+    r.text = texto
+    return r
+
+
+class TestDescoberta(unittest.TestCase):
+    def test_encontra_appium_no_path(self):
+        with patch("shutil.which", return_value="/opt/homebrew/bin/appium"), \
+             patch("pathlib.Path.is_file", return_value=True), \
+             patch("os.access", return_value=True):
+            self.assertEqual(AppiumBridge.locate_appium(), "/opt/homebrew/bin/appium")
+
+    def test_sem_appium_devolve_none(self):
+        with patch("shutil.which", return_value=None), patch("pathlib.Path.is_file", return_value=False):
+            self.assertIsNone(AppiumBridge.locate_appium())
+
+    def test_servidor_no_ar(self):
+        with patch("requests.get", return_value=resposta(200)):
+            self.assertTrue(AppiumBridge().is_running())
+
+    def test_servidor_fora_do_ar_nao_levanta(self):
+        with patch("requests.get", side_effect=requests.ConnectionError()):
+            self.assertFalse(AppiumBridge().is_running())
+
+
+class TestCapabilities(unittest.TestCase):
+    def setUp(self):
+        self.bridge = AppiumBridge(wda_url="http://localhost:8100")
+
+    def test_sessao_nao_pede_app_nem_bundle(self):
+        # Sem app/bundleId o XCUITest sobe o WDA e deixa o simulador na tela
+        # inicial, que é o que queremos: não estamos testando um app.
+        caps = self.bridge._capabilities("AAAA-1111", None)
+        self.assertNotIn("appium:app", caps)
+        self.assertNotIn("appium:bundleId", caps)
+
+    def test_timeout_de_comando_desligado(self):
+        # Com o padrão de 60 s, o Appium encerraria a sessão por inatividade e
+        # derrubaria o WDA junto: o indicador ficaria verde e voltaria a vermelho.
+        self.assertEqual(self.bridge._capabilities("A", None)["appium:newCommandTimeout"], 0)
+
+    def test_porta_do_wda_vem_da_configuracao(self):
+        bridge = AppiumBridge(wda_url="http://localhost:9100")
+        self.assertEqual(bridge._capabilities("A", None)["appium:wdaLocalPort"], 9100)
+
+    def test_versao_da_plataforma_e_opcional(self):
+        self.assertNotIn("appium:platformVersion", self.bridge._capabilities("A", None))
+        self.assertEqual(self.bridge._capabilities("A", "18.0")["appium:platformVersion"], "18.0")
+
+
+class TestSubidaDoServidor(unittest.TestCase):
+    def test_servidor_ja_no_ar_nao_inicia_outro(self):
+        bridge = AppiumBridge()
+        with patch.object(bridge, "is_running", return_value=True), \
+             patch("subprocess.Popen") as popen:
+            ok, msg = bridge.start_server()
+        self.assertTrue(ok)
+        popen.assert_not_called()
+        self.assertIn("ja estava", msg)
+
+    def test_sem_appium_instalado_levanta_erro_tipado(self):
+        bridge = AppiumBridge()
+        with patch.object(bridge, "is_running", return_value=False), \
+             patch.object(AppiumBridge, "locate_appium", return_value=None), \
+             self.assertRaises(ToolNotFoundError) as ctx:
+            bridge.start_server()
+        self.assertIn("npm i -g appium", str(ctx.exception))
+
+    def test_processo_que_morre_na_largada_e_reportado(self):
+        bridge = AppiumBridge()
+        processo = MagicMock()
+        processo.poll.return_value = 1  # encerrou
+        with patch.object(bridge, "is_running", return_value=False), \
+             patch.object(AppiumBridge, "locate_appium", return_value="/bin/appium"), \
+             patch("subprocess.Popen", return_value=processo), \
+             patch("pathlib.Path.open", side_effect=OSError):
+            ok, msg = bridge.start_server()
+        self.assertFalse(ok)
+        self.assertIn("encerrou", msg)
+
+    def test_node_ao_lado_do_appium_entra_no_path(self):
+        """Aberto pelo Finder, o app nao tem o Homebrew no PATH e o
+        `#!/usr/bin/env node` do Appium morria antes de subir."""
+        bridge = AppiumBridge()
+        processo = MagicMock()
+        processo.poll.return_value = 1
+        with patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}, clear=True), \
+             patch.object(bridge, "is_running", return_value=False), \
+             patch.object(AppiumBridge, "locate_appium", return_value="/opt/npm/bin/appium"), \
+             patch("subprocess.Popen", return_value=processo) as popen:
+            bridge.start_server()
+        caminho = popen.call_args.kwargs["env"]["PATH"].split(os.pathsep)
+        self.assertEqual(caminho[0], "/opt/npm/bin")
+        self.assertIn("/usr/bin", caminho)
+
+
+class TestEnderecoDoServidor(unittest.TestCase):
+    """O Appium escuta em 0.0.0.0 por padrao e nao tem autenticacao: subido
+    sem `--address`, qualquer maquina da rede comandava o aparelho conectado.
+    O motor so sobe o servidor proprio em loopback, na porta da APPIUM_URL."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="mobaile-appium-")
+        self.addCleanup(self._tmp.cleanup)
+        self.pasta_de_logs = os.path.join(self._tmp.name, "logs")
+        # Nada de log no ~/Library de quem roda a suite, nem no caminho antigo.
+        for alvo in (
+            patch.dict(os.environ, {"MOBAILE_LOG_DIR": self.pasta_de_logs}),
+            patch("pathlib.Path.home", return_value=Path(self._tmp.name)),
+        ):
+            alvo.start()
+            self.addCleanup(alvo.stop)
+
+    def _subir(self, url):
+        """Sobe com `Popen` falso; o servidor "responde" logo depois."""
+        bridge = AppiumBridge(base_url=url)
+        processo = MagicMock()
+        processo.poll.return_value = None
+        with patch.object(bridge, "is_running", side_effect=[False, True]), \
+             patch.object(AppiumBridge, "locate_appium", return_value="/bin/appium"), \
+             patch("subprocess.Popen", return_value=processo) as popen:
+            ok, msg = bridge.start_server()
+        if popen.called:
+            # O log do Appium fica aberto no processo filho; aqui o falso nao fecha.
+            saida = popen.call_args.kwargs.get("stdout")
+            if hasattr(saida, "close"):
+                saida.close()
+        return ok, msg, popen
+
+    @staticmethod
+    def _opcao(argv, nome):
+        return argv[argv.index(nome) + 1] if nome in argv else None
+
+    def test_sobe_so_no_loopback_na_porta_padrao(self):
+        ok, _msg, popen = self._subir("http://127.0.0.1:4723")
+        self.assertTrue(ok)
+        argv = popen.call_args.args[0]
+        self.assertEqual(self._opcao(argv, "--address"), "127.0.0.1")
+        self.assertEqual(self._opcao(argv, "--port"), "4723")
+
+    def test_porta_vem_da_url(self):
+        _ok, _msg, popen = self._subir("http://localhost:4799")
+        argv = popen.call_args.args[0]
+        self.assertEqual(self._opcao(argv, "--address"), "127.0.0.1")
+        self.assertEqual(self._opcao(argv, "--port"), "4799")
+
+    def test_url_sem_porta_usa_a_do_appium(self):
+        _ok, _msg, popen = self._subir("http://127.0.0.1")
+        self.assertEqual(self._opcao(popen.call_args.args[0], "--port"), "4723")
+
+    def test_loopback_ipv6_escuta_no_ipv6(self):
+        # O cliente fala com [::1]; servidor em 127.0.0.1 nunca responderia.
+        _ok, _msg, popen = self._subir("http://[::1]:4723")
+        self.assertEqual(self._opcao(popen.call_args.args[0], "--address"), "::1")
+
+    def test_porta_zero_nao_sobe_servidor(self):
+        # O harness de QA usa porta 0 para nunca alcancar um Appium de verdade.
+        # Antes, o motor subia o Appium real e esperava 45 s a toa.
+        ok, msg, popen = self._subir("http://127.0.0.1:0")
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        self.assertIn("indisponivel", msg)
+
+    def test_host_fora_do_loopback_nao_sobe_servidor(self):
+        ok, msg, popen = self._subir("http://10.0.0.5:4723")
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        self.assertIn("indisponivel", msg)
+
+    def test_credencial_da_url_nao_vai_para_a_mensagem(self):
+        ok, msg, popen = self._subir("http://fulano:segredo@10.0.0.5:4723")
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        self.assertNotIn("segredo", msg)
+
+    def test_harness_de_qa_pela_variavel_de_ambiente(self):
+        import mobaile.adapters.appium as modulo
+        from mobaile.config import Settings
+
+        with patch.dict(os.environ, {"APPIUM_URL": "http://127.0.0.1:0"}), \
+             patch.object(modulo, "settings", Settings.from_env()):
+            ok, _msg, popen = self._subir(None)
+        self.assertFalse(ok)
+        popen.assert_not_called()
+
+    def test_servidor_remoto_ja_no_ar_continua_valendo(self):
+        # Quem aponta APPIUM_URL para outra maquina e sobe o servidor por la
+        # continua sendo atendido: o motor so deixa de subir um proprio.
+        bridge = AppiumBridge(base_url="http://10.0.0.5:4723")
+        with patch.object(bridge, "is_running", return_value=True), \
+             patch("subprocess.Popen") as popen:
+            ok, _msg = bridge.start_server()
+        self.assertTrue(ok)
+        popen.assert_not_called()
+
+    def test_log_vai_para_a_pasta_de_logs_so_para_o_dono(self):
+        ok, msg, _popen = self._subir("http://127.0.0.1:4723")
+        self.assertTrue(ok)
+        caminho = os.path.join(self.pasta_de_logs, "appium.log")
+        self.assertTrue(os.path.isfile(caminho), msg)
+        self.assertEqual(stat.S_IMODE(os.stat(caminho).st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(os.stat(self.pasta_de_logs).st_mode), 0o700)
+        self.assertIn(caminho, msg)
+        self.assertFalse((Path(self._tmp.name) / "Library" / "Logs" / "mobaile-appium.log").exists())
+
+    def test_log_de_outro_dono_segue_sem_log(self):
+        # fchmod recusado (arquivo de outro dono): o Appium sobe sem log, como antes.
+        with patch("os.fchmod", side_effect=PermissionError("outro dono")), \
+             patch("os.close", wraps=os.close) as fechar:
+            ok, _msg, popen = self._subir("http://127.0.0.1:4723")
+        self.assertTrue(ok)
+        self.assertIs(popen.call_args.kwargs.get("stdout"), subprocess.DEVNULL)
+        fechar.assert_called()
+
+
+class TestGarantirWDA(unittest.TestCase):
+    def test_wda_ja_no_ar_nao_abre_sessao(self):
+        bridge = AppiumBridge()
+        with patch.object(bridge, "is_wda_running", return_value=True), \
+             patch("requests.post") as post:
+            ok, msg = bridge.ensure_wda("AAAA-1111")
+        self.assertTrue(ok)
+        post.assert_not_called()
+        self.assertIn("ja estava", msg)
+
+    def test_fluxo_completo_abre_sessao_e_espera_a_porta(self):
+        bridge = AppiumBridge()
+        # WDA fora do ar na primeira checagem, no ar depois da sessão.
+        with patch.object(bridge, "is_wda_running", side_effect=[False, True]), \
+             patch.object(bridge, "start_server", return_value=(True, "ok")), \
+             patch("requests.post", return_value=resposta(200, {"sessionId": "S1"})) as post:
+            ok, _msg = bridge.ensure_wda("AAAA-1111", "18.0")
+        self.assertTrue(ok)
+        self.assertEqual(bridge.session_id, "S1")
+        caps = post.call_args.kwargs["json"]["capabilities"]["alwaysMatch"]
+        self.assertEqual(caps["appium:udid"], "AAAA-1111")
+        self.assertEqual(caps["appium:platformVersion"], "18.0")
+
+    def test_recusa_do_appium_vira_mensagem_util(self):
+        bridge = AppiumBridge()
+        erro = resposta(500, {"value": {"message": "xcodebuild failed with code 65"}})
+        with patch.object(bridge, "is_wda_running", return_value=False), \
+             patch.object(bridge, "start_server", return_value=(True, "ok")), \
+             patch("requests.post", return_value=erro):
+            ok, msg = bridge.ensure_wda("AAAA-1111")
+        self.assertFalse(ok)
+        self.assertIn("xcodebuild failed", msg)
+
+    def test_primeira_compilacao_demorada_explica_o_motivo(self):
+        bridge = AppiumBridge()
+        with patch.object(bridge, "is_wda_running", return_value=False), \
+             patch.object(bridge, "start_server", return_value=(True, "ok")), \
+             patch("requests.post", side_effect=requests.Timeout()):
+            ok, msg = bridge.ensure_wda("AAAA-1111")
+        self.assertFalse(ok)
+        self.assertIn("compila o WDA", msg)
+
+    def test_servidor_que_nao_sobe_interrompe_cedo(self):
+        bridge = AppiumBridge()
+        with patch.object(bridge, "is_wda_running", return_value=False), \
+             patch.object(bridge, "start_server", return_value=(False, "porta ocupada")), \
+             patch("requests.post") as post:
+            ok, msg = bridge.ensure_wda("AAAA-1111")
+        self.assertFalse(ok)
+        self.assertEqual(msg, "porta ocupada")
+        post.assert_not_called()
+
+    def test_udid_malicioso_e_recusado(self):
+        with self.assertRaises(InvalidInputError):
+            AppiumBridge().ensure_wda("A; rm -rf /")
+
+
+class TestEncerramento(unittest.TestCase):
+    def test_so_derruba_o_servidor_que_nos_subimos(self):
+        bridge = AppiumBridge()
+        bridge._process = None
+        with patch("subprocess.Popen") as popen:
+            bridge.stop_server()
+        popen.assert_not_called()
+
+    def test_encerra_o_processo_proprio(self):
+        bridge = AppiumBridge()
+        processo = MagicMock()
+        bridge._process = processo
+        bridge.stop_server()
+        processo.terminate.assert_called_once()
+        self.assertIsNone(bridge._process)
+
+    def test_processo_teimoso_leva_kill(self):
+        bridge = AppiumBridge()
+        processo = MagicMock()
+        processo.wait.side_effect = subprocess.TimeoutExpired("appium", 5)
+        bridge._process = processo
+        bridge.stop_server()
+        processo.kill.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestSessaoSobConcorrencia(unittest.TestCase):
+    """O motor atende filas em paralelo: `wda.start` e um dump Android pelo
+    Appium podem abrir sessao ao mesmo tempo. Duas criacoes simultaneas
+    gravariam `session_*` misturando a sessao de uma com o alvo da outra."""
+
+    def test_aberturas_de_sessao_nao_se_sobrepoem(self):
+        import threading
+        import time
+
+        bridge = AppiumBridge()
+        em_voo, maximo = [0], [0]
+        trava = threading.Lock()
+
+        def post_lento(*_args, **kwargs):
+            with trava:
+                em_voo[0] += 1
+                maximo[0] = max(maximo[0], em_voo[0])
+            time.sleep(0.05)
+            with trava:
+                em_voo[0] -= 1
+            plataforma = kwargs["json"]["capabilities"]["alwaysMatch"]["platformName"]
+            return resposta(200, {"sessionId": f"S-{plataforma}"})
+
+        with patch.object(bridge, "is_wda_running", side_effect=[False, True]), \
+             patch.object(bridge, "is_running", return_value=True), \
+             patch("requests.post", side_effect=post_lento):
+            ios = threading.Thread(target=bridge.ensure_wda, args=("AAAA-1111",))
+            android = threading.Thread(target=bridge.ensure_android_session, args=("emulator-5554",))
+            ios.start()
+            android.start()
+            ios.join(5)
+            android.join(5)
+
+        self.assertEqual(maximo[0], 1)
+        # A ultima sessao aberta e coerente consigo mesma.
+        par = (bridge.session_id, bridge.session_platform)
+        self.assertIn(par, {("S-iOS", "ios"), ("S-Android", "android")})

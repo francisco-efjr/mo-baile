@@ -1,0 +1,395 @@
+"""Geração de Page Objects e ações Appium a partir dos elementos inspecionados.
+
+`LocatorStrategy` e `AutomationStep` vivem no domínio — este módulo só sabe
+transformá-los em código. Ficam reexportados para compatibilidade dos imports
+existentes.
+"""
+
+from __future__ import annotations
+
+import re
+import time
+import unicodedata
+
+from mobaile.config import settings
+from mobaile.domain.models import AutomationStep, LocatorStrategy, UIElement
+
+__all__ = ["AutomationStep", "CodeGenerator", "LocatorStrategy", "UIElement"]
+
+# Padrao do Page Object da casa: toda acao espera o elemento aparecer antes, e
+# o clique ja sai com tentativas.
+WAIT_TIMEOUT = 15
+CLICK_ATTEMPTS = 2
+
+# Nome de classe que pode ir para o XPath sem escape: o que Android e iOS usam
+# de verdade (`android.widget.Button`, `XCUIElementTypeButton`).
+_XPATH_TAG = re.compile(r"[A-Za-z_][\w.\-]*")
+
+
+def _py_str(valor: str) -> str:
+    """Literal Python com aspas duplas, seguro para qualquer texto.
+
+    Todo valor que vem da tela (texto, resource-id, content-desc) passa por
+    aqui ou por `repr()`: assim ele entra no codigo gerado so como string, e
+    nunca como codigo (SEC-2). Sem caractere especial, a saida e a de sempre,
+    `"valor"`.
+    """
+    literal = repr(valor)
+    if '"' in valor or literal.startswith('"'):
+        return literal
+    return f'"{literal[1:-1]}"'
+
+
+def _xpath_str(valor: str) -> str:
+    """Literal de string XPath 1.0, que nao tem escape: troca de aspas ou concat()."""
+    if '"' not in valor:
+        return f'"{valor}"'
+    if "'" not in valor:
+        return f"'{valor}'"
+    pedacos: list[str] = []
+    for i, parte in enumerate(valor.split('"')):
+        if i:
+            pedacos.append("'\"'")
+        if parte:
+            pedacos.append(f'"{parte}"')
+    return "concat(" + ", ".join(pedacos) + ")"
+
+
+def _xpath_tag(class_name: str) -> str:
+    return class_name if class_name and _XPATH_TAG.fullmatch(class_name) else "*"
+
+
+def _identificador(nome: str) -> str:
+    """Descarta o que `\\w` aceita mas um identificador Python nao aceita."""
+    return "".join(c for c in nome if c == "_" or f"a{c}".isidentifier())
+
+
+class CodeGenerator:
+    def __init__(
+        self,
+        page_objects_key: str | None = None,
+        strategy: LocatorStrategy = LocatorStrategy.POSITION,
+    ):
+        self.page_objects_key = page_objects_key or settings.page_objects_key
+        self.strategy = strategy
+        self.declared_objects: dict[str, str] = {}
+        self.declared_actions: dict[str, str] = {}
+        self.steps: list[AutomationStep] = []
+
+    def reset(self):
+        self.declared_objects.clear()
+        self.declared_actions.clear()
+        self.steps.clear()
+
+    def set_last_input_text(self, texto: str) -> bool:
+        """Guarda no ultimo passo de digitacao o texto que foi realmente escrito.
+
+        O metodo gerado continua recebendo `texto` como parametro, porque o Page
+        Object precisa ser reutilizavel. O valor observado fica no passo, que e
+        o que a execucao repete.
+        """
+        for passo in reversed(self.steps):
+            if passo.action_type == "input":
+                passo.input_text = texto
+                return True
+        return False
+
+    def get_steps(self) -> list[AutomationStep]:
+        return list(self.steps)
+
+    def clear_steps(self):
+        self.steps.clear()
+
+    @staticmethod
+    def _sanitize_string(text: str) -> str:
+        nfkd = unicodedata.normalize("NFKD", text)
+        clean = "".join([c for c in nfkd if not unicodedata.combining(c)])
+        stripped = re.sub(r"[^\w\s]", " ", clean)
+        words = [w for w in (_identificador(w) for w in stripped.strip().split()) if w][:7]
+        return "_".join(words).upper()
+
+    @staticmethod
+    def _sanitize_slug(text: str) -> str:
+        nfkd = unicodedata.normalize("NFKD", text)
+        clean = "".join([c for c in nfkd if not unicodedata.combining(c)])
+        stripped = re.sub(r"[^\w\s]", " ", clean)
+        words = [w for w in (_identificador(w) for w in stripped.strip().split()) if w][:6]
+        return "_".join(words).lower()
+
+    @staticmethod
+    def _get_prefix(class_name: str, text: str) -> str:
+        combined = f"{class_name} {text}".lower()
+
+        if any(w in combined for w in ("checkbox", "check", "termos")):
+            if any(w in combined for w in ("button", "botao", "termos")):
+                return "CHECK_BOX_BOTAO"
+            return "CHECK_BOX"
+        if any(w in combined for w in ("button", "btn")):
+            return "BOTAO"
+        if any(w in combined for w in ("search", "edittext", "input", "textfield", "autocomplete")):
+            # `autocomplete`: AutoCompleteTextView e MultiAutoCompleteTextView
+            # sao EditText por heranca, mas o nome da classe so diz "textview".
+            return "CAMPO"
+        if any(w in combined for w in ("switch", "toggle")):
+            return "SWITCH"
+        if any(w in combined for w in ("image", "icon")):
+            return "IMAGEM"
+        if any(w in combined for w in ("textview", "statictext", "label")):
+            return "TEXTO"
+        if "cell" in combined:
+            return "CELULA"
+        if "radio" in combined:
+            return "RADIO"
+        return "ELEMENTO"
+
+    def generate_variable_name(self, element: UIElement) -> tuple[str, str]:
+        raw_text = ""
+        base_name = ""
+
+        if element.text and element.text.strip():
+            raw_text = element.text.strip()
+            base_name = self._sanitize_string(raw_text)
+        elif element.content_desc and element.content_desc.strip():
+            raw_text = element.content_desc.strip()
+            base_name = self._sanitize_string(raw_text)
+        elif element.resource_id:
+            raw_id = element.resource_id.split("/")[-1]
+            raw_text = raw_id
+            base_name = self._sanitize_string(raw_id)
+
+        if not base_name:
+            simple_class = element.class_name.replace("XCUIElementType", "").split(".")[-1]
+            raw_text = simple_class
+            base_name = self._sanitize_string(simple_class)
+
+        prefix = self._get_prefix(element.class_name, raw_text)
+        slug = self._sanitize_slug(raw_text) or "elemento"
+        var_name = f"{prefix}_{base_name}" if base_name else f"{prefix}_DESCONHECIDO"
+
+        final_name = var_name
+        final_slug = slug
+        counter = 1
+        while final_name in self.declared_objects:
+            final_name = f"{var_name}_{counter}"
+            final_slug = f"{slug}_{counter}"
+            counter += 1
+
+        return final_name, final_slug
+
+    def rank_locators(self, element: UIElement, screen: list[UIElement]) -> list[dict]:
+        """Ordena os localizadores possiveis do mais robusto ao menos, dizendo
+        quais sao unicos na tela atual.
+
+        Escolher o seletor na mao, uma estrategia so para a sessao inteira,
+        produz codigo instavel: o mesmo `resource-id` pode aparecer cinco vezes
+        na tela, e o passo gerado passa a depender de qual delas o Appium achar
+        primeiro. Como a hierarquia inteira ja esta carregada, da para conferir.
+
+        A ordem segue robustez: identificador estavel primeiro, texto depois
+        (muda com idioma e conteudo), e coordenada por ultimo, que quebra em
+        qualquer mudanca de layout.
+        """
+        candidatos: list[dict] = []
+
+        def quantos_com(campo: str, valor: str) -> int:
+            return sum(1 for e in screen if getattr(e, campo, None) == valor)
+
+        if element.resource_id:
+            campo = "resource_id"
+            candidatos.append({
+                "strategy": "id",
+                "value": self.generate_locator_value(element, LocatorStrategy.ID),
+                "matches": quantos_com(campo, element.resource_id),
+                "why": "identificador do elemento, o que menos muda entre versoes",
+            })
+        if element.content_desc:
+            candidatos.append({
+                "strategy": "accessibility_id",
+                "value": f"(AppiumBy.ACCESSIBILITY_ID, {_py_str(element.content_desc)})",
+                "matches": quantos_com("content_desc", element.content_desc),
+                "why": "rotulo de acessibilidade, estavel e legivel",
+            })
+        if element.text:
+            # O xpath do candidato "texto" tem de ser de texto: `_generate_xpath`
+            # prioriza o resource-id e o passo gravado casava com todos os
+            # elementos de mesmo id, embora aqui o texto fosse unico.
+            xpath_texto = self._generate_text_xpath(element)
+            tag = _xpath_tag(element.class_name)
+            candidatos.append({
+                "strategy": "text",
+                "value": f"(AppiumBy.XPATH, {xpath_texto!r})",
+                "matches": sum(
+                    1 for e in screen
+                    if self._casa_texto(e, element.text) and (tag == "*" or _xpath_tag(e.class_name) == tag)
+                ),
+                "why": "texto visivel; muda com idioma e com conteudo dinamico",
+            })
+        candidatos.append({
+            "strategy": "xpath",
+            "value": f"(AppiumBy.XPATH, {self._generate_xpath(element)!r})",
+            "matches": self._xpath_matches(element, screen),
+            "why": "caminho na arvore; quebra se o layout mudar",
+        })
+        candidatos.append({
+            "strategy": "position",
+            "value": self.generate_locator_value(element, LocatorStrategy.POSITION),
+            "matches": 1,
+            "why": "coordenada absoluta; ultimo recurso, quebra com qualquer mudanca de tela",
+        })
+
+        for c in candidatos:
+            c["unique"] = c["matches"] == 1
+        # Unico vence ambiguo; entre iguais, mantem a ordem de robustez acima.
+        return sorted(candidatos, key=lambda c: not c["unique"])
+
+    def choose_locator(self, element: UIElement, screen: list[UIElement]) -> dict:
+        """O melhor localizador para este elemento nesta tela."""
+        return self.rank_locators(element, screen)[0]
+
+    def generate_locator_value(self, element: UIElement, strategy: LocatorStrategy) -> str:
+        if strategy == LocatorStrategy.ID:
+            if element.platform == "ios":
+                id_val = element.resource_id or element.content_desc or element.text
+                if id_val:
+                    return f"(AppiumBy.ACCESSIBILITY_ID, {_py_str(id_val)})"
+            else:
+                if element.resource_id:
+                    return f"(AppiumBy.ID, {_py_str(element.resource_id)})"
+                elif element.content_desc:
+                    return f"(AppiumBy.ACCESSIBILITY_ID, {_py_str(element.content_desc)})"
+
+        xpath = self._generate_xpath(element)
+        return f"(AppiumBy.XPATH, {xpath!r})"
+
+    @staticmethod
+    def _casa_texto(e: UIElement, texto: str) -> bool:
+        """O elemento `e` seria casado pelo xpath de texto gerado para `texto`?
+
+        No Android o xpath e `@text`, que e o campo `text`. No iOS ele e
+        `@value or @label`, e o `UIElement` guarda `value`-ou-`label` em `text`
+        e `label`-ou-`name` em `content_desc`: um elemento com value "1" e
+        label "Adicionar" casa pelo label, embora `text` seja "1". Contar so
+        por `text` dava "unico" a um xpath que pegava dois. Pelo `content_desc`
+        a contagem e conservadora (pode contar um `name` igual que o xpath nao
+        casa), e ambiguidade a mais e mais segura que unicidade falsa.
+        """
+        if e.platform == "ios":
+            return e.text == texto or e.content_desc == texto
+        return e.text == texto
+
+    @staticmethod
+    def _generate_text_xpath(element: UIElement) -> str:
+        """XPath que casa pelo texto, sem passar pelo resource-id."""
+        tag = _xpath_tag(element.class_name)
+        if element.platform == "ios":
+            # O `text` do elemento iOS e o `value` ou, sem ele, o `label`
+            # (hierarchy.py). Procurar so `@value` nao achava um botao que so
+            # tem label.
+            literal = _xpath_str(element.text)
+            return f"//{tag}[@value={literal} or @label={literal}]"
+        return f"//{tag}[@text={_xpath_str(element.text)}]"
+
+    @staticmethod
+    def _xpath_matches(element: UIElement, screen: list[UIElement]) -> int:
+        """Quantos elementos da tela o `_generate_xpath` deste elemento casa."""
+        tag = _xpath_tag(element.class_name)
+        if element.resource_id:
+            campo = "resource_id"
+        elif element.platform == "ios":
+            campo = "content_desc" if element.content_desc else ("text" if element.text else None)
+        else:
+            campo = "text" if element.text else ("content_desc" if element.content_desc else None)
+        valor = getattr(element, campo) if campo else None
+        return max(1, sum(
+            1 for e in screen
+            if (tag == "*" or _xpath_tag(e.class_name) == tag)
+            and (campo is None or getattr(e, campo, None) == valor)
+        ))
+
+    @staticmethod
+    def _generate_xpath(element: UIElement) -> str:
+        tag = _xpath_tag(element.class_name)
+        if element.platform == "ios":
+            if element.resource_id:
+                return f"//{tag}[@name={_xpath_str(element.resource_id)}]"
+            elif element.content_desc:
+                return f"//{tag}[@label={_xpath_str(element.content_desc)}]"
+            elif element.text:
+                return f"//{tag}[@value={_xpath_str(element.text)}]"
+            return f"//{tag}"
+        else:
+            if element.resource_id:
+                return f"//{tag}[@resource-id={_xpath_str(element.resource_id)}]"
+            elif element.text:
+                return f"//{tag}[@text={_xpath_str(element.text)}]"
+            elif element.content_desc:
+                return f"//{tag}[@content-desc={_xpath_str(element.content_desc)}]"
+            return f"//{tag}"
+
+    def generate_entry(
+        self,
+        element: UIElement,
+        strategy: LocatorStrategy | None = None,
+        click_coord: tuple[int, int] | None = None,
+        locator_value: str | None = None,
+        anchor: dict[str, str] | None = None,
+    ) -> tuple[str, str, str]:
+        """`locator_value` e o localizador que o ranking escolheu. Sem ele, o
+        valor sai da estrategia, que prioriza o resource-id e pode casar com
+        mais elementos do que o candidato escolhido (M7)."""
+        active_strat = strategy or self.strategy
+        var_name, slug = self.generate_variable_name(element)
+        locator_val = locator_value or self.generate_locator_value(element, active_strat)
+
+        object_line = f"    {var_name} = {locator_val}"
+        self.declared_objects[var_name] = object_line
+
+        # Tres sinais, em ordem de confianca: a classe e de entrada; o prefixo
+        # do nome e CAMPO; ou o elemento nao tem tipo conhecido (ELEMENTO) e o
+        # nome fala em campo, caso dos componentes custom com id `campo_cpf`.
+        # Um botao ou texto com "campo" no rotulo (BOTAO_PREENCHER_CAMPO) nao
+        # entra: virava passo de digitacao sem texto.
+        classe = element.class_name.upper()
+        por_classe = any(k in classe for k in ("EDITTEXT", "TEXTFIELD", "SEARCH", "AUTOCOMPLETE"))
+        por_nome = var_name.startswith("ELEMENTO_") and "CAMPO" in var_name.split("_")
+        is_input = por_classe or var_name.startswith("CAMPO_") or por_nome
+
+        # O codigo exibido e o que a pessoa cola no proprio Page Object, entao
+        # segue o padrao da casa e nao carrega coordenada: o clique por posicao
+        # fica guardado no passo (`coords`), que e o que a execucao repete.
+        ref = f"self.locators[{self.page_objects_key!r}].{var_name}"
+        espera = f"        self.wait_to_be_visible({ref}, {WAIT_TIMEOUT})\n"
+        if is_input:
+            action_block = (
+                f"    def preencher_{slug}(self, texto):\n"
+                f"{espera}"
+                f"        self.send_keys({ref}, texto)\n"
+            )
+        else:
+            action_block = (
+                f"    def click_{slug}(self):\n"
+                f"{espera}"
+                f"        self.click({ref}, {CLICK_ATTEMPTS})\n"
+            )
+
+        self.declared_actions[var_name] = action_block
+
+        pos_coord = click_coord if click_coord else element.center
+        step = AutomationStep(
+            step_num=len(self.steps) + 1,
+            action_type="input" if is_input else "click",
+            var_name=var_name,
+            element_name=element.display_name or slug,
+            class_name=element.class_name,
+            strategy=active_strat,
+            locator_value=locator_val,
+            coords=pos_coord,
+            input_text=None,
+            package=element.package,
+            platform=element.platform,
+            recorded_at=time.time(),
+            anchor=anchor,
+        )
+        self.steps.append(step)
+
+        return var_name, object_line, action_block

@@ -1,0 +1,91 @@
+# Mo baile — atalhos de desenvolvimento.
+#
+# `make setup` uma vez; depois `make check` antes de qualquer commit.
+
+SHELL := /bin/bash
+PYTHON ?= python3
+VENV := .venv
+VENV_PY := $(VENV)/bin/python
+SWIFT_APP := apps/MoBaile
+
+.DEFAULT_GOAL := help
+.PHONY: help setup hooks version test test-engine test-ui test-qa test-swift qa coverage lint format security audit fixtures fixtures-check check run run-engine install-app build-native verify-native update-native clean
+
+help: ## Lista os alvos disponiveis
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Cria o ambiente virtual e instala motor + UI em modo editavel
+	$(PYTHON) -m venv $(VENV)
+	$(VENV_PY) -m pip install --upgrade pip
+	$(VENV_PY) -m pip install -e "engine[dev,macos]"
+	$(VENV_PY) -m pip install -e apps/tk-legacy
+	$(MAKE) hooks
+	@echo "pronto. Ative com: source $(VENV)/bin/activate"
+
+hooks: ## Liga o portao de versionamento no push (docs/VERSIONAMENTO.md)
+	git config core.hooksPath .githooks
+
+version: ## Mostra a versao e confere se as copias e o CHANGELOG batem
+	$(PYTHON) tools/version.py check
+
+test: test-engine test-ui test-qa ## Roda as suites Python
+
+test-engine: ## Suite do motor (nao precisa de aparelho nem de servidor grafico)
+	cd engine && $(abspath $(VENV_PY)) -m pytest
+
+test-ui: ## Suite da UI Tkinter (precisa de sessao grafica)
+	cd apps/tk-legacy && PYTHONPATH=.:../../engine/src $(abspath $(VENV_PY)) -m pytest
+
+test-qa: ## Regressao do gate de QA (recusa falso verde e timeout)
+	$(VENV_PY) -m pytest qa/tests -q
+
+test-swift: ## Suite do front nativo (so no macOS, com Swift instalado)
+	cd $(SWIFT_APP) && swift test
+
+qa: ## Fluxos de ponta a ponta com aparelho falso (sem device, iOS, Android, HTTPS)
+	$(VENV_PY) qa/run_all.py
+
+coverage: ## Cobertura do motor
+	cd engine && $(abspath $(VENV_PY)) -m pytest --cov --cov-report=term-missing
+
+lint: ## Analise estatica
+	$(VENV_PY) -m ruff check engine apps tools qa
+
+format: ## Corrige o que o lint sabe corrigir sozinho
+	$(VENV_PY) -m ruff check --fix engine apps tools qa
+
+security: ## Varredura de padroes inseguros no codigo
+	$(VENV_PY) -m bandit -q -r engine/src apps/tk-legacy -ll
+
+audit: ## Vulnerabilidades conhecidas nas dependencias
+	$(VENV_PY) -m pip_audit --skip-editable
+
+fixtures: ## Regera as fixtures do contrato usadas pela suite Swift
+	$(PYTHON) tools/generate_fixtures.py
+
+fixtures-check: ## Falha se as fixtures do contrato estiverem desatualizadas
+	$(VENV_PY) tools/generate_fixtures.py --check
+
+check: version lint security test qa fixtures-check ## Portao antes do commit
+
+run: ## Sobe a interface Tkinter a partir do codigo-fonte
+	$(VENV_PY) apps/tk-legacy/main.py
+
+run-engine: ## Sobe o motor em modo JSON-RPC (util para depurar o contrato)
+	PYTHONPATH=engine/src $(VENV_PY) -m mobaile.rpc
+
+install-app: ## Instala o "Mo baile.app" com a interface Python (a que funciona)
+	bash tools/install_tk_app.sh
+
+build-native: ## Empacota o front SwiftUI como app SEPARADO, apos swift test passar
+	bash tools/package_macos_app.sh
+
+verify-native: ## Confere se o app nativo instalado esta com o codigo do repositorio
+	bash tools/verify_native_app.sh
+
+update-native: build-native verify-native ## Obrigatorio ao fim de tarefa que mexe no app (AGENTS.md)
+
+clean: ## Remove artefatos de build e cache
+	find . -name "__pycache__" -type d -prune -exec rm -rf {} + 2>/dev/null || true
+	rm -rf .pytest_cache .ruff_cache engine/.pytest_cache .coverage htmlcov
+	rm -rf $(SWIFT_APP)/.build

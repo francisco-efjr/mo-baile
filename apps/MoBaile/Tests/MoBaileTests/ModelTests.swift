@@ -1,0 +1,321 @@
+import XCTest
+@testable import MoBaile
+
+final class ModelTests: XCTestCase {
+    
+    // UIElement Tests
+    func testUIElementChipType() {
+        let btn = UIElement(tag: "", className: "XCUIElementTypeButton", resourceId: "", text: "", contentDesc: "", clickable: true, bounds: .zero, area: 0, package: "", platform: .ios, depth: 0, parentIndex: nil)
+        XCTAssertEqual(btn.chipType, .button)
+        
+        let input = UIElement(tag: "", className: "XCUIElementTypeSecureTextField", resourceId: "", text: "", contentDesc: "", clickable: true, bounds: .zero, area: 0, package: "", platform: .ios, depth: 0, parentIndex: nil)
+        XCTAssertEqual(input.chipType, .input)
+        
+        let text = UIElement(tag: "", className: "XCUIElementTypeStaticText", resourceId: "", text: "", contentDesc: "", clickable: false, bounds: .zero, area: 0, package: "", platform: .ios, depth: 0, parentIndex: nil)
+        XCTAssertEqual(text.chipType, .text)
+        
+        let window = UIElement(tag: "", className: "XCUIElementTypeWindow", resourceId: "", text: "", contentDesc: "", clickable: false, bounds: .zero, area: 0, package: "", platform: .ios, depth: 0, parentIndex: nil)
+        XCTAssertEqual(window.chipType, .window)
+    }
+    
+    func testUIElementDisplayName() {
+        // Priority: text > contentDesc > resourceId > className
+        var element = UIElement(tag: "", className: "android.widget.Button", resourceId: "com.app:id/submit", text: "Submit", contentDesc: "Submit Button", clickable: true, bounds: .zero, area: 0, package: "", platform: .android, depth: 0, parentIndex: nil)
+        XCTAssertEqual(element.displayName, "Submit")
+        
+        element = UIElement(tag: "", className: "android.widget.Button", resourceId: "com.app:id/submit", text: "", contentDesc: "Submit Button", clickable: true, bounds: .zero, area: 0, package: "", platform: .android, depth: 0, parentIndex: nil)
+        XCTAssertEqual(element.displayName, "Submit Button")
+        
+        element = UIElement(tag: "", className: "android.widget.Button", resourceId: "com.app:id/submit", text: "", contentDesc: "", clickable: true, bounds: .zero, area: 0, package: "", platform: .android, depth: 0, parentIndex: nil)
+        // Extract short ID
+        XCTAssertEqual(element.displayName, "submit")
+        
+        element = UIElement(tag: "", className: "android.widget.Button", resourceId: "", text: "", contentDesc: "", clickable: true, bounds: .zero, area: 0, package: "", platform: .android, depth: 0, parentIndex: nil)
+        XCTAssertEqual(element.displayName, "android.widget.Button")
+    }
+    
+    func testUIElementCenter() {
+        let element = UIElement(tag: "", className: "View", resourceId: "", text: "", contentDesc: "", clickable: true, bounds: CGRect(x: 10, y: 20, width: 40, height: 60), area: 2400, package: "", platform: .android, depth: 0, parentIndex: nil)
+        XCTAssertEqual(element.center, CGPoint(x: 30, y: 50)) // midX, midY
+    }
+    
+    // NetworkEvent Tests
+    func testNetworkEventFormattedDuration() {
+        var event = NetworkEvent(id: 1, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "", path: "", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "HTTP/1.1", isTunnel: false)
+        
+        event.durationMs = nil
+        XCTAssertEqual(event.formattedDuration, "—")
+        
+        event.durationMs = 500
+        XCTAssertEqual(event.formattedDuration, "500 ms")
+        
+        event.durationMs = 1500
+        XCTAssertEqual(event.formattedDuration, "1.5 s")
+    }
+    
+    func testNetworkEventFormattedSize() {
+        var event = NetworkEvent(id: 1, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "", path: "", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "HTTP/1.1", isTunnel: false)
+        
+        // Size is computed from responseBody string length in utf8
+        event.responseBody = String(repeating: "A", count: 500)
+        XCTAssertEqual(event.formattedSize, "500 B")
+        
+        event.responseBody = String(repeating: "A", count: 1536) // 1.5 KB
+        XCTAssertEqual(event.formattedSize, "1.5 KB")
+        
+        event.responseBody = String(repeating: "A", count: 1024 * 1024 + 512 * 1024) // 1.5 MB
+        XCTAssertEqual(event.formattedSize, "1.5 MB")
+    }
+    
+    // AppState Tests
+    @MainActor
+    func testAppStateFilteredHTTPRequests() {
+        let state = AppState()
+        
+        let req1 = NetworkEvent(id: 1, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "api.example.com", path: "/users", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "", isTunnel: false)
+        let req2 = NetworkEvent(id: 2, timestamp: Date(), timeStr: "", method: "POST", url: "", host: "auth.example.com", path: "/login", statusCode: 401, statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "", isTunnel: false)
+        
+        state.httpRequests = [req1, req2]
+        
+        state.httpFilterText = "auth"
+        XCTAssertEqual(state.filteredHTTPRequests.count, 1)
+        XCTAssertEqual(state.filteredHTTPRequests.first?.id, 2)
+        
+        state.httpFilterText = "401"
+        XCTAssertEqual(state.filteredHTTPRequests.count, 1)
+        XCTAssertEqual(state.filteredHTTPRequests.first?.id, 2)
+        
+        state.httpFilterText = "GET"
+        XCTAssertEqual(state.filteredHTTPRequests.count, 1)
+        XCTAssertEqual(state.filteredHTTPRequests.first?.id, 1)
+    }
+    
+    /// O evento mais novo aparece no topo das listas de Rede e Analytics, para
+    /// continuar visível sem rolar. A ordem guardada segue a de chegada.
+    @MainActor
+    func testListasExibemOMaisNovoNoTopo() {
+        let state = AppState()
+        let antigo = NetworkEvent(id: 1, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "api.example.com", path: "/a", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "", isTunnel: false)
+        let novo = NetworkEvent(id: 2, timestamp: Date(), timeStr: "", method: "GET", url: "", host: "api.example.com", path: "/b", statusText: "", requestHeaders: [:], requestBody: "", responseHeaders: [:], responseBody: "", protocol: "", isTunnel: false)
+        state.httpRequests = [antigo, novo]
+
+        XCTAssertEqual(state.filteredHTTPRequests.map(\.id), [2, 1])
+        state.httpFilterText = "api"
+        XCTAssertEqual(state.filteredHTTPRequests.map(\.id), [2, 1])
+        XCTAssertEqual(state.httpRequests.map(\.id), [1, 2], "a ordem guardada é a de chegada")
+    }
+
+    @MainActor
+    func testAppStateToggleZenMode() {
+        let state = AppState()
+        
+        state.mirrorVisible = false
+        state.zenMode = false
+
+        // Modo Zen esconde barra lateral e inspector e deixa o espaço para
+        // espelho e workspace, que voltam a aparecer se estavam ocultos.
+        state.toggleZenMode()
+
+        XCTAssertTrue(state.zenMode)
+        XCTAssertEqual(state.sidebarVisibility, .detailOnly)
+        XCTAssertFalse(state.inspectorVisible)
+        XCTAssertTrue(state.mirrorVisible)
+        XCTAssertTrue(state.workspaceVisible)
+
+        state.toggleZenMode()
+
+        XCTAssertFalse(state.zenMode)
+        XCTAssertEqual(state.sidebarVisibility, .all)
+        XCTAssertTrue(state.inspectorVisible)
+    }
+
+    /// Sair do Zen devolve o inspector como estava: fechado continua fechado.
+    @MainActor
+    func testSairDoZenNaoAbreAHierarquia() {
+        let state = AppState.atLaunch()
+        state.toggleZenMode()
+        state.toggleZenMode()
+        XCTAssertFalse(state.inspectorVisible)
+    }
+
+    /// O telefone (espelho) se esconde só onde ele existe: com aparelho, nas
+    /// áreas que precisam dele.
+    @MainActor
+    func testEsconderOEspelho() {
+        let state = AppState()
+        state.workspaceTab = .pageObjects
+        state.toggleMirror()
+        XCTAssertTrue(state.mirrorVisible, "sem aparelho não há espelho para esconder")
+        state.selectedDevice = "SERIAL0001"
+        state.toggleMirror()
+        XCTAssertFalse(state.mirrorVisible)
+        state.workspaceTab = .home
+        XCTAssertFalse(state.canToggleMirror)
+        state.workspaceTab = .network
+        state.toggleMirror()
+        XCTAssertTrue(state.mirrorVisible)
+    }
+
+    /// D3: sem aparelho o inspector sai da janela e volta ao conectar, sem
+    /// perder a escolha da pessoa. No Relatório ele fica, porque mostra o Figma.
+    func testInspectorSaiSemAparelhoEVoltaAoConectar() {
+        let state = AppState()
+        state.selectedDevice = nil
+        state.workspaceTab = .pageObjects
+        XCTAssertTrue(state.inspectorSuppressed)
+        XCTAssertFalse(state.inspectorShown)
+
+        state.toggleInspector()
+        XCTAssertTrue(state.inspectorVisible, "sem aparelho o atalho não mexe na escolha")
+
+        state.workspaceTab = .report
+        XCTAssertTrue(state.inspectorShown, "o Relatório funciona sem aparelho")
+
+        state.workspaceTab = .network
+        state.selectedDevice = "SERIAL0001"
+        XCTAssertTrue(state.inspectorShown, "volta ao conectar")
+
+        state.toggleInspector()
+        state.selectedDevice = nil
+        state.selectedDevice = "SERIAL0001"
+        XCTAssertFalse(state.inspectorShown, "quem fechou à mão continua com ele fechado")
+    }
+
+    /// Motion dos clicáveis: o − da árvore, a faixa e a paleta passam pelo
+    /// mesmo método do Projeto, que é o que anima.
+    func testProjetoAbreEFechaPeloMesmoMetodo() {
+        let state = AppState()
+        XCTAssertTrue(state.projectTreeVisible)
+        state.setProjectTree(false)
+        XCTAssertFalse(state.projectTreeVisible)
+        state.toggleProjectTree()
+        XCTAssertTrue(state.projectTreeVisible)
+    }
+
+    /// A política de cada teste não segue o "Reduzir movimento" da máquina: o
+    /// resultado da suíte não depende do ajuste de acessibilidade de quem roda.
+    func testPoliticaDeTesteNaoSegueOSistema() {
+        let politica = MotionPolicy()
+        XCTAssertFalse(politica.reduced)
+        XCTAssertEqual(Motion.smooth(policy: politica), .spring(duration: 0.5, bounce: 0))
+        XCTAssertEqual(Motion.snappy(policy: politica), .spring(duration: 0.35, bounce: 0.15))
+    }
+
+    /// COD-4: com o inspector suprimido, buscar na hierarquia não mexe na
+    /// escolha da pessoa nem deixa pedido de foco pendente para depois.
+    func testBuscaNaHierarquiaSuprimidaNaoMexeEmNada() {
+        let state = AppState()
+        state.selectedDevice = nil
+        state.workspaceTab = .pageObjects
+        state.inspectorVisible = false
+        XCTAssertTrue(state.inspectorSuppressed)
+        XCTAssertFalse(state.canSearchHierarchy)
+        XCTAssertFalse(state.canSearch, "⌘F fica desabilitado sem aparelho em Page Objects")
+
+        state.requestHierarchySearch()
+        state.search()
+        XCTAssertFalse(state.inspectorVisible, "a escolha da pessoa não muda")
+        XCTAssertEqual(state.hierarchySearchFocusRequest, 0, "nenhum pedido de foco pendente")
+
+        state.selectedDevice = "SERIAL0001"
+        XCTAssertTrue(state.canSearchHierarchy)
+        state.search()
+        XCTAssertTrue(state.inspectorVisible, "com aparelho, buscar abre o inspector")
+        XCTAssertEqual(state.hierarchySearchFocusRequest, 1)
+
+        state.workspaceTab = .network
+        state.search()
+        XCTAssertTrue(state.toolbarSearchPresented, "em Rede, ⌘F abre a busca da toolbar")
+        XCTAssertEqual(state.hierarchySearchFocusRequest, 1)
+    }
+
+    /// COD-3: a divisória some com o ponteiro em cima e devolve o cursor; sair
+    /// duas vezes não tira da pilha o cursor de outra view.
+    func testCursorDaDivisoriaFicaEmPar() {
+        var pilha = 0
+        let cursor = PaneDividerCursor(push: { pilha += 1 }, pop: { pilha -= 1 })
+        cursor.enter()
+        cursor.enter()
+        XCTAssertEqual(pilha, 1, "hover repetido não empilha de novo")
+        cursor.leave() // onDisappear
+        cursor.leave() // onHover(false) atrasado
+        XCTAssertEqual(pilha, 0)
+        cursor.leave()
+        XCTAssertEqual(pilha, 0, "sumir sem ter entrado não faz pop")
+    }
+
+    /// D4: a barra de status só mostra os serviços da plataforma ativa.
+    func testBarraDeStatusMostraSoOsServicosDaPlataforma() {
+        XCTAssertEqual(StatusBar.Servico.visiveis(.ios), [.wda, .proxy, .fa])
+        XCTAssertEqual(StatusBar.Servico.visiveis(.android), [.adb, .proxy, .fa])
+    }
+
+    /// UX-4: siglas da barra explicadas por extenso e métricas legíveis.
+    func testBarraDeStatusExplicaAsSiglas() {
+        let portas = StatusBar.Portas(wda: 8100, proxy: 8082)
+        XCTAssertEqual(StatusBar.Servico.wda.rotulo(portas), "WDA 8100")
+        XCTAssertEqual(StatusBar.Servico.wda.nome(portas), "WebDriverAgent, porta 8100")
+        XCTAssertEqual(StatusBar.Servico.fa.rotulo(portas), "Analytics", "nada de \"FA listener\"")
+        XCTAssertEqual(StatusBar.Servico.proxy.rotulo(StatusBar.Portas()), "Proxy", "sem motor, sem porta inventada")
+        for servico in StatusBar.Servico.allCases {
+            let nome = servico.nome(portas)
+            XCTAssertNotEqual(nome, servico.rotulo(portas), "\(servico): o nome por extenso tem de ir além da sigla")
+            XCTAssertGreaterThan(servico.explicacao.count, 30, "\(servico): explicação curta demais")
+            XCTAssertTrue(servico.explicacao.hasSuffix("."))
+        }
+
+        let m = StatusBar.Metricas(x: 196, y: 725, fps: 24, estavelMs: 180, latenciaMs: 42)
+        XCTAssertFalse(m.completa.contains("settle"))
+        XCTAssertTrue(m.porExtenso.contains("quadros por segundo"))
+        XCTAssertTrue(m.porExtenso.contains("parar de mudar"))
+        XCTAssertGreaterThanOrEqual(StatusBar.metricsFontSize, 11)
+    }
+
+    func testHARExporterGeneratesValidJSON() throws {
+        let event = NetworkEvent(
+            id: 1,
+            timestamp: Date(),
+            timeStr: "12:00:00",
+            method: "GET",
+            url: "https://api.example.com/items",
+            host: "api.example.com",
+            path: "/items",
+            statusCode: 200,
+            statusText: "OK",
+            requestHeaders: ["Accept": "application/json"],
+            requestBody: "",
+            responseHeaders: ["Content-Type": "application/json"],
+            responseBody: "{\"items\": []}",
+            durationMs: 45,
+            protocol: "HTTP/1.1",
+            isTunnel: false
+        )
+        guard let data = HARExporter.generateHAR(from: [event]) else {
+            XCTFail("Falha ao gerar HAR")
+            return
+        }
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNotNil(json)
+        let log = json?["log"] as? [String: Any]
+        XCTAssertEqual(log?["version"] as? String, "1.2")
+        let entries = log?["entries"] as? [[String: Any]]
+        XCTAssertEqual(entries?.count, 1)
+        let firstEntry = entries?.first
+        let req = firstEntry?["request"] as? [String: Any]
+        XCTAssertEqual(req?["method"] as? String, "GET")
+        XCTAssertEqual(req?["url"] as? String, "https://api.example.com/items")
+        let resp = firstEntry?["response"] as? [String: Any]
+        XCTAssertEqual(resp?["status"] as? Int, 200)
+    }
+
+    func testScrcpyStatusDecoding() throws {
+        let json = """
+        {"running": true, "available": true, "started": true, "device_id": "emulator-5554"}
+        """.data(using: .utf8)!
+        let status = try JSONDecoder().decode(EngineDTO.ScrcpyStatus.self, from: json)
+        XCTAssertTrue(status.running)
+        XCTAssertEqual(status.available, true)
+        XCTAssertEqual(status.started, true)
+        XCTAssertEqual(status.deviceId, "emulator-5554")
+    }
+}

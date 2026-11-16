@@ -1,0 +1,168 @@
+import SwiftUI
+
+/// Janela de Ajustes (⌘,): abas Geral, Desempenho, Paletas e Conexões. As
+/// mudanças valem na hora, sem Salvar nem Cancelar.
+struct SettingsView: View {
+    var body: some View {
+        TabView {
+            GeneralSettings()
+                .frame(width: 520)
+                .tabItem { Label("Geral", systemImage: "gearshape") }
+            PerformanceSettings()
+                .frame(width: 520)
+                .tabItem { Label("Desempenho", systemImage: "gauge.with.dots.needle.33percent") }
+            PaletteGallery()
+                .frame(width: 680, height: 640)
+                .tabItem { Label("Paletas", systemImage: "paintpalette") }
+            ConnectionSettings()
+                .frame(width: 520)
+                .tabItem { Label("Conexões", systemImage: "cable.connector") }
+        }
+    }
+}
+
+struct GeneralSettings: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(UpdateState.self) private var updates: UpdateState?
+    @AppStorage(LocatorStrategy.defaultKey) private var seletorPadrao: LocatorStrategy = .auto
+    @AppStorage(FlowRunOptions.launchAppKey) private var abrirAppAntes = false
+    @AppStorage(EditorScheme.chave) private var esquemaEditor = EditorScheme.pycharmID
+
+    var body: some View {
+        @Bindable var state = appState
+        Form {
+            Picker("Aparência:", selection: Binding(
+                get: { themeManager.mode },
+                set: { modo in withAnimation(Motion.crossfade) { themeManager.setMode(modo) } }
+            )) {
+                Text("Sistema").tag(ThemeMode.system)
+                Text("Claro").tag(ThemeMode.light)
+                Text("Escuro").tag(ThemeMode.dark)
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
+            .disabled(themeManager.palette != nil)
+
+            if let paleta = themeManager.palette {
+                LabeledContent("") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("A paleta \(paleta.name) é \(paleta.isDark ? "escura" : "clara") e define a aparência do app.")
+                            .font(DSFont.subheadline)
+                            .foregroundStyle(themeManager.current.labelSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Voltar para a Praia") {
+                            themeManager.setPalette(PaletteSpec.praiaID)
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+
+            Picker("Seletor padrão:", selection: $seletorPadrao) {
+                ForEach(LocatorStrategy.allCases) { Text($0.displayName).tag($0) }
+            }
+            .fixedSize()
+            .onChange(of: seletorPadrao) { _, novo in appState.locatorStrategy = novo }
+            .help("Estratégia com que o app abre. Auto: o motor escolhe o localizador único mais robusto.")
+
+            // Editor de Page Objects no modelo do PyCharm (PO-3).
+            Picker("Cores do editor:", selection: $esquemaEditor) {
+                Text("PyCharm").tag(EditorScheme.pycharmID)
+                Text("Paleta do app").tag(EditorScheme.temaID)
+            }
+            .fixedSize()
+            .help("PyCharm: as cores do Islands Dark (escuro) e do IntelliJ Light (claro), com JetBrains Mono 13.")
+
+            Divider()
+
+            LabeledContent("Ao conectar:") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Iniciar o espelho automaticamente", isOn: $state.autoStartStream)
+                    Text("O espelho começa assim que um aparelho é detectado.")
+                        .font(DSFont.subheadline)
+                        .foregroundStyle(themeManager.current.labelSecondary)
+                }
+            }
+
+            LabeledContent("Ao rodar automação:") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Abrir o app do zero antes do primeiro passo", isOn: $abrirAppAntes)
+                    Text("Fecha e abre o app gravado, para o primeiro passo começar sempre na mesma tela. Só no Android.")
+                        .font(DSFont.subheadline)
+                        .foregroundStyle(themeManager.current.labelSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if let updates {
+                Divider()
+                AutoUpdateSetting(updates: updates)
+            }
+        }
+        .formStyle(.columns)
+        .padding(DesignMetrics.Spacing.windowMargin)
+    }
+}
+
+/// Ajustes › Geral › Atualizações (LIB-4).
+private struct AutoUpdateSetting: View {
+    @Bindable var updates: UpdateState
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        LabeledContent("Atualizações:") {
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Buscar versão nova ao abrir", isOn: $updates.autoCheck)
+                Text("Uma consulta por dia ao GitHub, só para saber se há versão nova. É a única chamada de rede do app; nada sobre você ou seu uso é enviado.")
+                    .font(DSFont.subheadline)
+                    .foregroundStyle(themeManager.current.labelSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// Endereços que o motor usa. Vêm da configuração do motor e aparecem só para
+/// leitura: o protocolo não tem como mudá-los com o motor no ar.
+struct ConnectionSettings: View {
+    @Environment(EngineSession.self) private var session
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        let theme = themeManager.current
+        Form {
+            LabeledContent("WebDriverAgent:") {
+                valor(session.engineInfo?.wdaUrl)
+            }
+            LabeledContent("Host do proxy:") {
+                VStack(alignment: .leading, spacing: 4) {
+                    valor(session.engineInfo?.proxy.host)
+                    Text("Mantenha 127.0.0.1. Escutar em 0.0.0.0 transforma a máquina em proxy aberto para a rede.")
+                        .font(DSFont.subheadline)
+                        .foregroundStyle(theme.labelSecondary)
+                        .frame(maxWidth: 240, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            LabeledContent("Porta do proxy:") {
+                valor(session.engineInfo.map { String($0.proxy.port) })
+            }
+            LabeledContent("adb:") {
+                valor(session.engineInfo.map { $0.adbAvailable ? $0.adbPath : "não encontrado" })
+            }
+            Text("Esses valores vêm da configuração do motor e valem para a sessão inteira.")
+                .font(DSFont.subheadline)
+                .foregroundStyle(theme.labelSecondary)
+        }
+        .formStyle(.columns)
+        .padding(DesignMetrics.Spacing.windowMargin)
+    }
+
+    private func valor(_ texto: String?) -> some View {
+        Text(texto ?? "motor não conectado")
+            .font(DSFont.mono(12))
+            .foregroundStyle(texto == nil ? themeManager.current.labelTertiary : themeManager.current.labelPrimary)
+            .textSelection(.enabled)
+    }
+}

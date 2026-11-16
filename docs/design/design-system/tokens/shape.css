@@ -1,0 +1,25 @@
+/* Raios concêntricos (interno = externo − espaçamento) e sombras. */
+:root{
+  --radius-window: 16px;
+  --radius-sheet: 16px;
+  --radius-popover: 14px;
+  --radius-card: 12px;
+  --radius-menu: 10px;
+  --radius-sidebar-item: 8px;   /* janela 16 − inset 8 */
+  --radius-menu-item: 6px;      /* menu 10 − inset 4 */
+  --radius-field: 7px;
+  --radius-row: 6px;
+  --radius-chip: 4px;
+  --radius-capsule: 999px;
+  --radius-device: 40px;
+  --radius-device-screen: 33px;   /* moldura 40 − padding 7 */
+
+  --shadow-window-active: 0 0 0 .5px rgba(0,0,0,.18), 0 22px 70px rgba(10,12,40,.30), 0 6px 18px rgba(10,12,40,.14);
+  --shadow-window-inactive: 0 0 0 .5px rgba(0,0,0,.14), 0 10px 32px rgba(10,12,40,.16);
+  --shadow-sheet: 0 0 0 .5px rgba(0,0,0,.16), 0 18px 48px rgba(10,12,40,.28);
+  --shadow-popover: 0 0 0 .5px rgba(0,0,0,.12), 0 10px 30px rgba(10,12,40,.18);
+  --shadow-menu: 0 0 0 .5px rgba(0,0,0,.14), 0 8px 24px rgba(10,12,40,.20);
+  --shadow-control: 0 .5px 1.5px rgba(10,12,40,.16), 0 0 0 .5px rgba(10,12,40,.08);
+  --shadow-drag: 0 8px 22px rgba(10,12,40,.22);
+  --shadow-card: 0 0 0 .5px var(--separator), 0 1px 2px rgba(10,12,40,.05);
+}

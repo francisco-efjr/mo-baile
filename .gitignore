@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Segredos e configuracao local
+.env
+.env.local
+.env.*.local
+
+# Ferramentas
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+
+# Swift / SPM
+apps/MoBaile/.build/
+apps/MoBaile/.swiftpm/
+*.xcodeproj/
+DerivedData/
+*.xcresult/
+
+# Artefatos de empacotamento: gerados por tools/package_macos_app.sh
+*.app/
+
+# Editores
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Artefatos temporarios da automacao
+.flow_runner.py
+.automation_cache/
+
+# Artefatos do harness de QA (gerados a cada execucao)
+qa/calls.log
+qa/cert.pem
+qa/key.pem
+
+# Artefatos de release (tools/package_macos_app.sh e .github/workflows/release.yml)
+*.zip
+*.zip.sha256
+*.dmg
+saida/
+.tmp-dist/
+.mobaile-staging.*/
+
+# Material de assinatura e notarizacao: nunca no repositorio (docs/RELEASE.md)
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.keychain
+*.keychain-db
+
+# Estado local de agentes e ferramentas
+.claude/worktrees/
+.claude/settings.local.json
+.claude/launch.json
+
+# Material de trabalho local do dono: prints antigos, vídeos de módulo,
+# status e notas de sessão. Pode ter tela ou dado real; nunca vai para o git.
+docs/design/telas/arquivo-2.x/
+docs/status/
+docs/video/
+docs/SESSAO_*.md
+
+# Material de privacidade do dono (relatorio detalhado, termos reais): nunca no git
+.privado/
