@@ -131,9 +131,9 @@ enum Exporters {
         choose(title: "Abrir Spec de Tagueamento", prompt: "Abrir", types: [.json])
     }
 
-    /// Log exportado: `log_obtido.json` ou Logcat em texto.
+    /// Log exportado: `log_obtido.json`, Logcat em texto ou o TSV de uma exploração do GA4.
     static func chooseReportLog() -> URL? {
-        var tipos: [UTType] = [.json, .plainText]
+        var tipos: [UTType] = [.json, .plainText, .tabSeparatedText]
         if let log = UTType.log { tipos.append(log) }
         return choose(title: "Escolher Log de Analytics", prompt: "Usar", types: tipos)
     }

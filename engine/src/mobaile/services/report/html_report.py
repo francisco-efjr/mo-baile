@@ -167,6 +167,11 @@ def _checks_table(result: VariantResult) -> str:
                         f'<td class="v__none">—</td><td class="v__exp">{_e(_value(value))}</td></tr>')
     else:
         for check in result.checks:
+            if not check.exported:
+                rows.append(f'<tr class="is-off"><td class="v__none">{_icon("minus", 12, 2.2)}'
+                            f'<span class="rp-sr">não exportado</span></td><td class="v__field">{_e(check.field)}</td>'
+                            f'<td class="v__none">não exportado</td><td class="v__exp">{_e(check.expected)}</td></tr>')
+                continue
             mark = (f'<td class="v__ok">{_icon("circle-check", 12, 2.2)}<span class="rp-sr">ok</span></td>' if check.ok
                     else f'<td class="v__bad">{_icon("circle-x", 12, 2.2)}<span class="rp-sr">diverge</span></td>')
             row_class = "" if check.ok else ' class="is-bad"'
@@ -405,6 +410,10 @@ def generate_interactive_html(report: AuditReport, prints_dir: str | Path | None
     extras_n = len(report.extras) + len(report.alerts)
     meta = [f'<span class="rp-chip rp-chip--{_e(platform)}">{_icon("smartphone", 11, 2)}{_e(report.platform.upper())}</span>',
             _period(report)]
+    if "exportados" in report.log_stats:
+        # Export do GA4: diz o que deu para conferir; o resto aparece como "não exportado".
+        campos = ", ".join(report.log_stats["exportados"]) or "só o nome do evento"
+        meta.append(f"<span>export do GA4 · confere {_e(campos)}</span>")
     if spec.versao_especificacao:
         meta.append(f"<span>spec {_e(spec.versao_especificacao)}</span>")
     meta += [f"<span>{len(spec.cards)} cards</span>", f"<span>{report.total} validações</span>",

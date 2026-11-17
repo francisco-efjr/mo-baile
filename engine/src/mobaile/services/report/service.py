@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from mobaile.domain.errors import InvalidInputError
-from mobaile.domain.report import PLATFORMS, AuditReport, SpecTemplate, TagEvent, VariantResult
+from mobaile.domain.report import PLATFORMS, AuditReport, ParamCheck, SpecTemplate, TagEvent, VariantResult
 from mobaile.ports import TextRecognizer
 from mobaile.security import (
     IMAGE_SUFFIXES,
@@ -81,7 +81,7 @@ MAX_CHECKLIST_BYTES = 2 * 1024 * 1024
 CHECKLIST_SUFFIX = ".checklist.md"
 # Mais que isso não é um card por print: é a pasta errada.
 MAX_PRINTS = 300
-LOG_SUFFIXES = (".json", ".txt", ".log")
+LOG_SUFFIXES = (".json", ".txt", ".log", ".tsv")
 
 
 def _no_progress(_message: str, _percent: float | None = None) -> None:
@@ -99,6 +99,16 @@ def _display(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+def _check_payload(check: ParamCheck) -> dict[str, Any]:
+    """Um parâmetro conferido. `exported` só aparece quando é falso (export do GA4 sem o parâmetro)."""
+    out: dict[str, Any] = {
+        "field": check.field, "expected": check.expected, "obtained": _display(check.obtained), "ok": check.ok,
+    }
+    if not check.exported:
+        out["exported"] = False
+    return out
 
 
 class ReportService:
@@ -225,6 +235,8 @@ class ReportService:
             "observations": "\n".join(observation_lines(report)),
             "markdown": generate_markdown(report),
             "tsv": generate_tsv(report),
+            # Só num export do GA4: os parâmetros que o arquivo traz.
+            **({"exported_fields": list(report.log_stats["exportados"])} if "exportados" in report.log_stats else {}),
         }
 
     @staticmethod
@@ -245,10 +257,7 @@ class ReportService:
             "event": result.variant.event,
             "variation": variation_text(result),
             "status": result.status.value,
-            "checks": [
-                {"field": c.field, "expected": c.expected, "obtained": _display(c.obtained), "ok": c.ok}
-                for c in result.checks
-            ],
+            "checks": [_check_payload(c) for c in result.checks],
             # O que a variação espera, já com o fluxo aplicado e na ordem do
             # card. Na não disparada é a única fonte dos valores (não há checks).
             "expected": [

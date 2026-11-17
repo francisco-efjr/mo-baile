@@ -342,11 +342,18 @@ struct ReportSummaryBar: View {
 
     private var origem: String {
         let fonte = report.logPath.map { ($0 as NSString).lastPathComponent } ?? "eventos capturados"
-        let uteis = report.logStats.useful == 1 ? "1 evento" : "\(report.logStats.useful) eventos"
+        let n = report.logStats.useful
+        let uteis = report.exportedFields != nil
+            ? (n == 1 ? "1 combinação do GA4" : "\(n) combinações do GA4")
+            : (n == 1 ? "1 evento" : "\(n) eventos")
         return "\(report.platform.displayName) · \(fonte) · \(uteis)"
     }
 
     private var ajudaOrigem: String {
+        if let campos = report.exportedFields {
+            let lista = campos.isEmpty ? "só o nome do evento" : campos.joined(separator: ", ")
+            return "Export do GA4 (TSV): confere \(lista). O que a spec pede e o export não traz aparece como não exportado."
+        }
         let st = report.logStats
         return "\(st.useful) eventos únicos da plataforma (\(st.duplicates) duplicados removidos de \(st.platformEvents)); \(st.totalRead) lidos no total"
     }

@@ -118,16 +118,17 @@ private struct ReportChecksPanel: View {
             Divider().overlay(theme.separator).gridCellUnsizedAxes(.horizontal)
             ForEach(result.checks) { check in
                 GridRow {
-                    Image(systemName: check.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(check.ok ? theme.success : theme.destructive)
+                    Image(systemName: !check.exported ? "minus.circle" : check.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(!check.exported ? theme.labelTertiary : check.ok ? theme.success : theme.destructive)
                         .accessibilityHidden(true)
                     Text(check.field)
                         .foregroundStyle(theme.accentText)
-                    Text(check.obtained ?? "ausente")
+                    Text(!check.exported ? "não exportado" : check.obtained ?? "ausente")
                         .foregroundStyle(check.obtained == nil ? theme.labelTertiary : theme.labelPrimary)
                         .italic(check.obtained == nil)
                         .lineLimit(3)
-                        .help(check.obtained ?? "O parâmetro não veio no disparo")
+                        .help(!check.exported ? "O export do Analytics (TSV) não traz este parâmetro"
+                              : check.obtained ?? "O parâmetro não veio no disparo")
                     Text(check.expected)
                         .foregroundStyle(check.ok ? theme.labelSecondary : theme.labelPrimary)
                         .lineLimit(3)
@@ -138,7 +139,9 @@ private struct ReportChecksPanel: View {
                 .padding(.vertical, 4)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
-                    "\(check.field): \(check.ok ? "confere" : "diverge"), obtido \(check.obtained ?? "ausente"), esperado \(check.expected)"
+                    check.exported
+                        ? "\(check.field): \(check.ok ? "confere" : "diverge"), obtido \(check.obtained ?? "ausente"), esperado \(check.expected)"
+                        : "\(check.field): não exportado no TSV, esperado \(check.expected)"
                 )
                 Divider().overlay(theme.separator).gridCellUnsizedAxes(.horizontal)
             }

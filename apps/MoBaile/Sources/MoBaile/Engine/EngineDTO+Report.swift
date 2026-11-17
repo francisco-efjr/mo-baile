@@ -51,6 +51,8 @@ extension EngineDTO {
         let expected: String
         let obtained: String?
         let ok: Bool
+        /// Só vem (falso) quando o log é um export do GA4 sem este parâmetro.
+        let exported: Bool?
     }
 
     struct ReportMatchedPayload: Decodable {
@@ -119,7 +121,9 @@ extension EngineDTO {
                 // Status desconhecido conta como divergente: esconder uma linha
                 // que o motor marcou seria pior que mostrá-la como problema.
                 status: ReportStatus(rawValue: status) ?? .error,
-                checks: checks.map { ReportCheck(field: $0.field, expected: $0.expected, obtained: $0.obtained, ok: $0.ok) },
+                checks: checks.map {
+                    ReportCheck(field: $0.field, expected: $0.expected, obtained: $0.obtained, ok: $0.ok, exported: $0.exported ?? true)
+                },
                 matched: matched.map {
                     ReportMatchedEvent(time: $0.time, eventName: $0.eventName, params: $0.params.mapValues(\.displayText))
                 },
@@ -191,11 +195,13 @@ extension EngineDTO {
         let observations: String
         let markdown: String
         let tsv: String
+        let exportedFields: [String]?
 
         enum CodingKeys: String, CodingKey {
             case spec, platform, source, summary, results, extras, alerts, observations, markdown, tsv
             case logPath = "log_path"
             case logStats = "log_stats"
+            case exportedFields = "exported_fields"
         }
 
         func toModel() -> AuditReport {
@@ -231,7 +237,8 @@ extension EngineDTO {
                 },
                 observations: observations,
                 markdown: markdown,
-                tsv: tsv
+                tsv: tsv,
+                exportedFields: exportedFields
             )
         }
     }

@@ -148,6 +148,9 @@ def variant_block_text(result: VariantResult, flow_label: str | None) -> str:
                  f"{result.occurrences} disparo(s)", "{"]
         for i, check in enumerate(result.checks):
             comma = "," if i < len(result.checks) - 1 else ""
+            if not check.exported:
+                lines.append(f'  "{check.field}": —{comma}  // não exportado')
+                continue
             got = "AUSENTE" if check.obtained is None else _fmt(check.obtained)
             lines.append(f'  "{check.field}": {got}{comma}  {"✓" if check.ok else "✗"}')
             if not check.ok:

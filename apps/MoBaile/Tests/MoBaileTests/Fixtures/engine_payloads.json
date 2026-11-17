@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.24.1",
+      "version": "3.25.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -112,7 +112,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.24.1",
+      "engine_version": "3.25.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -2302,6 +2302,408 @@
         "code": "invalid_input",
         "message": "Nenhum evento capturado nesta sessão. Inicie a escuta em Analytics ou escolha um arquivo de log."
       }
+    }
+  },
+  "report.audit_ga4_tsv": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "spec": {
+        "path": "/Users/qa/Documents/Mo baile/Demanda/spec.json",
+        "projeto": "Teste",
+        "versao_especificacao": null,
+        "plataforma": "android",
+        "prints_dir": "/Users/qa/Documents/Mo baile/Demanda/prints",
+        "prints_dir_exists": true,
+        "fluxos": [
+          {
+            "key": "avulso",
+            "label": "PDA · pedido-avulso"
+          },
+          {
+            "key": "empresa",
+            "label": "PDE · pedido-empresa"
+          }
+        ],
+        "cards": 3,
+        "variants": 7,
+        "sections": [
+          "Home",
+          "Simulação"
+        ]
+      },
+      "platform": "android",
+      "source": "file",
+      "log_path": "/Users/qa/Documents/Mo baile/Demanda/exploracao.tsv",
+      "log_stats": {
+        "total_lidos": 2,
+        "da_plataforma": 2,
+        "duplicados": 0,
+        "uteis": 2
+      },
+      "summary": {
+        "total": 7,
+        "ok": 2,
+        "divergent": 0,
+        "missing": 5,
+        "compliance_rate": 28.6,
+        "extras": 0,
+        "alerts": 0
+      },
+      "results": [
+        {
+          "id": 0,
+          "card_index": 0,
+          "section": "Home",
+          "card_title": "screen_view",
+          "print_path": "/Users/qa/Documents/Mo baile/Demanda/prints/home.png",
+          "flow": null,
+          "flow_label": null,
+          "event": "screen_view",
+          "variation": "app:pedido:home",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:home",
+              "obtained": "app:pedido:home",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido",
+              "obtained": "pedido",
+              "ok": true
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:home"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido"
+            }
+          ],
+          "matched": {
+            "id": 0,
+            "time": null,
+            "event_name": "screen_view",
+            "params": {
+              "ga_screen": "app:pedido:home",
+              "flow_name": "pedido"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "",
+          "block": "// screen_view [OK]\n// log  · 1 disparo(s)\n{\n  \"screen_name\": \"app:pedido:home\",  ✓\n  \"flow_name\": \"pedido\"  ✓\n}"
+        },
+        {
+          "id": 1,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "avulso",
+          "flow_label": "PDA · pedido-avulso",
+          "event": "interaction_pedido_avulso",
+          "variation": "click:parcelas",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:avulso:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-avulso"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDA · interaction_pedido_avulso [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:avulso:simulacao\",\n  \"flow_name\": \"pedido-avulso\",\n  \"component\": \"button\",\n  \"detail\": \"click:parcelas\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 2,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "avulso",
+          "flow_label": "PDA · pedido-avulso",
+          "event": "interaction_pedido_avulso",
+          "variation": "click:[numero]-parcela-sem-seguro",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:avulso:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-avulso"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDA · interaction_pedido_avulso [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:avulso:simulacao\",\n  \"flow_name\": \"pedido-avulso\",\n  \"component\": \"button\",\n  \"detail\": \"click:[numero]-parcela-sem-seguro\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 3,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "empresa",
+          "flow_label": "PDE · pedido-empresa",
+          "event": "interaction_pedido_empresa",
+          "variation": "click:parcelas",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:parcelas"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDE · interaction_pedido_empresa [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:empresa:simulacao\",\n  \"flow_name\": \"pedido-empresa\",\n  \"component\": \"button\",\n  \"detail\": \"click:parcelas\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 4,
+          "card_index": 1,
+          "section": "Simulação",
+          "card_title": "interaction_pedido_{fluxo}",
+          "print_path": null,
+          "flow": "empresa",
+          "flow_label": "PDE · pedido-empresa",
+          "event": "interaction_pedido_empresa",
+          "variation": "click:[numero]-parcela-sem-seguro",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "component",
+              "value": "button"
+            },
+            {
+              "key": "detail",
+              "value": "click:[numero]-parcela-sem-seguro"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDE · interaction_pedido_empresa [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:empresa:simulacao\",\n  \"flow_name\": \"pedido-empresa\",\n  \"component\": \"button\",\n  \"detail\": \"click:[numero]-parcela-sem-seguro\"\n}  // esperado (spec)"
+        },
+        {
+          "id": 5,
+          "card_index": 2,
+          "section": "Simulação",
+          "card_title": "add_to_cart",
+          "print_path": null,
+          "flow": "avulso",
+          "flow_label": "PDA · pedido-avulso",
+          "event": "add_to_cart",
+          "variation": "app:pedido:avulso:simulacao",
+          "status": "ok",
+          "checks": [
+            {
+              "field": "screen_name",
+              "expected": "app:pedido:avulso:simulacao",
+              "obtained": "app:pedido:avulso:simulacao",
+              "ok": true
+            },
+            {
+              "field": "flow_name",
+              "expected": "pedido-avulso",
+              "obtained": "pedido-avulso",
+              "ok": true
+            },
+            {
+              "field": "insurance",
+              "expected": "[0|1]",
+              "obtained": null,
+              "ok": true,
+              "exported": false
+            },
+            {
+              "field": "value",
+              "expected": "[numero]",
+              "obtained": null,
+              "ok": true,
+              "exported": false
+            },
+            {
+              "field": "items[0].item_id",
+              "expected": "1001",
+              "obtained": null,
+              "ok": true,
+              "exported": false
+            },
+            {
+              "field": "items[0].item_name",
+              "expected": "pedido-avulso",
+              "obtained": null,
+              "ok": true,
+              "exported": false
+            }
+          ],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:avulso:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-avulso"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"1001\", \"item_name\": \"pedido-avulso\"}]"
+            }
+          ],
+          "matched": {
+            "id": 1,
+            "time": null,
+            "event_name": "add_to_cart",
+            "params": {
+              "ga_screen": "app:pedido:avulso:simulacao",
+              "flow_name": "pedido-avulso"
+            }
+          },
+          "occurrences": 1,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "",
+          "block": "// PDA · add_to_cart [OK]\n// log  · 1 disparo(s)\n{\n  \"screen_name\": \"app:pedido:avulso:simulacao\",  ✓\n  \"flow_name\": \"pedido-avulso\",  ✓\n  \"insurance\": —,  // não exportado\n  \"value\": —,  // não exportado\n  \"items[0].item_id\": —,  // não exportado\n  \"items[0].item_name\": —  // não exportado\n}"
+        },
+        {
+          "id": 6,
+          "card_index": 2,
+          "section": "Simulação",
+          "card_title": "add_to_cart",
+          "print_path": null,
+          "flow": "empresa",
+          "flow_label": "PDE · pedido-empresa",
+          "event": "add_to_cart",
+          "variation": "app:pedido:empresa:simulacao",
+          "status": "missing",
+          "checks": [],
+          "expected": [
+            {
+              "key": "screen_name",
+              "value": "app:pedido:empresa:simulacao"
+            },
+            {
+              "key": "flow_name",
+              "value": "pedido-empresa"
+            },
+            {
+              "key": "insurance",
+              "value": "[0|1]"
+            },
+            {
+              "key": "value",
+              "value": "[numero]"
+            },
+            {
+              "key": "items",
+              "value": "[{\"item_id\": \"[preenchido]\", \"item_name\": \"pedido-empresa\"}]"
+            }
+          ],
+          "matched": null,
+          "occurrences": 0,
+          "older_divergent": 0,
+          "older_divergences": [],
+          "ga_screen": null,
+          "note": null,
+          "divergences": "Não disparado no log",
+          "block": "// PDE · add_to_cart [ERRO]\n// NÃO DISPARADO no log\n{\n  \"screen_name\": \"app:pedido:empresa:simulacao\",\n  \"flow_name\": \"pedido-empresa\",\n  \"insurance\": \"[0|1]\",\n  \"value\": \"[numero]\",\n  \"items[0].item_id\": \"[preenchido]\",\n  \"items[0].item_name\": \"pedido-empresa\"\n}  // esperado (spec)"
+        }
+      ],
+      "extras": [],
+      "alerts": [],
+      "observations": "Eventos dos fluxos da spec que nenhum card cobre:\n  (nenhum)\n\nAlertas (app_exception / error_view nas telas da spec):\n  (nenhum)\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.",
+      "markdown": "# Auditoria de Tagueamento — Teste (ANDROID)\n\n- 3 cards · 7 validações · OK: 2 · Erro: 5 (sendo 5 não disparadas) · Conformidade: 28.6%\n- Plataforma: ANDROID · 2 eventos únicos (0 duplicados removidos de 2 da plataforma; 2 lidos no arquivo)\n\n| Seção | Card | Fluxo | Evento | Variação | Status | Divergências | Horário | Disparos |\n|---|---|---|---|---|---|---|---|---|\n| Home | screen_view | - | screen_view | app:pedido:home | OK |  |  | 1 |\n| Simulação | interaction_pedido_{fluxo} | PDA · pedido-avulso | interaction_pedido_avulso | click:parcelas | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDA · pedido-avulso | interaction_pedido_avulso | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:parcelas | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | interaction_pedido_{fluxo} | PDE · pedido-empresa | interaction_pedido_empresa | click:[numero]-parcela-sem-seguro | NÃO DISPARADO | Não disparado no log |  | 0 |\n| Simulação | add_to_cart | PDA · pedido-avulso | add_to_cart | app:pedido:avulso:simulacao | OK |  |  | 1 |\n| Simulação | add_to_cart | PDE · pedido-empresa | add_to_cart | app:pedido:empresa:simulacao | NÃO DISPARADO | Não disparado no log |  | 0 |\n\n## Fora da spec / Observações\n\nEventos dos fluxos da spec que nenhum card cobre:\n  (nenhum)\n\nAlertas (app_exception / error_view nas telas da spec):\n  (nenhum)\n\nRegra: cada variação é validada pelo disparo mais recente; '⚠' indica disparos anteriores com divergência diferente.\n",
+      "tsv": "Seção\tCard\tFluxo\tEvento\tVariação\tStatus\tDivergências\tHorário\tDisparos\nHome\tscreen_view\t-\tscreen_view\tapp:pedido:home\tOK\t\t\t1\nSimulação\tinteraction_pedido_{fluxo}\tPDA · pedido-avulso\tinteraction_pedido_avulso\tclick:parcelas\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_pedido_{fluxo}\tPDA · pedido-avulso\tinteraction_pedido_avulso\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:parcelas\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tinteraction_pedido_{fluxo}\tPDE · pedido-empresa\tinteraction_pedido_empresa\tclick:[numero]-parcela-sem-seguro\tNÃO DISPARADO\tNão disparado no log\t\t0\nSimulação\tadd_to_cart\tPDA · pedido-avulso\tadd_to_cart\tapp:pedido:avulso:simulacao\tOK\t\t\t1\nSimulação\tadd_to_cart\tPDE · pedido-empresa\tadd_to_cart\tapp:pedido:empresa:simulacao\tNÃO DISPARADO\tNão disparado no log\t\t0\n",
+      "exported_fields": [
+        "ga_screen",
+        "flow_name"
+      ]
     }
   },
   "report.card": {

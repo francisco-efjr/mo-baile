@@ -245,6 +245,21 @@ def arvore_projeto(call) -> dict:
         return _trocar_caminhos(saida, (str(raiz),), "/Users/qa/Documents/Mo baile")
 
 
+def _tsv_ga4(pasta: pathlib.Path) -> pathlib.Path:
+    """Export TSV de uma exploração do GA4 (fictício), pivotado por sistema operacional."""
+    caminho = pasta / "exploracao.tsv"
+    caminho.write_text(
+        "# DemoApp\n# Exploração de teste\n# 20261008-20261008\n\n"
+        "\t\tSistema operacional\tAndroid\tTotais\n"
+        "Nome do evento\tfirebase_screen\tflow_name\tTotal de usuários\tTotal de usuários\n"
+        "\t\t\t3\t3\tTotal geral\n"
+        "screen_view\tapp:pedido:home\tpedido\t2\t2\n"
+        "add_to_cart\tapp:pedido:avulso:simulacao\tpedido-avulso\t1\t1\n",
+        encoding="utf-8",
+    )
+    return caminho
+
+
 def relatorio(server: EngineServer, call) -> dict:
     """`report.*` pelo servidor de verdade, sobre arquivos de verdade."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -271,6 +286,10 @@ def relatorio(server: EngineServer, call) -> dict:
                 "prints_dir": str(prints), "projeto": "Demanda", "platform": "android",
             }),
             "erro_report_sessao_vazia": call("report.audit", {"spec_path": str(spec_path), "source": "session"}),
+            # Log em TSV de uma exploração do GA4: só as dimensões exportadas são conferidas.
+            "report.audit_ga4_tsv": call("report.audit", {
+                "spec_path": str(spec_path), "source": "file", "log_path": str(_tsv_ga4(pasta)),
+            }),
             # Depois da auditoria e do export: a edição regrava a spec.
             "report.card": call("report.card", {"spec_path": str(spec_path), "card_index": 2}),
             "report.card_update": call("report.card_update", {

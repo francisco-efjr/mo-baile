@@ -214,6 +214,9 @@ class ParamCheck:
     expected: str
     obtained: Any
     ok: bool
+    # Falso quando o log é um export do GA4 que não traz este parâmetro: não
+    # há o que comparar, então não conta como divergência (`ok` fica verdadeiro).
+    exported: bool = True
 
 
 @dataclass
@@ -255,7 +258,7 @@ class AuditReport:
     spec: SpecTemplate
     platform: str
     results: list[VariantResult]
-    log_stats: dict[str, int] = field(default_factory=dict)
+    log_stats: dict[str, Any] = field(default_factory=dict)
     extras: list[ExtraEvent] = field(default_factory=list)
     alerts: list[ExtraEvent] = field(default_factory=list)
     # Primeiro e último evento útil do log, em ordem de horário: o período auditado.

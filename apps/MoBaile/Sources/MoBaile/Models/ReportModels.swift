@@ -63,6 +63,9 @@ struct ReportCheck: Identifiable, Equatable, Sendable {
     /// `nil` quando o parâmetro não veio no disparo.
     let obtained: String?
     let ok: Bool
+    /// Falso quando o log é um export do GA4 (TSV) que não traz este parâmetro:
+    /// não conta como divergência, aparece como "não exportado".
+    var exported: Bool = true
     var id: String { field }
 }
 
@@ -192,6 +195,8 @@ struct AuditReport: Equatable, Sendable {
     let observations: String
     let markdown: String
     let tsv: String
+    /// Só num export do GA4 (TSV): os parâmetros que o arquivo traz.
+    var exportedFields: [String]? = nil
 
     var alerts: [ReportExtra] { extras.filter(\.isAlert) }
     var outOfSpec: [ReportExtra] { extras.filter { !$0.isAlert } }

@@ -5,6 +5,23 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.25.0] - 2026-11-17
+
+### Adicionado
+
+- **Log de eventos em TSV do Google Analytics:** a auditoria do Relatório
+  aceita o arquivo de "Fazer o download dos dados" (TSV) de uma exploração do
+  GA4 (`services/report/ga4_tsv.py`).
+  - Cada linha com métrica maior que zero vira um evento, uma vez por
+    plataforma quando o export é pivotado por sistema operacional.
+  - As dimensões viram parâmetros, e `firebase_screen` vira `ga_screen`, como
+    no logcat. `(not set)` conta como exportado e vazio.
+  - Só as dimensões exportadas são conferidas. O que a spec pede e o export
+    não traz aparece como **não exportado**, sem contar como divergência: no
+    app, no bloco e no relatório HTML.
+  - Contrato: `checks[].exported: false` e `exported_fields` só aparecem com o
+    TSV, e o resultado de um logcat não muda.
+
 ## [3.24.1] - 2026-11-16
 
 ### Corrigido

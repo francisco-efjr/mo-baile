@@ -6,7 +6,9 @@ no time:
 - a lista que o próprio Mo baile exporta em ``log_obtido.json`` (e o que a
   escuta tem em memória, que é o mesmo `AnalyticsEvent.to_dict`);
 - objeto com ``eventos`` ou com ``jornadas`` (logs consolidados à mão);
-- Logcat em texto, onde cada linha ``Logging event:`` vira um evento.
+- Logcat em texto, onde cada linha ``Logging event:`` vira um evento;
+- export TSV de uma exploração do Google Analytics 4 (`ga4_tsv`): cada linha
+  com métrica maior que zero vira um evento, só com as dimensões exportadas.
 
 Regras de leitura:
 
@@ -25,6 +27,7 @@ import re
 from typing import Any
 
 from mobaile.domain.report import TagEvent
+from mobaile.services.report.ga4_tsv import ANY_PLATFORM, items_from_ga4_tsv, looks_like_ga4_tsv
 from mobaile.services.report.rules import clean_colon_spacing, strip_event_suffixes, strip_param_key_suffixes
 
 ANDROID_LINE = re.compile(r"Logging event:\s*origin=([^,]+),name=([^,]+),params=(Bundle\[.*\])\s*$")
@@ -129,10 +132,12 @@ def items_from_json(data: Any) -> list[dict[str, Any]]:
 
 
 def items_from_text(content: str) -> list[dict[str, Any]]:
-    """JSON quando é JSON; senão Logcat em texto, uma linha ``Logging event:`` por evento."""
+    """JSON quando é JSON; TSV do GA4 quando tem o cabeçalho dele; senão Logcat, uma linha ``Logging event:`` por evento."""
     try:
         return items_from_json(json.loads(content))
     except json.JSONDecodeError:
+        if looks_like_ga4_tsv(content):
+            return items_from_ga4_tsv(content)
         return [{"raw_log": line, "tag": "FA-SVC"} for line in content.splitlines() if "Logging event:" in line]
 
 
@@ -140,20 +145,24 @@ def events_from_items(
     items: list[dict[str, Any]],
     platform: str,
     dedupe: bool = True,
-) -> tuple[list[TagEvent], dict[str, int]]:
+) -> tuple[list[TagEvent], dict[str, Any]]:
     """Normaliza os eventos da plataforma pedida.
 
     Devolve os eventos em ordem de horário e as estatísticas da leitura:
-    ``total_lidos``, ``da_plataforma``, ``duplicados`` e ``uteis``.
+    ``total_lidos``, ``da_plataforma``, ``duplicados`` e ``uteis``. Num export
+    do GA4, ``exportados`` lista os parâmetros que vieram no arquivo; item sem
+    plataforma no export vale para a plataforma auditada.
     """
     platform = platform.lower()
-    stats = {"total_lidos": len(items), "da_plataforma": 0, "duplicados": 0, "uteis": 0}
+    stats: dict[str, Any] = {"total_lidos": len(items), "da_plataforma": 0, "duplicados": 0, "uteis": 0}
     seen: set[tuple[Any, ...]] = set()
     events: list[TagEvent] = []
     order: list[str] = []
     for index, item in enumerate(items):
-        if detect_platform(item) != platform:
+        if detect_platform(item) not in (platform, ANY_PLATFORM):
             continue
+        if "exportados" in item and "exportados" not in stats:
+            stats["exportados"] = list(item["exportados"])
         stats["da_plataforma"] += 1
         raw = str(item.get("raw_log") or "")
         parsed = _from_android_raw(raw) if platform == "android" else None

@@ -51,9 +51,31 @@ def screen_of(params: dict[str, Any]) -> Any:
     return params.get("screen_name") or params.get("ga_screen")
 
 
-def check_params(expected: dict[str, Any], params: dict[str, Any]) -> list[ParamCheck]:
+def is_exported(key: str, exported: frozenset[str] | None) -> bool:
+    """O log traz este parâmetro? Num logcat (`exported` None), sempre."""
+    if exported is None:
+        return True
+    if key == "screen_name":
+        return "screen_name" in exported or "ga_screen" in exported
+    return key in exported
+
+
+def check_params(
+    expected: dict[str, Any], params: dict[str, Any], exported: frozenset[str] | None = None,
+) -> list[ParamCheck]:
+    """Confere cada parâmetro da spec. O que o export não traz vira "não exportado"."""
     checks: list[ParamCheck] = []
     for key, exp in expected.items():
+        if not is_exported(key, exported):
+            if key == "items" and isinstance(exp, list):
+                exp_first = exp[0] if exp and isinstance(exp[0], dict) else {}
+                checks.extend(
+                    ParamCheck(field=f"items[0].{k}", expected=display_expected(v), obtained=None, ok=True, exported=False)
+                    for k, v in exp_first.items()
+                )
+            else:
+                checks.append(ParamCheck(field=key, expected=display_expected(exp), obtained=None, ok=True, exported=False))
+            continue
         if key == "items" and isinstance(exp, list):
             got_items = params.get("items")
             first = (
@@ -138,10 +160,11 @@ class EventIndex:
         return pool
 
 
-def _candidates(variant: Variant, events: EventIndex) -> Sequence[TagEvent]:
+def _candidates(variant: Variant, events: EventIndex, exported: frozenset[str] | None = None) -> Sequence[TagEvent]:
     exp = variant.expected
-    base = [(key, exp[key]) for key in ("flow_name", "detail") if key in exp]
-    if "screen_name" not in exp:
+    # Campo que o export não traz não recorta: ele não está em nenhum evento.
+    base = [(key, exp[key]) for key in ("flow_name", "detail") if key in exp and is_exported(key, exported)]
+    if "screen_name" not in exp or not is_exported("screen_name", exported):
         return events.select(variant.event, base)
     same_screen = events.select(variant.event, [*base, ("screen", exp["screen_name"])])
     if same_screen:
@@ -157,16 +180,17 @@ def audit_variant(variant: Variant, events: Sequence[TagEvent] | EventIndex) -> 
     return _judge(variant, _candidates(variant, index))
 
 
-def _judge(variant: Variant, pool: Sequence[TagEvent]) -> VariantResult:
+def _judge(variant: Variant, pool: Sequence[TagEvent], exported: frozenset[str] | None = None) -> VariantResult:
     """Resultado da variação a partir dos disparos dela, em ordem de horário."""
     if not pool:
         return VariantResult(variant=variant, status=VariantStatus.MISSING)
     latest = pool[-1]
-    checks = check_params(variant.expected, latest.params)
+    checks = check_params(variant.expected, latest.params, exported)
     current = _failures(checks)
     # Cada disparo anterior é conferido uma vez só.
     older_bad = [
-        diff for diff in (_failures(check_params(variant.expected, e.params)) - current for e in pool[:-1]) if diff
+        diff for diff in (_failures(check_params(variant.expected, e.params, exported)) - current for e in pool[:-1])
+        if diff
     ]
     ga_screen = latest.params.get("ga_screen")
     explicit = latest.params.get("screen_name")
@@ -259,12 +283,15 @@ def run_audit(
     spec: SpecTemplate,
     events: list[TagEvent],
     platform: str,
-    log_stats: dict[str, int] | None = None,
+    log_stats: dict[str, Any] | None = None,
 ) -> AuditReport:
     variants = expand_spec(spec)
     index = EventIndex(events)
-    pools = [_candidates(v, index) for v in variants]
-    results = [_judge(v, pool) for v, pool in zip(variants, pools, strict=True)]
+    # Export do GA4: só os parâmetros que vieram no arquivo são conferidos.
+    listed = (log_stats or {}).get("exportados")
+    exported = frozenset(listed) if listed is not None else None
+    pools = [_candidates(v, index, exported) for v in variants]
+    results = [_judge(v, pool, exported) for v, pool in zip(variants, pools, strict=True)]
     extras, alerts = find_extras(variants, events, pools)
     return AuditReport(
         spec=spec, platform=platform, results=results, log_stats=dict(log_stats or {}), extras=extras, alerts=alerts,
