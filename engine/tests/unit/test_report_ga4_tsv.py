@@ -136,6 +136,18 @@ class AuditoriaComTsvTest(unittest.TestCase):
         # A compra só existe no Android.
         self.assertEqual(compra.status, VariantStatus.MISSING)
 
+    def test_vale_a_combinacao_que_atende_e_as_outras_viram_aviso(self):
+        tsv = (
+            "Nome do evento\tfirebase_screen\tflow_name\tflow_step\tTotal de usuários\n"
+            "screen_view\tdemoapp:loja:inicio\tloja\tprimeiro-acesso\t5\n"
+            "screen_view\tdemoapp:loja:inicio\tloja\tretomada\t2\n"
+        )
+        inicio = self.relatorio(tsv).results[0]
+        self.assertEqual(inicio.status, VariantStatus.OK)
+        self.assertEqual(inicio.matched.params["flow_step"], "primeiro-acesso")
+        self.assertEqual(inicio.older_divergent, 1)
+        self.assertEqual(inicio.older_divergences, ["flow_step=retomada"])
+
     def test_detail_nao_exportado_nao_recorta_os_candidatos(self):
         r = self.relatorio()
         self.assertEqual(r.results[1].occurrences, 1)

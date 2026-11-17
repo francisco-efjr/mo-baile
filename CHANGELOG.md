@@ -19,6 +19,8 @@ A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/V
   - Só as dimensões exportadas são conferidas. O que a spec pede e o export
     não traz aparece como **não exportado**, sem contar como divergência: no
     app, no bloco e no relatório HTML.
+  - O export não tem ordem de disparo: vale a combinação que atende à spec, e
+    as outras viram aviso de disparo anterior divergente.
   - Contrato: `checks[].exported: false` e `exported_fields` só aparecem com o
     TSV, e o resultado de um logcat não muda.
 

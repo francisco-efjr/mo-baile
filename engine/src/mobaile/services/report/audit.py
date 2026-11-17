@@ -185,11 +185,19 @@ def _judge(variant: Variant, pool: Sequence[TagEvent], exported: frozenset[str] 
     if not pool:
         return VariantResult(variant=variant, status=VariantStatus.MISSING)
     latest = pool[-1]
+    others: Sequence[TagEvent] = pool[:-1]
+    if exported is not None:
+        # Export do GA4: as linhas são combinações, sem "mais recente". Vale a
+        # última que atende tudo, se houver; as outras viram aviso.
+        matching = [e for e in pool if not _failures(check_params(variant.expected, e.params, exported))]
+        if matching:
+            latest = matching[-1]
+            others = [e for e in pool if e is not latest]
     checks = check_params(variant.expected, latest.params, exported)
     current = _failures(checks)
     # Cada disparo anterior é conferido uma vez só.
     older_bad = [
-        diff for diff in (_failures(check_params(variant.expected, e.params, exported)) - current for e in pool[:-1])
+        diff for diff in (_failures(check_params(variant.expected, e.params, exported)) - current for e in others)
         if diff
     ]
     ga_screen = latest.params.get("ga_screen")
