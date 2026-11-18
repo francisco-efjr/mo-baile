@@ -113,8 +113,8 @@ private struct AutoUpdateSetting: View {
     var body: some View {
         LabeledContent("Atualizações:") {
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("Buscar versão nova ao abrir", isOn: $updates.autoCheck)
-                Text("Uma consulta por dia ao GitHub, só para saber se há versão nova. É a única chamada de rede do app; nada sobre você ou seu uso é enviado.")
+                Toggle("Buscar versão nova automaticamente", isOn: $updates.autoCheck)
+                Text("Com o app aberto, uma consulta ao GitHub a cada duas horas, só para saber se há versão nova; quando há, aparece uma faixa e uma notificação. Ao clicar em Atualizar, o app baixa o zip do release e confere a assinatura antes de instalar. Nada sobre você ou seu uso é enviado.")
                     .font(DSFont.subheadline)
                     .foregroundStyle(themeManager.current.labelSecondary)
                     .fixedSize(horizontal: false, vertical: true)

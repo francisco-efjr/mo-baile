@@ -1,15 +1,17 @@
 import AppKit
 import Foundation
 import Observation
+import os
 
-/// Aviso de versão nova (LIB-4). O app pergunta ao GitHub qual é o release
-/// mais recente e, se for maior que o instalado, mostra uma faixa discreta com
-/// Ver Novidades, Baixar, Lembrar Depois e Ignorar Esta Versão. Não baixa nem
-/// troca nada sozinho: a atualização no lugar só vale a pena com Developer ID
-/// (`docs/melhorias/2026-11-16-liberacao/revisao/distribuicao.md`, PROP-1).
+/// Aviso e instalação de versão nova (LIB-4, ADR 0008). Com o app aberto, ele
+/// pergunta ao GitHub a cada duas horas qual é o release mais recente. Se for
+/// maior que o instalado, mostra uma faixa e uma notificação do macOS com
+/// Atualizar. Atualizar baixa o zip, confere a assinatura Ed25519 e deixa a
+/// versão pronta; Reiniciar e Atualizar troca o app e abre de novo
+/// (`UpdateInstaller`). Nada é baixado nem trocado sem um clique.
 ///
-/// É a única chamada de rede do app. Fica desligável em Ajustes › Geral, e
-/// erro de rede é silencioso: o Mo baile continua funcionando offline.
+/// A consulta é desligável em Ajustes › Geral, e erro de rede é silencioso: o
+/// Mo baile continua funcionando offline.
 
 /// Versão `X.Y.Z` comparável por número: 3.9.0 < 3.10.0. Aceita o `v` da tag.
 struct AppVersion: Comparable, CustomStringConvertible, Sendable {
@@ -95,10 +97,18 @@ struct ReleaseInfo: Codable, Equatable, Sendable {
 
     var version: AppVersion? { AppVersion(tagName) }
 
-    /// O zip do app no release (`MoBaile-X.Y.Z-macOS.zip`); sem ele, a página.
-    var downloadURL: URL {
-        assets.first { $0.name.hasSuffix("-macOS.zip") }?.browserDownloadURL ?? htmlURL
+    /// O zip do app no release (`MoBaile-X.Y.Z-macOS.zip`).
+    var zipAsset: Asset? { assets.first { $0.name.hasSuffix("-macOS.zip") } }
+
+    /// A assinatura Ed25519 do zip (`<zip>.sig`), publicada pelo workflow de
+    /// release desde a 3.26.0. Sem ela, só o download manual.
+    var signatureAsset: Asset? {
+        guard let zip = zipAsset else { return nil }
+        return assets.first { $0.name == zip.name + ".sig" }
     }
+
+    /// O zip, para baixar pelo navegador; sem ele, a página do release.
+    var downloadURL: URL { zipAsset?.browserDownloadURL ?? htmlURL }
 }
 
 /// Decisão pura, testável sem rede nem relógio de verdade.
@@ -159,6 +169,12 @@ struct GitHubReleaseFetcher: ReleaseFetching {
     }
 }
 
+/// Notificação do macOS para versão nova (`UpdateNotifier`).
+@MainActor
+protocol UpdateNotifying: AnyObject {
+    func notifyAvailable(_ release: ReleaseInfo, installed: String, canInstall: Bool)
+}
+
 /// Estado do aviso de versão, injetado pelo ambiente como o `AppState`.
 @MainActor
 @Observable
@@ -169,8 +185,16 @@ final class UpdateState {
         static let snoozeUntil = "mobaile.update.snoozeUntil"
         static let lastCheck = "mobaile.update.lastCheck"
         static let feedURL = "mobaile.update.feedURL"
-        /// Último release lido do GitHub, para decidir sem rede dentro das 24 h.
+        /// Último release lido do GitHub, para decidir sem rede dentro do intervalo.
         static let lastRelease = "mobaile.update.lastRelease"
+        /// De que endereço veio o `lastRelease`: um teste com `MOBAILE_UPDATE_URL`
+        /// não deixa um release falso valendo para o app de uso diário.
+        static let lastFeed = "mobaile.update.lastFeed"
+        /// Tag que já virou notificação: uma por versão, não uma por consulta.
+        static let notifiedTag = "mobaile.update.notifiedTag"
+        #if DEBUG
+        static let debugAutoInstall = "mobaile.update.debugAutoInstall"
+        #endif
     }
 
     /// Resultado de "Buscar Atualizações…" pelo menu, para o alerta.
@@ -180,60 +204,130 @@ final class UpdateState {
         case failed
     }
 
+    /// Onde está a instalação da versão nova.
+    enum Phase: Equatable {
+        case idle
+        /// Fração de 0 a 1.
+        case downloading(Double)
+        /// Baixada e conferida; falta o "Reiniciar e Atualizar".
+        case ready
+        case installing
+        /// Trocou o app, mas o ajudante que reabre não subiu.
+        case installedNeedsRestart
+        case failed(String)
+    }
+
     /// Release maior que o instalado, ainda não ignorado nem adiado.
     private(set) var available: ReleaseInfo?
     private(set) var checking = false
+    private(set) var phase: Phase = .idle
 
     var autoCheck: Bool {
         didSet { defaults.set(autoCheck, forKey: Keys.autoCheck) }
     }
 
-    /// Intervalo mínimo entre conferências automáticas.
-    static let interval: TimeInterval = 24 * 60 * 60
+    /// Intervalo mínimo entre consultas automáticas ao GitHub.
+    static let checkInterval: TimeInterval = 2 * 60 * 60
+    /// Quanto vale o "Lembrar Amanhã".
+    static let snoozeInterval: TimeInterval = 24 * 60 * 60
+    /// Com o app aberto, de quanto em quanto tempo vê se o intervalo já passou.
+    static let tick: Duration = .seconds(15 * 60)
+
+    /// Notificação do macOS. Fica nil nos testes e no `swift run`.
+    var notifier: UpdateNotifying?
+    /// Encerra o app depois de trocar o bundle; o ajudante abre o novo.
+    ///
+    /// Pelo runloop, e não direto: o `restartNow()` costuma rodar dentro de uma
+    /// tarefa do MainActor (clique na notificação, fim do download). Ali, o
+    /// `.terminateLater` do `AppDelegate` faz o AppKit esperar a resposta num
+    /// laço que não drena a fila principal, e nem a resposta do encerramento
+    /// ordenado nem a rede de segurança de 6 s chegam: o app trava (visto no
+    /// teste de ponta a ponta de 18/11).
+    var terminate: @MainActor () -> Void = {
+        NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
+    }
+    /// Abre notas e download no navegador. Injetável para testes.
+    var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
+
+    private static let log = Logger(subsystem: "com.qa.mobaile", category: "update")
 
     private let fetcher: ReleaseFetching
     private let defaults: UserDefaults
     private let current: AppVersion?
     private let now: () -> Date
+    private let installer: UpdateInstalling?
+    private let feedID: String
+    private var prepared: PreparedUpdate?
+    /// Tag em download ou pronta: uma consulta nova não troca o release no meio.
+    private var installingTag: String?
+    private var downloadTask: Task<Void, Never>?
+    private var loop: Task<Void, Never>?
 
     init(
         fetcher: ReleaseFetching = GitHubReleaseFetcher(),
         defaults: UserDefaults = .standard,
         current: AppVersion? = AppVersion.installed,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        installer: UpdateInstalling? = UpdateInstaller.forCurrentApp(),
+        feedID: String = GitHubReleaseFetcher.configuredURL().absoluteString
     ) {
         self.fetcher = fetcher
         self.defaults = defaults
         self.current = current
         self.now = now
+        self.installer = installer
+        self.feedID = feedID
         autoCheck = defaults.object(forKey: Keys.autoCheck) as? Bool ?? true
     }
 
     var currentVersion: String { current?.description ?? "dev" }
 
-    /// Ao abrir o app: no máximo uma vez a cada 24 h, se estiver ligado.
+    /// Por que a versão disponível não pode ser instalada com um clique; nil se pode.
+    var inPlaceBlocker: String? {
+        guard let available else { return nil }
+        guard let installer else { return "Só o app empacotado se atualiza sozinho." }
+        return installer.blocker(for: available)
+    }
+
+    private var busy: Bool {
+        switch phase {
+        case .downloading, .ready, .installing, .installedNeedsRestart: true
+        case .idle, .failed: false
+        }
+    }
+
+    // MARK: - Consulta
+
+    /// Ao abrir o app: confere agora (se o intervalo passou) e depois a cada
+    /// `tick`, enquanto o app estiver aberto. Chamar de novo não duplica.
+    func startAutomaticChecks() {
+        guard loop == nil else { return }
+        loop = Task { [weak self] in
+            await self?.checkIfDue()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.tick)
+                guard !Task.isCancelled else { return }
+                await self?.checkIfDue()
+            }
+        }
+    }
+
     func checkOnLaunch() async {
+        await checkIfDue()
+    }
+
+    /// Consulta o GitHub se a última consulta passou do intervalo. Dentro dele,
+    /// decide pelo último release guardado, sem rede: a faixa não some sozinha
+    /// ao reabrir o app, e o "Lembrar Amanhã" vale um dia mesmo sem consulta.
+    func checkIfDue() async {
         guard autoCheck, current != nil else { return }
-        if let ultima = defaults.object(forKey: Keys.lastCheck) as? Date, now().timeIntervalSince(ultima) < Self.interval {
-            // Dentro das 24 h: decide pelo último release guardado, sem rede.
-            // Assim a faixa não some sozinha ao reabrir o app, e o "Lembrar
-            // Amanhã" vale um dia, e não até a próxima consulta.
-            if let dados = defaults.data(forKey: Keys.lastRelease),
-               let guardado = try? JSONDecoder().decode(ReleaseInfo.self, from: dados) {
-                apply(UpdateDecision.decide(
-                    current: current, remote: guardado,
-                    ignoredTag: defaults.string(forKey: Keys.ignoredTag),
-                    snoozeUntil: defaults.object(forKey: Keys.snoozeUntil) as? Date,
-                    now: now()
-                ))
+        if let ultima = defaults.object(forKey: Keys.lastCheck) as? Date, now().timeIntervalSince(ultima) < Self.checkInterval {
+            if available == nil, let guardado = cachedRelease() {
+                apply(decide(guardado, manual: false), automatic: true)
             }
             return
         }
         await check(manual: false)
-    }
-
-    private func apply(_ decisao: UpdateDecision) {
-        if case .available(let release) = decisao { available = release } else { available = nil }
     }
 
     /// "Buscar Atualizações…": ignora o adiamento e a versão ignorada.
@@ -242,15 +336,21 @@ final class UpdateState {
         await check(manual: true)
     }
 
-    func ignoreCurrent() {
-        guard let available else { return }
-        defaults.set(available.tagName, forKey: Keys.ignoredTag)
-        self.available = nil
+    private func cachedRelease() -> ReleaseInfo? {
+        guard defaults.string(forKey: Keys.lastFeed) == feedID, let dados = defaults.data(forKey: Keys.lastRelease) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ReleaseInfo.self, from: dados)
     }
 
-    func snooze() {
-        defaults.set(now().addingTimeInterval(Self.interval), forKey: Keys.snoozeUntil)
-        available = nil
+    private func decide(_ remoto: ReleaseInfo, manual: Bool) -> UpdateDecision {
+        UpdateDecision.decide(
+            current: current, remote: remoto,
+            ignoredTag: defaults.string(forKey: Keys.ignoredTag),
+            snoozeUntil: defaults.object(forKey: Keys.snoozeUntil) as? Date,
+            now: now(),
+            manual: manual
+        )
     }
 
     @discardableResult
@@ -260,30 +360,183 @@ final class UpdateState {
         defer { checking = false }
         do {
             let remoto = try await fetcher.latest()
+            Self.log.notice("consulta de versão: \(remoto.tagName, privacy: .public) publicada, \(self.currentVersion, privacy: .public) instalada")
             defaults.set(now(), forKey: Keys.lastCheck)
             defaults.set(try? JSONEncoder().encode(remoto), forKey: Keys.lastRelease)
-            let decisao = UpdateDecision.decide(
-                current: current,
-                remote: remoto,
-                ignoredTag: defaults.string(forKey: Keys.ignoredTag),
-                snoozeUntil: defaults.object(forKey: Keys.snoozeUntil) as? Date,
-                now: now(),
-                manual: manual
-            )
-            switch decisao {
-            case .available(let release):
-                available = release
-                return .available
-            case .none:
-                available = nil
-                return .upToDate(currentVersion)
-            }
+            defaults.set(feedID, forKey: Keys.lastFeed)
+            apply(decide(remoto, manual: manual), automatic: !manual)
+            return available == nil ? .upToDate(currentVersion) : .available
         } catch {
             // Offline ou GitHub fora do ar: silêncio na conferência automática;
             // só o pedido pelo menu mostra a falha.
+            Self.log.notice("consulta de versão falhou: \(error.localizedDescription, privacy: .public)")
             return .failed
         }
     }
+
+    private func apply(_ decisao: UpdateDecision, automatic: Bool) {
+        switch decisao {
+        case .available(let release):
+            if busy {
+                // Em download ou pronta: só volta a mostrar a mesma versão
+                // (depois de um "Lembrar Amanhã"), sem trocar no meio.
+                if release.tagName == installingTag { available = release }
+                return
+            }
+            if case .failed = phase, available?.tagName != release.tagName { phase = .idle }
+            available = release
+            if automatic { notifyIfNew(release) }
+            #if DEBUG
+            if automatic, debugAutoInstall { update() }
+            #endif
+        case .none:
+            guard !busy else { return }
+            available = nil
+            phase = .idle
+        }
+    }
+
+    private func notifyIfNew(_ release: ReleaseInfo) {
+        guard let notifier, defaults.string(forKey: Keys.notifiedTag) != release.tagName else { return }
+        defaults.set(release.tagName, forKey: Keys.notifiedTag)
+        notifier.notifyAvailable(release, installed: currentVersion, canInstall: inPlaceBlocker == nil)
+    }
+
+    // MARK: - Instalação
+
+    /// "Atualizar" (faixa ou notificação): baixa e confere; se já estiver
+    /// pronta, instala. Sem como instalar no lugar, abre o download.
+    func update() {
+        switch phase {
+        case .ready:
+            restartNow()
+            return
+        case .downloading, .installing, .installedNeedsRestart:
+            return
+        case .idle, .failed:
+            break
+        }
+        guard let release = available else {
+            // Clique na notificação com o app fechado: a consulta ainda não rodou.
+            Task { if await checkNow() == .available { update() } }
+            return
+        }
+        guard let installer, installer.blocker(for: release) == nil else {
+            openDownloadPage()
+            return
+        }
+        installingTag = release.tagName
+        phase = .downloading(0)
+        Self.log.notice("baixando \(release.tagName, privacy: .public)")
+        let aviso: @Sendable (Double) -> Void = { [weak self] fracao in
+            Task { @MainActor in self?.progress(fracao) }
+        }
+        downloadTask = Task { [weak self] in
+            do {
+                let pronto = try await installer.prepare(release, progress: aviso)
+                self?.downloaded(pronto)
+            } catch is CancellationError {
+                self?.reset()
+            } catch {
+                self?.fail(error)
+            }
+        }
+    }
+
+    private func progress(_ fracao: Double) {
+        if case .downloading = phase { phase = .downloading(min(max(fracao, 0), 1)) }
+    }
+
+    private func downloaded(_ pronto: PreparedUpdate) {
+        guard case .downloading = phase else {
+            // Cancelado enquanto terminava.
+            try? FileManager.default.removeItem(at: pronto.workDir)
+            return
+        }
+        prepared = pronto
+        phase = .ready
+        Self.log.notice("versão \(pronto.version.description, privacy: .public) baixada e conferida")
+        #if DEBUG
+        if debugAutoInstall { restartNow() }
+        #endif
+    }
+
+    func cancelDownload() {
+        guard case .downloading = phase else { return }
+        downloadTask?.cancel()
+        downloadTask = nil
+        reset()
+    }
+
+    /// "Reiniciar e Atualizar": troca o app e encerra; o ajudante abre o novo.
+    func restartNow() {
+        guard case .ready = phase, let prepared, let installer else { return }
+        phase = .installing
+        do {
+            try installer.install(prepared)
+            Self.log.notice("app trocado pela \(prepared.version.description, privacy: .public); encerrando para reabrir")
+            terminate()
+        } catch UpdateInstallError.relaunchFailed {
+            self.prepared = nil
+            phase = .installedNeedsRestart
+        } catch {
+            try? FileManager.default.removeItem(at: prepared.workDir)
+            self.prepared = nil
+            installingTag = nil
+            fail(error)
+        }
+    }
+
+    func retry() {
+        guard case .failed = phase else { return }
+        phase = .idle
+        update()
+    }
+
+    private func reset() {
+        if let prepared { try? FileManager.default.removeItem(at: prepared.workDir) }
+        prepared = nil
+        installingTag = nil
+        phase = .idle
+    }
+
+    private func fail(_ error: Error) {
+        installingTag = nil
+        let motivo = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        Self.log.error("atualização falhou: \(motivo, privacy: .public)")
+        phase = .failed(motivo)
+    }
+
+    func openDownloadPage() {
+        if let r = available, r.downloadURL.scheme == "https" { openURL(r.downloadURL) }
+    }
+
+    func openReleaseNotes() {
+        if let r = available, r.htmlURL.scheme == "https" { openURL(r.htmlURL) }
+    }
+
+    func ignoreCurrent() {
+        guard let available else { return }
+        downloadTask?.cancel()
+        downloadTask = nil
+        reset()
+        defaults.set(available.tagName, forKey: Keys.ignoredTag)
+        self.available = nil
+    }
+
+    /// Some por um dia. Se a versão já estiver baixada, continua pronta.
+    func snooze() {
+        defaults.set(now().addingTimeInterval(Self.snoozeInterval), forKey: Keys.snoozeUntil)
+        available = nil
+    }
+
+    #if DEBUG
+    /// Teste de ponta a ponta sem clicar (docs/RELEASE.md): baixa e reinicia
+    /// sozinho. Só existe em build de depuração; o app distribuído não tem isto.
+    private var debugAutoInstall: Bool {
+        ProcessInfo.processInfo.environment["MOBAILE_UPDATE_AUTOINSTALL"] == "1" || defaults.bool(forKey: Keys.debugAutoInstall)
+    }
+    #endif
 }
 
 /// Alerta do "Buscar Atualizações…" quando não há faixa a mostrar.

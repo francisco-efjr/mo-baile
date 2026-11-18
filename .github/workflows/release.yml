@@ -136,6 +136,28 @@ jobs:
       #     (cd "$(dirname "$ZIP")" && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
       #     spctl -a -vv "$DEST_DIR/$APP_NAME.app"
 
+      # Assinatura Ed25519 do zip final (ADR 0008). O app só instala sozinho um
+      # zip cuja assinatura bata com as chaves públicas embutidas nele; por
+      # isso o passo também confere contra UpdateSignature.swift. Fica depois
+      # da notarização porque ela refaz o zip.
+      - name: Assinar o zip para a atualização dentro do app
+        env:
+          ZIP: ${{ steps.zip.outputs.zip }}
+          MOBAILE_UPDATE_SIGNING_KEY: ${{ secrets.MOBAILE_UPDATE_SIGNING_KEY }}
+          PUBLICAR: ${{ github.ref_type == 'tag' || inputs.publicar }}
+        run: |
+          if [ -z "$MOBAILE_UPDATE_SIGNING_KEY" ]; then
+            if [ "$PUBLICAR" = "true" ]; then
+              echo "::error::Falta o secret MOBAILE_UPDATE_SIGNING_KEY. Sem ele o app não se atualiza sozinho (docs/RELEASE.md, seção Atualização dentro do app)."
+              exit 1
+            fi
+            echo "::warning::Sem MOBAILE_UPDATE_SIGNING_KEY: o zip de teste sai sem .sig."
+            exit 0
+          fi
+          swift tools/update_signing.swift sign "$ZIP" "$ZIP.sig"
+          swift tools/update_signing.swift verify "$ZIP" "$ZIP.sig" \
+            --app-keys apps/MoBaile/Sources/MoBaile/App/UpdateSignature.swift
+
       - name: Guardar o zip como artefato do workflow
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -166,6 +188,11 @@ jobs:
           > **Produto em desenvolvimento (beta):** pode ter bugs. Relate em
           > Ajuda › Relatar um Problema… no app ou abrindo uma issue.
 
+          **Já tem o Mo baile 3.26.0 ou mais novo?** O app avisa com uma faixa e
+          uma notificação: clique em **Atualizar** e depois em **Reiniciar e
+          Atualizar**. Ele baixa este zip, confere a assinatura (`.sig`) e abre
+          de novo já atualizado.
+
           **Instalação:** Mac com Apple Silicon e macOS 14+. Baixe o zip,
           descompacte e mova o app para Aplicativos. Esta versão tem assinatura
           ad-hoc e **não é notarizada**: na primeira abertura, tente abrir, depois
@@ -182,7 +209,7 @@ jobs:
           VERSAO: ${{ steps.versao.outputs.versao }}
           ZIP: ${{ steps.zip.outputs.zip }}
         run: |
-          gh release create "v$VERSAO" "$ZIP" "$ZIP.sha256" \
+          gh release create "v$VERSAO" "$ZIP" "$ZIP.sha256" "$ZIP.sig" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "Mo baile $VERSAO" \

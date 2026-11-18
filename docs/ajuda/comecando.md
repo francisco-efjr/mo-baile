@@ -37,9 +37,11 @@ Você quer gravar o login do DemoApp. Confirme no Ambiente que nada está penden
 - **Relatório** (⌘4): audita eventos contra a spec.
 - **Ambiente** (⌘5): mostra o que está instalado e instala o que falta.
 - **Execução** (⌘6): roda o projeto de automação (behave) do seu time.
+- **Atualizações:** quando sai versão nova, aparecem uma faixa e uma notificação com **Atualizar**. O app baixa a versão e confere a assinatura enquanto você trabalha. Depois, salve o que estiver aberto e clique em **Reiniciar e Atualizar**: o Mo baile abre de novo já atualizado. **Mo baile › Buscar Atualizações…** confere na hora.
 
 ## Problemas comuns
 
+- **O botão de atualizar virou Baixar.** O app está fora da pasta Aplicativos ou sem permissão para se trocar. Mova o Mo baile para Aplicativos, abra de novo e o clique volta a funcionar.
 - **O aparelho não aparece.** Abra o Ambiente e confira o `adb` (Android) ou o Xcode (iOS). Depois, atualize a lista no Início.
 - **Uma área diz que falta algo.** Instale o item no Ambiente e clique em **Verificar de Novo**.
 - **Não sei por onde começar.** Abra o Início (⌘0): ele mostra o próximo passo.

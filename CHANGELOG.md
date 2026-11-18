@@ -5,6 +5,37 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.26.0] - 2026-11-18
+
+### Adicionado
+
+- **Atualização dentro do app:** quando sai versão nova, o Mo baile mostra
+  uma faixa e uma notificação do macOS com **Atualizar**
+  ([ADR 0008](docs/adr/0008-atualizacao-no-lugar.md)).
+  - **Atualizar** baixa o zip do release, confere a assinatura Ed25519 (`.sig`,
+    chave pública embutida no app) e valida o app novo: mesmo bundle id, a
+    versão anunciada e a assinatura de código íntegra. O app continua em uso
+    durante o download, e dá para cancelar.
+  - **Reiniciar e Atualizar** troca o app no mesmo lugar, fecha o Mo baile
+    pelo encerramento normal (que desfaz o proxy do aparelho) e abre a versão
+    nova. Se a troca falhar, o app anterior volta ao lugar e a faixa mostra o
+    motivo, com **Baixar** para trocar à mão.
+  - Sem como instalar no lugar (app fora de Aplicativos, pasta sem permissão
+    ou release sem `.sig`), o botão vira **Baixar**, como antes.
+- **Consulta periódica:** com o app aberto, uma consulta ao GitHub a cada duas
+  horas, em vez de uma por dia só ao abrir. A notificação sai uma vez por
+  versão; **Lembrar Amanhã** e **Ignorar Esta Versão** continuam valendo.
+- O workflow de release assina o zip com o secret `MOBAILE_UPDATE_SIGNING_KEY`,
+  confere a assinatura contra as chaves do app e publica `<zip>.sig`
+  (`tools/update_signing.swift`, [docs/RELEASE.md](docs/RELEASE.md)).
+
+### Notas
+
+- Quem está na 3.25.0 ou antes atualiza para a 3.26.0 uma vez à mão (a faixa
+  antiga avisa e abre o download). Daí em diante, o clique basta.
+- O app continua sem Developer ID: depois de atualizar, o macOS pode pedir de
+  novo as permissões do app.
+
 ## [3.25.0] - 2026-11-17
 
 ### Adicionado

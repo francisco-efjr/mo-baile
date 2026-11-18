@@ -24,6 +24,9 @@ subir está em [VERSIONAMENTO.md](VERSIONAMENTO.md).
      (`DEST_DIR`), o que roda `swift test` antes e assina ad-hoc;
    - gera `MoBaile-X.Y.Z-macOS.zip` com `ditto -c -k --keepParent` e o
      `.sha256` ao lado;
+   - assina o zip com o secret `MOBAILE_UPDATE_SIGNING_KEY`, confere a
+     assinatura contra as chaves embutidas no app e gera o `.sig` (seção
+     "Atualização dentro do app", abaixo). Sem o secret, o release não sai;
    - cria o GitHub Release `vX.Y.Z` com a seção `## [X.Y.Z]` do CHANGELOG
      como notas, mais o aviso de app não notarizado.
 
@@ -105,8 +108,71 @@ executada neste repositório. Confira com `xcrun notarytool --help` antes de
 ligar. O `codesign --deep` atual também deve virar assinatura de dentro para
 fora quando houver binários aninhados.
 
+## Atualização dentro do app
+
+Desde a 3.26.0 o app se atualiza sozinho com dois cliques: **Atualizar** e
+**Reiniciar e Atualizar** ([ADR 0008](adr/0008-atualizacao-no-lugar.md)). Ele
+só instala um zip cuja assinatura Ed25519 bata com uma das chaves públicas de
+[`UpdateSignature.swift`](../apps/MoBaile/Sources/MoBaile/App/UpdateSignature.swift).
+A ferramenta é [`tools/update_signing.swift`](../tools/update_signing.swift),
+que roda com o Swift do Xcode ou das Command Line Tools.
+
+### Chave de assinatura
+
+A chave atual foi gerada em 18/11/2026 e fica em `.privado/update-signing-key.b64`
+(fora do git). Guarde uma cópia fora da máquina, por exemplo num gerenciador de
+senhas. O release lê a chave do secret `MOBAILE_UPDATE_SIGNING_KEY`:
+
+```bash
+gh secret set MOBAILE_UPDATE_SIGNING_KEY -R francisco-efjr/mo-baile < .privado/update-signing-key.b64
+```
+
+Conferir que a chave guardada é a que o app aceita:
+
+```bash
+swift tools/update_signing.swift public-key --key-file .privado/update-signing-key.b64
+```
+
+A saída tem de estar na lista `publicKeys`.
+
+**Trocar a chave** (perda ou vazamento):
+
+1. Gere uma chave nova com `swift tools/update_signing.swift keygen <arquivo>`.
+   O comando recusa sobrescrever uma chave que já existe.
+2. Acrescente a chave pública nova a `publicKeys` e publique uma versão ainda
+   assinada com a chave antiga, se ela não tiver vazado.
+3. Troque o secret e publique a versão seguinte já com a chave nova.
+
+Se a chave antiga se perdeu ou vazou, pule o passo 2. Nesse caso, quem está numa
+versão anterior atualiza aquela versão à mão, uma vez.
+
+### Testar a atualização sem publicar
+
+1. Monte duas versões num diretório temporário. A versão nova pode ser uma
+   cópia da antiga com `CFBundleShortVersionString` maior no `Info.plist` e
+   assinada de novo com `codesign --force --deep --sign -`.
+2. Gere o zip com `ditto -c -k --keepParent` e assine com `sign --key-file`.
+3. Sirva a pasta em loopback, por exemplo com `python3 -m http.server --bind 127.0.0.1 8765`.
+   Ponha nela um `latest.json` no formato da API de releases (`tag_name`,
+   `html_url`, `assets[].name` e `browser_download_url`).
+4. Abra o app antigo com `MOBAILE_UPDATE_URL=http://127.0.0.1:8765/latest.json`.
+   O release falso fica guardado à parte (`mobaile.update.lastFeed`) e não
+   aparece no app de uso diário.
+
+Para não precisar clicar, um build de depuração (`swift build`) aceita
+`MOBAILE_UPDATE_AUTOINSTALL=1`, ou a chave `mobaile.update.debugAutoInstall`
+em UserDefaults. Com ela, o app baixa e reinicia sozinho. O app distribuído é
+compilado em release e não tem esse atalho.
+
 ## Conferir um zip baixado
 
 ```bash
 shasum -a 256 -c MoBaile-X.Y.Z-macOS.zip.sha256
+```
+
+A autenticidade, que o `.sha256` não garante, vem do `.sig`:
+
+```bash
+swift tools/update_signing.swift verify MoBaile-X.Y.Z-macOS.zip MoBaile-X.Y.Z-macOS.zip.sig \
+  --app-keys apps/MoBaile/Sources/MoBaile/App/UpdateSignature.swift
 ```

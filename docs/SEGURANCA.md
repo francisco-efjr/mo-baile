@@ -159,10 +159,17 @@ Tkinter ainda tem ocorrências, e é código em transição.
 O motor e o app trabalham offline. Três exceções, todas visíveis e sob controle
 de quem usa:
 
-1. **Aviso de versão nova.** Uma vez por dia o app faz `GET` em
+1. **Aviso e atualização de versão nova.** Com o app aberto, a cada duas horas
+   o app faz `GET` em
    `api.github.com/repos/francisco-efjr/mo-baile/releases/latest`, sem token,
    com `User-Agent: MoBaile/<versão>`. Nada sobre a pessoa ou o uso vai junto.
-   Desliga em *Ajustes › Geral*. Erro de rede é silencioso.
+   Desliga em *Ajustes › Geral*. Erro de rede é silencioso. Só depois de um
+   clique em **Atualizar** o app baixa o zip e o `.sig` do release. Ele instala
+   apenas se a assinatura Ed25519 bater com a chave pública embutida, o bundle
+   for o Mo baile na versão anunciada e o `codesign --verify` passar. Como o
+   arquivo não entra em quarentena, o Gatekeeper não avalia a versão nova; quem
+   responde por ela é a assinatura, de propósito
+   ([ADR 0008](adr/0008-atualizacao-no-lugar.md)).
 2. **Relatar um Problema.** O app não envia nada sozinho: ele abre o navegador
    numa issue pré-preenchida e mostra a pasta com o relato e os anexos. Versão,
    modelo do Mac e aparelho só entram se a pessoa marcar, e a prévia mostra o

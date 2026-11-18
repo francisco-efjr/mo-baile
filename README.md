@@ -79,13 +79,19 @@ virtual; o Python do Mo baile resolve os dois casos.
 
 ### Atualizações
 
-O app confere uma vez por dia se há versão nova publicada aqui e, se houver,
-mostra uma faixa no topo da janela com **Ver Novidades** e **Baixar**. Para
-atualizar: baixe o zip, feche o Mo baile e troque o app na pasta Aplicativos.
-**Mo baile › Buscar Atualizações…** confere na hora. É a única chamada de rede
-do app, sem nenhum dado seu, e dá para desligar em *Ajustes › Geral*. Depois
-de atualizar, o macOS pode pedir de novo as permissões do app (o app ainda não
-tem assinatura da Apple).
+Com o app aberto, ele confere a cada duas horas se há versão nova publicada
+aqui. Se houver, mostra uma faixa no topo da janela e uma notificação do macOS
+com **Atualizar**. Atualizar baixa o zip e confere a assinatura do release
+(`.sig`), enquanto você continua usando o app. Depois, **Reiniciar e
+Atualizar** troca o app em Aplicativos e o abre de novo já atualizado
+([ADR 0008](docs/adr/0008-atualizacao-no-lugar.md)). Isso vale a partir da
+3.26.0. Quem está numa versão anterior atualiza uma vez à mão: baixe o zip,
+feche o Mo baile e troque o app na pasta Aplicativos.
+
+**Mo baile › Buscar Atualizações…** confere na hora. A consulta e o download
+são as únicas chamadas de rede do app, não levam nenhum dado seu, e dá para
+desligar a consulta em *Ajustes › Geral*. Depois de atualizar, o macOS pode
+pedir de novo as permissões do app (o app ainda não tem assinatura da Apple).
 
 ### Aviso: o app não é notarizado
 

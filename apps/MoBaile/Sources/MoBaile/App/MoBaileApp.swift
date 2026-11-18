@@ -11,9 +11,10 @@ struct MoBaileApp: App {
     @State private var appState: AppState
     @State private var session: EngineSession
     @State private var themeManager = ThemeManager()
-    /// Aviso de versão nova (LIB-4): confere o GitHub ao abrir, no máximo uma
-    /// vez por dia, e pode ser desligado em Ajustes › Geral.
-    @State private var updates = UpdateState()
+    /// Aviso e instalação de versão nova (LIB-4, ADR 0008): confere o GitHub a
+    /// cada duas horas com o app aberto, avisa por faixa e notificação, e pode
+    /// ser desligado em Ajustes › Geral.
+    @State private var updates: UpdateState
     /// Ajuda por área (LIB-2) e relato de bug (LIB-3): estado que sobrevive a
     /// fechar e reabrir as janelas durante a sessão.
     @State private var help = HelpNavigator()
@@ -23,6 +24,11 @@ struct MoBaileApp: App {
         let state = AppState.atLaunch()
         _appState = State(initialValue: state)
         _session = State(initialValue: EngineSession(state: state))
+        _updates = State(initialValue: UpdateState())
+        // O delegado das notificações entra antes de o app terminar de abrir:
+        // assim o clique em Atualizar que abriu o app não se perde. O estado
+        // é ligado na janela, com a instância que a cena guardou.
+        UpdateNotifier.shared.configure()
     }
 
     var body: some Scene {
@@ -43,7 +49,10 @@ struct MoBaileApp: App {
                 .background(WindowReader { SplashController.shared.hold($0) })
                 // Janela oculta pausa o espelho no motor (PERF-1).
                 .background(WindowReader { WindowVisibility.shared.observe($0, session: session) })
-                .task { await updates.checkOnLaunch() }
+                .task {
+                    UpdateNotifier.shared.attach(updates)
+                    updates.startAutomaticChecks()
+                }
         }
         .defaultSize(DesignMetrics.Window.defaultSize)
         .windowToolbarStyle(.unified)
