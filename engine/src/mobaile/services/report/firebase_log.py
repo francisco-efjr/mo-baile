@@ -26,6 +26,8 @@ import json
 import re
 from typing import Any
 
+from mobaile.adapters.firebase_bundle import parse_bundle as _parse_bundle
+from mobaile.adapters.firebase_bundle import split_top_level as _split_top_level  # noqa: F401 (testes)
 from mobaile.domain.report import TagEvent
 from mobaile.services.report.ga4_tsv import ANY_PLATFORM, items_from_ga4_tsv, looks_like_ga4_tsv
 from mobaile.services.report.rules import clean_colon_spacing, strip_event_suffixes, strip_param_key_suffixes
@@ -33,54 +35,16 @@ from mobaile.services.report.rules import clean_colon_spacing, strip_event_suffi
 ANDROID_LINE = re.compile(r"Logging event:\s*origin=([^,]+),name=([^,]+),params=(Bundle\[.*\])\s*$")
 LOGCAT_TIME = re.compile(r"^(?:\d{2}-\d{2}\s+)?(\d{2}:\d{2}:\d{2}\.\d{3})")
 LOG_DATE = re.compile(r"^(?:(\d{4})-)?(\d{2}-\d{2})\s")
-_NESTING = re.compile(r"[\[\]{}]")
-_SEPARATORS = re.compile(r"[\[\]{},]")
-
-
-def _split_top_level(text: str) -> list[str]:
-    """Divide por vírgulas que não estão dentro de [] ou {}."""
-    if _NESTING.search(text) is None:
-        parts = text.split(",")
-    else:
-        # Só os caracteres que importam são visitados, e não o texto inteiro.
-        parts: list[str] = []
-        depth = start = 0
-        for found in _SEPARATORS.finditer(text):
-            ch = found.group()
-            if ch in "[{":
-                depth += 1
-            elif ch in "]}":
-                depth -= 1
-            elif depth == 0:
-                parts.append(text[start:found.start()])
-                start = found.end()
-        parts.append(text[start:])
-    if not parts[-1].strip():
-        parts.pop()
-    return parts
 
 
 def parse_bundle(text: str) -> dict[str, Any]:
-    """``Bundle[{k=v, items=[Bundle[{...}]]}]`` em dicionário.
+    """``Bundle[{k=v, items=[Bundle[{...}]]}]`` em dicionário, para a auditoria.
 
-    As chaves perdem o sufixo do SDK (``ga_screen(_sn)`` vira ``ga_screen``) e
-    lista de Bundles vira lista de objetos.
+    O leitor é o mesmo da escuta ao vivo (`adapters/firebase_bundle`), que
+    mantém a vírgula de dentro do valor (``value=30,03`` não vira ``30``). Aqui
+    cada valor ainda passa por `clean_colon_spacing`, que é o que a spec espera.
     """
-    body = text.strip()
-    if body.startswith("Bundle[{") and body.endswith("}]"):
-        body = body[8:-2]
-    out: dict[str, Any] = {}
-    for part in _split_top_level(body):
-        if "=" not in part:
-            continue
-        key, value = part.split("=", 1)
-        key = strip_param_key_suffixes(key.strip())
-        value = value.strip()
-        if value.startswith("[Bundle[") and value.endswith("]"):
-            out[key] = [parse_bundle(b) for b in _split_top_level(value[1:-1])]
-        else:
-            out[key] = clean_colon_spacing(value)
-    return out
+    return _parse_bundle(text, clean_colon_spacing)
 
 
 def parse_ios_items(text: str) -> list[dict[str, str]]:

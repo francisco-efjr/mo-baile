@@ -68,31 +68,46 @@ def check_params(
     for key, exp in expected.items():
         if not is_exported(key, exported):
             if key == "items" and isinstance(exp, list):
-                exp_first = exp[0] if exp and isinstance(exp[0], dict) else {}
                 checks.extend(
-                    ParamCheck(field=f"items[0].{k}", expected=display_expected(v), obtained=None, ok=True, exported=False)
-                    for k, v in exp_first.items()
+                    ParamCheck(field=f"items[{i}].{k}", expected=display_expected(v), obtained=None, ok=True, exported=False)
+                    for i, rule in enumerate(_item_rules(exp))
+                    for k, v in rule.items()
                 )
             else:
                 checks.append(ParamCheck(field=key, expected=display_expected(exp), obtained=None, ok=True, exported=False))
             continue
         if key == "items" and isinstance(exp, list):
-            got_items = params.get("items")
-            first = (
-                got_items[0]
-                if isinstance(got_items, list) and got_items and isinstance(got_items[0], dict)
-                else {}
-            )
-            exp_first = exp[0] if exp and isinstance(exp[0], dict) else {}
-            for item_key, item_exp in exp_first.items():
-                got = first.get(item_key)
-                checks.append(ParamCheck(
-                    field=f"items[0].{item_key}", expected=display_expected(item_exp),
-                    obtained=got, ok=value_matches(item_exp, got),
-                ))
+            checks.extend(check_items(exp, params.get("items")))
             continue
         got = screen_of(params) if key == "screen_name" else params.get(key)
         checks.append(ParamCheck(field=key, expected=display_expected(exp), obtained=got, ok=value_matches(exp, got)))
+    return checks
+
+
+def _item_rules(expected_items: list[Any]) -> list[dict[str, Any]]:
+    return [rule for rule in expected_items if isinstance(rule, dict)] or [{}]
+
+
+def check_items(expected_items: list[Any], got_items: Any) -> list[ParamCheck]:
+    """Confere todos os itens do evento, e não só o primeiro.
+
+    O item ``i`` do log segue o item ``i`` da spec. Os itens além dos que a spec
+    lista seguem o último item dela. Assim, uma spec com um item só vale para
+    todos os itens do evento. Uma spec com mais itens do que o log aponta os que
+    faltam. Sem itens no log, cada campo da spec aparece sem valor.
+    """
+    rules = _item_rules(expected_items)
+    got = [item for item in got_items if isinstance(item, dict)] if isinstance(got_items, list) else []
+    checks: list[ParamCheck] = []
+    for i in range(max(len(rules), len(got))):
+        rule = rules[min(i, len(rules) - 1)]
+        item = got[i] if i < len(got) else {}
+        for item_key, item_exp in rule.items():
+            value = item.get(item_key)
+            checks.append(ParamCheck(
+                field=f"items[{i}].{item_key}", expected=display_expected(item_exp),
+                obtained=value, ok=value_matches(item_exp, value),
+            ))
     return checks
 
 

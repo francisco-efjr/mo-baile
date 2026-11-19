@@ -10,7 +10,9 @@ Valores aceitos nos parâmetros da spec:
 - ``[numero]``, ``[data]`` (dd/mm/aaaa) e ``[preenchido]`` (qualquer valor não
   vazio), inteiros ou em trecho: ``click:[numero]-parcela-com-seguro``;
 - ``re:<regex>``: expressão regular completa;
-- ``items``: lista de objetos; cada campo do primeiro item segue as mesmas regras.
+- ``items``: lista de objetos cujos campos seguem as mesmas regras. Desde a
+  3.27.0, todos os itens do log são conferidos: o item ``i`` segue o item ``i``
+  da spec, e os que sobram seguem o último (`audit.check_items`).
 
 ``{fluxo}`` é trocado por cada chave de ``fluxos``; ``params_por_fluxo``
 sobrescreve valores de um fluxo.

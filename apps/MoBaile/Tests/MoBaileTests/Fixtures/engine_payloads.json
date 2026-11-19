@@ -3,7 +3,7 @@
     "jsonrpc": "2.0",
     "id": 1,
     "result": {
-      "version": "3.26.1",
+      "version": "3.27.0",
       "platform": "android",
       "device_id": null,
       "adb_path": "adb",
@@ -112,7 +112,7 @@
     "id": 1,
     "result": {
       "protocol_version": 2,
-      "engine_version": "3.26.1",
+      "engine_version": "3.27.0",
       "capabilities": [
         "cancel",
         "progress",
@@ -1608,7 +1608,17 @@
       "params": {
         "screen_name": "cadastro_demo",
         "step": 2,
-        "first_open": true
+        "first_open": true,
+        "items": [
+          {
+            "item_id": "SKU_1",
+            "price": "10.01"
+          },
+          {
+            "item_id": "SKU_2",
+            "price": "21.01"
+          }
+        ]
       },
       "raw_log": "Logging event: screen_view"
     }

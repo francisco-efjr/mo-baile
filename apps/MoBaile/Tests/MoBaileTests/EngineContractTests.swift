@@ -185,6 +185,10 @@ extension EngineContractTests {
         XCTAssertEqual(event.params["screen_name"], "cadastro_demo")
         XCTAssertEqual(event.params["step"], "2")
         XCTAssertEqual(event.params["first_open"], "true")
+        // `items` vem como lista de objetos (3.27.0) e aparece como JSON, com os dois itens.
+        let items = try XCTUnwrap(event.params["items"])
+        XCTAssertTrue(items.hasPrefix("["))
+        XCTAssertTrue(items.contains("SKU_1") && items.contains("SKU_2"))
     }
 }
 

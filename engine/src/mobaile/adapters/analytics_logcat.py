@@ -31,9 +31,15 @@ from typing import Any
 
 from mobaile.adapters import ios_device_log
 from mobaile.adapters.adb import ADBBridge
+from mobaile.adapters.firebase_bundle import parse_bundle
 from mobaile.domain.errors import AdapterError, InvalidInputError
 from mobaile.domain.models import AnalyticsEvent
 from mobaile.security import validate_device_id
+
+
+def _strip_quotes(value: str) -> str:
+    """Valor do Bundle como a escuta mostra: sem aspas nas pontas."""
+    return value.strip().strip("\"'")
 
 logger = logging.getLogger(__name__)
 
@@ -587,16 +593,13 @@ class FirebaseAnalyticsListener:
 
         params: dict[str, Any] = {}
 
-        # 4. Parâmetros Android (Bundle[{...}])
+        # 4. Parâmetros Android (Bundle[{...}]). O leitor é o mesmo do Relatório:
+        # `items` vira uma lista com um objeto por item. Antes, `items` virava o
+        # texto "[Bundle[{item_id=…" e os campos do último item apareciam como
+        # se fossem do evento.
         m_bundle = re.search(r"Bundle\[\{(.*)\}\]", line)
         if m_bundle:
-            bundle_content = m_bundle.group(1)
-            pairs = re.split(r",\s*(?=[a-zA-Z0-9_]+(?:\([^\)]+\))?=)", bundle_content)
-            for pair in pairs:
-                if "=" in pair:
-                    k, v = pair.split("=", 1)
-                    clean_k = re.sub(r"\([^\)]+\)", "", k).strip()
-                    params[clean_k] = v.strip().strip("\"'")
+            params.update(parse_bundle(m_bundle.group(1), _strip_quotes))
 
         # 5. Parâmetros iOS (params={ key = "val"; key2 = "val2"; })
         m_ios_params = re.search(r"params\s*=\s*\{(.*?)\}", line, re.DOTALL)

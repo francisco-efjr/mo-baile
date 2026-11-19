@@ -264,7 +264,7 @@ Métodos com `"progress": true` no contrato emitem, enquanto trabalham:
 | `netlog.stop` | — | para a leitura nas duas plataformas; devolve `running` |
 | `analytics.start` | `package` (opcional), `ios_source` (iOS: `auto`, `simulator` ou UDID do iPhone) | começa a escutar o tagueamento; no iOS sem simulador, `auto` usa o iPhone conectado por cabo. Devolve `running`, `source`, `device_id` |
 | `analytics.stop` | — | para de escutar |
-| `analytics.events` | `limit` | histórico recente |
+| `analytics.events` | `limit` | histórico recente. Em `params`, cada valor é texto, menos `items` no Android, que é uma lista com um objeto por item (`{item_id, item_name, price, …}`), igual em `analytics.event`. Até a 3.26.1, `items` vinha como o texto `[Bundle[{…` e os campos do último item apareciam no nível do evento (3.27.0) |
 | `analytics.clear` | — | limpa o histórico |
 | `analytics.ios_devices` | — | iPhones por cabo (`udid`, `name`, `ios_version`, `connection`, `problem` opcional) e `available` (pymobiledevice3 instalado) |
 

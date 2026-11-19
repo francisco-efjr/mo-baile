@@ -5,6 +5,37 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.27.0] - 2026-11-19
+
+Correções que saíram da validação contra os eventos de vendas on-line do GA4
+(`add_to_cart`, `begin_checkout`, `purchase` e os outros 11 da seção).
+
+### Mudado
+
+- **Relatório: todos os itens de `items` são conferidos, e não só o
+  primeiro.** O item `i` do log segue o item `i` da spec, e os itens que
+  sobram seguem o último item dela. Assim, a regra de um card com um item só
+  (o caso comum, ex.: `item_id: [preenchido]`) vale para cada item do evento.
+  Antes, um 2º item sem `item_id` passava. A divergência aponta o item:
+  `items[1].item_id`.
+  - **Atenção:** um card com valor fixo no item (ex.: `item_id: 1001`) agora
+    exige esse valor em todos os itens do evento. Se o evento tem itens
+    diferentes de propósito, liste um item por posição na spec.
+
+### Corrigido
+
+- **Vírgula dentro do valor não corta mais o valor.** O Bundle do Firebase não
+  põe aspas nos valores. Por isso, `value=30,03` era lido como `30` e
+  `item_name=Camiseta, verde` como `Camiseta`, sem aviso, e um valor errado
+  podia passar como OK. Agora um trecho só abre um parâmetro novo quando começa
+  com `chave=`.
+- **Escuta ao vivo do Analytics (Android): `items` vira uma lista com um objeto
+  por item.** Antes, `items` aparecia como o texto `[Bundle[{item_id=…`, e os
+  campos do último item apareciam como se fossem do evento. A escuta e o
+  Relatório agora usam o mesmo leitor (`adapters/firebase_bundle.py`). O
+  formato de `params` em `analytics.event` está em
+  [docs/PROTOCOLO_RPC.md](docs/PROTOCOLO_RPC.md).
+
 ## [3.26.1] - 2026-11-19
 
 ### Adicionado

@@ -660,7 +660,9 @@ def build() -> dict:
 
     analytics = AnalyticsEvent(
         id=3, timestamp=1757030001.0, time_str="14:32:11.001", tag="FA", event_name="screen_view",
-        params={"screen_name": "cadastro_demo", "step": 2, "first_open": True},
+        # `items` do Android chega como lista de objetos desde a 3.27.0.
+        params={"screen_name": "cadastro_demo", "step": 2, "first_open": True,
+                "items": [{"item_id": "SKU_1", "price": "10.01"}, {"item_id": "SKU_2", "price": "21.01"}]},
         raw_log="Logging event: screen_view", platform="android",
     )
     fixtures["notif_analytics.event"] = protocol.notification("analytics.event", analytics.to_dict())
