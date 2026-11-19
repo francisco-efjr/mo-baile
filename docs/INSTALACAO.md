@@ -23,6 +23,96 @@ Terminal…" para cada item que um script resolve. O mesmo diagnóstico sai no
 terminal com `python3 -m mobaile.services.setup`, com `PYTHONPATH=engine/src`
 quando roda do código.
 
+## Instalador de um comando (3.26.1)
+
+Para quem vai só usar o app, este é o caminho que não esbarra no Gatekeeper
+nem na falta de Python:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/francisco-efjr/mo-baile/main/tools/instalar.sh | bash
+```
+
+**Por que existe.** Um colega baixou o zip pelo navegador e o macOS 26 recusou
+o app com "A Apple não pôde verificar se o item … está livre de malware", só
+com **Mover para o Lixo** e **OK**. O app é ad-hoc e não é notarizado (ver
+[RELEASE.md](RELEASE.md)). Desde o macOS 15, o clique direito › Abrir não
+libera mais o app. Sobram o **Abrir Mesmo Assim** de *Privacidade e
+Segurança* e o `xattr`, e os dois dependem de a pessoa achar o caminho.
+Passado o Gatekeeper, vem o Python. Num Mac novo, o "Instalar no Terminal…" do
+Início passa pelo Homebrew, que pede senha de administrador e as Command Line
+Tools.
+
+**O que o `tools/instalar.sh` faz**, nesta ordem, e para com uma mensagem que
+diz o que fazer quando algo falha:
+
+1. Confere o Mac: Apple Silicon (`hw.optional.arm64`, que diz o chip mesmo
+   num Terminal do Rosetta), macOS 14+ e o app fechado.
+2. Acha o último release pelo redirecionamento de `releases/latest`, sem a API
+   e o limite de chamadas dela. `MOBAILE_VERSAO` fixa uma versão.
+3. Baixa o zip e o `.sha256` com `curl` (só HTTPS) e confere o hash. Descompacta
+   com `ditto` e confere a assinatura, a versão e o `LSMinimumSystemVersion`.
+4. Instala em `/Applications`. Se a conta não grava ali, instala em
+   `~/Applications`, sem senha. A versão anterior só é apagada depois que a nova
+   está no lugar.
+5. Monta o Python do Mo baile em `~/Library/Application Support/Mo baile/python`,
+   o primeiro lugar que o app procura depois de `MOBAILE_PYTHON`. O Python é o
+   CPython 3.12 do python-build-standalone (o mesmo de onde o `uv` tira os
+   Pythons), em versão e SHA-256 fixos. Depois instala Pillow, requests e o
+   Quartz opcional pelo `pip`. Um Python que já serve fica como está. Um que
+   não serve é guardado ao lado como `python.anterior-<data>`.
+6. Sobe o motor embutido com esse Python (`engine.hello`, como o
+   `verify_native_app.sh`), confere de novo a assinatura e abre o app.
+
+**Por que não aparece o aviso.** O Gatekeeper só avalia arquivos com o atributo
+`com.apple.quarantine`. Navegador, Slack, Mail e AirDrop gravam esse atributo;
+o `curl` não grava. O zip é o mesmo do release, e o SHA-256 prova que ele chegou
+inteiro. A confiança fica na origem (github.com sobre HTTPS), a mesma de quem
+clica em "Abrir Mesmo Assim". Isso não substitui a notarização: com Developer
+ID e notarização, o zip do navegador abriria sem nenhum passo extra.
+
+**Cuidados do script.**
+
+- Roda no `/bin/bash` 3.2 do macOS.
+- Não chama `/usr/bin/python3`, `git` nem `lipo`: num Mac sem as Command Line
+  Tools, esses comandos abrem o pedido de instalação delas.
+- Tudo fica dentro de `main()`, então um download cortado no meio não executa
+  pela metade.
+- O `pip` roda com `PIP_USER=0` e `PIP_REQUIRE_VIRTUALENV=0`, para que a
+  configuração de quem roda não desvie os pacotes. O `pip.conf` continua
+  valendo, porque é por ele que uma rede de empresa aponta um espelho do PyPI.
+
+**Prova.** O workflow `.github/workflows/instalador.yml` faz o seguinte num
+runner zerado de macOS 15 e de macOS 26:
+
+- roda o script com `env -i` (sem Homebrew no `PATH`);
+- confere que o app ficou sem quarentena e com a assinatura válida;
+- abre o app e espera o motor subir com o Python que o instalador montou.
+
+O workflow roda a cada mudança no script e depois de cada release. Em
+19/11/2026, numa casa falsa com `PATH` mínimo, também foram testados:
+
+- instalação do zero, em 25 s;
+- reinstalação por cima;
+- Python sem Pillow (o script completa os pacotes);
+- Python quebrado (o script guarda o antigo e baixa um novo);
+- versão inexistente e versão inválida;
+- app aberto (o script recusa);
+- abertura do app instalado pelo script, sem nenhum aviso.
+
+**Trocar o Python fixo.** Atualize `PY_RELEASE`, `PY_ARQUIVO` e `PY_SHA256` no
+topo do script. O hash vem do campo `digest` do asset em
+`https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/<release>`.
+Prefira um release de pelo menos duas semanas. Rode o workflow Instalador
+antes de publicar.
+
+**O que ele não resolve.**
+
+- **Mac Intel:** o binário é só arm64. O script para e explica.
+- **Mac gerenciado por MDM** que só aceita apps da App Store ou de
+  desenvolvedores identificados: só a notarização resolve.
+- **Rede que bloqueia `github.com` ou o PyPI:** o script para e diz qual dos
+  dois falhou.
+
 ## O que cada recurso precisa (Mac)
 
 **Obr.** = obrigatório; **Opc.** = opcional; **—** = não usa.
@@ -137,9 +227,12 @@ Ainda dizem "MITM" em lugar errado:
 
 ### Permissões do macOS
 
-- **Gatekeeper:** o app é assinado ad-hoc, sem notarização. Na primeira vez,
-  use "clique direito › Abrir" ou `xattr -dr com.apple.quarantine`
-  (README).
+- **Gatekeeper:** o app é assinado ad-hoc, sem notarização. Instalado pelo
+  [instalador de um comando](#instalador-de-um-comando-3261), abre sem aviso.
+  Baixado pelo navegador, a primeira abertura é bloqueada. Para liberar, use
+  *Privacidade e Segurança › Abrir Mesmo Assim* ou
+  `xattr -dr com.apple.quarantine` (README). O "clique direito › Abrir" não
+  funciona desde o macOS 15.
 - **Rede local:** o `Info.plist` declara `NSLocalNetworkUsageDescription`
   para o proxy.
 - **Pasta Documentos:** o pedido repetido vinha de um `.pth` que apontava

@@ -64,6 +64,34 @@ virtual; o Python do Mo baile resolve os dois casos.
 
 ## Instalação
 
+Precisa de um Mac com Apple Silicon (M1 ou mais novo) e macOS 14 ou mais novo.
+
+### Com um comando (recomendado)
+
+Abra o **Terminal** (Aplicativos › Utilitários), cole a linha abaixo e tecle
+Return:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/francisco-efjr/mo-baile/main/tools/instalar.sh | bash
+```
+
+O [instalador](tools/instalar.sh) faz isto, em menos de um minuto:
+
+- confere o Mac;
+- baixa o zip do último release e confere o SHA-256;
+- instala em **Aplicativos**. Numa conta que não é de administrador, instala em
+  `~/Applications`, sem pedir senha;
+- monta o Python do Mo baile com Pillow e requests;
+- sobe o motor para conferir e abre o app.
+
+Não precisa de Homebrew nem de senha. O macOS também não mostra o aviso de "não
+pôde verificar": o Gatekeeper só confere arquivos com o atributo de quarentena,
+que o navegador grava no download e o `curl` não grava. A confiança é a mesma
+de um zip baixado daqui (veja o aviso abaixo). Se algo der errado, o instalador
+para e diz o que fazer. Rodar de novo continua de onde parou e também atualiza.
+
+### Pelo zip
+
 1. Baixe `MoBaile-X.Y.Z-macOS.zip` na página de
    [Releases](https://github.com/francisco-efjr/mo-baile/releases/latest).
 2. Confira a integridade (opcional, recomendado):
@@ -72,9 +100,10 @@ virtual; o Python do Mo baile resolve os dois casos.
    shasum -a 256 -c MoBaile-X.Y.Z-macOS.zip.sha256
    ```
 
-3. Descompacte e arraste `Mo baile (nativo).app` para **Aplicativos**.
-4. Abra o app. Na primeira vez o macOS bloqueia (veja o aviso abaixo). Depois,
-   a tela **Início** diz o que falta instalar; o mais comum é o Python, que o
+3. Descompacte e arraste `Mo baile (nativo).app` para **Aplicativos**. Não abra
+   o app direto da pasta Downloads.
+4. Abra o app. Na primeira vez, o macOS bloqueia (veja o aviso abaixo). Depois,
+   a tela **Início** diz o que falta instalar. O mais comum é o Python, que o
    próprio app instala pelo Terminal.
 
 ### Atualizações
@@ -96,12 +125,17 @@ pedir de novo as permissões do app (o app ainda não tem assinatura da Apple).
 ### Aviso: o app não é notarizado
 
 O Mo baile ainda sai com assinatura **ad-hoc**, sem Developer ID e sem
-notarização da Apple. Na primeira abertura o macOS avisa que não pode
-verificar o desenvolvedor e bloqueia. Para abrir, escolha **um** caminho:
+notarização da Apple. Quem baixa o zip pelo navegador, ou recebe o app pelo
+Slack, por e-mail ou por AirDrop, vê na primeira abertura "A Apple não pôde
+verificar se o item … está livre de malware", só com **Mover para o Lixo** e
+**OK**. Desde o macOS 15, o clique direito › Abrir não libera mais o app. Para
+abrir, escolha **um** caminho:
 
-- Tente abrir o app uma vez e feche o aviso. Vá em *Ajustes do Sistema* >
+- Use o [instalador de um comando](#com-um-comando-recomendado).
+- Tente abrir o app uma vez e clique em **OK**. Vá em *Ajustes do Sistema* >
   *Privacidade e Segurança*, role até a mensagem sobre o Mo baile, clique em
-  **Abrir Mesmo Assim** e confirme com **Abrir**
+  **Abrir Mesmo Assim** e confirme com a senha do Mac. O botão fica
+  disponível por cerca de uma hora depois da tentativa
   ([página da Apple](https://support.apple.com/pt-br/102445)).
 - Ou remova o atributo de quarentena pelo Terminal:
 
@@ -223,12 +257,16 @@ engine holds all the logic; the SwiftUI front end talks to it over JSON-RPC.
 - **Windows/Linux:** the Report and saved-logcat Analytics run in the browser via
   `python -m mobaile.web` (local only, see docs/INSTALACAO.md).
 - **Updates:** the app checks GitHub Releases once a day (can be turned off).
-- **Install:** download the zip from
+- **Install:** run
+  `curl -fsSL https://raw.githubusercontent.com/francisco-efjr/mo-baile/main/tools/instalar.sh | bash`
+  in Terminal. It downloads the latest release, checks its SHA-256, installs the
+  app and a private Python with the engine's dependencies, and opens the app,
+  with no Gatekeeper prompt and no admin password. Or download the zip from
   [Releases](https://github.com/francisco-efjr/mo-baile/releases/latest). The
   app is ad-hoc signed and **not notarized**: on first launch use System
-  Settings > Privacy & Security > Open Anyway, or run
-  `xattr -dr com.apple.quarantine` on the app. Only do this with
-  the official zip and a verified SHA-256, or build from source.
+  Settings > Privacy & Security > Open Anyway (Control-click > Open no longer
+  works on macOS 15+), or run `xattr -dr com.apple.quarantine` on the app.
+  Only do this with the official zip and a verified SHA-256, or build from source.
 - **Build:** `make setup && make check && make test-swift && make update-native`.
 - **Contributing:** docs and discussion are in Brazilian Portuguese; issues and
   PRs in English are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and

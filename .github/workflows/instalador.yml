@@ -1,0 +1,83 @@
+name: Instalador
+
+# Prova o instalador de um comando (tools/instalar.sh) num Mac zerado, do jeito
+# que um colega roda: baixa o último release, instala em /Applications, monta o
+# Python do Mo baile e abre o app. Passa só se o app abrir sem quarentena e o
+# motor subir com o Python que o instalador montou. Detalhes em
+# docs/INSTALACAO.md, seção "Instalador de um comando".
+on:
+  push:
+    branches: [main]
+    paths: ["tools/instalar.sh", ".github/workflows/instalador.yml"]
+  pull_request:
+    paths: ["tools/instalar.sh", ".github/workflows/instalador.yml"]
+  # Depois de cada release, prova o zip recém-publicado.
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  instalar:
+    name: Instalar e abrir (${{ matrix.os }})
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        # O app exige macOS 14+; estas são as imagens com Apple Silicon em uso.
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      APP: /Applications/Mo baile (nativo).app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Máquina zerada
+        run: |
+          sw_vers
+          uname -m
+          test ! -e "$APP"
+          test ! -e "$HOME/Library/Application Support/Mo baile"
+
+      # env -i: nada do ambiente do runner (Homebrew no PATH, Python do
+      # setup-python) entra. Fica só o que um Mac novo tem.
+      - name: Rodar o instalador como no README (cat | bash)
+        run: |
+          cat tools/instalar.sh | env -i HOME="$HOME" USER="$USER" \
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR="$RUNNER_TEMP" \
+            MOBAILE_ABRIR=0 /bin/bash
+
+      - name: App sem quarentena e com assinatura válida
+        run: |
+          if xattr -lr "$APP" | grep -q com.apple.quarantine; then
+            echo "::error::o app ficou com quarentena"; exit 1
+          fi
+          codesign --verify --deep --strict --verbose=1 "$APP"
+
+      - name: Abrir o app e esperar o motor com o Python do Mo baile
+        run: |
+          open "$APP"
+          for i in $(seq 1 45); do
+            if pgrep -f 'Mo baile/python/bin/python3 -S -m mobaile.rpc' >/dev/null; then
+              echo "Motor de pé depois de ${i}s:"
+              pgrep -fl 'Mo baile \(nativo\)\.app/Contents/MacOS/'
+              pgrep -fl 'mobaile.rpc'
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::o app não subiu o motor com o Python do Mo baile em 45 s"
+          pgrep -fl 'Mo baile' || true
+          /usr/bin/log show --last 3m --predicate 'process == "syspolicyd"' --style compact | tail -30 || true
+          tail -50 "$HOME/Library/Logs/Mo baile/"*.log 2>/dev/null || true
+          exit 1
+
+      - name: Fechar o app
+        if: always()
+        run: pkill -f 'Mo baile \(nativo\)\.app/Contents/MacOS/' || true

@@ -5,6 +5,35 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.26.1] - 2026-11-19
+
+### Adicionado
+
+- **Instalador de um comando** (`tools/instalar.sh`): no Terminal,
+  `curl -fsSL https://raw.githubusercontent.com/francisco-efjr/mo-baile/main/tools/instalar.sh | bash`.
+  Não passa pelo bloqueio do macOS ("A Apple não pôde verificar se o item …
+  está livre de malware"), que um colega encontrou ao abrir o zip baixado pelo
+  navegador.
+  - Confere o Mac: Apple Silicon, macOS 14+ e o app fechado.
+  - Baixa o último release e confere o SHA-256.
+  - Instala em Aplicativos, ou em `~/Applications` numa conta sem
+    administrador.
+  - Monta o Python do Mo baile, um CPython 3.12 próprio e fixo por SHA-256,
+    com Pillow e requests. Não usa Homebrew nem pede senha.
+  - Sobe o motor para conferir e abre o app.
+  - Detalhes, limites e como foi testado em
+    [docs/INSTALACAO.md](docs/INSTALACAO.md#instalador-de-um-comando-3261).
+- **Workflow Instalador:** roda o script num Mac zerado (macOS 15 e 26), abre
+  o app e espera o motor subir com o Python montado pelo instalador. Roda a
+  cada mudança no script e depois de cada release.
+
+### Corrigido
+
+- **README e notas do release:** o "clique direito › Abrir" não libera mais
+  apps não notarizados desde o macOS 15. O caminho manual agora é **Abrir
+  Mesmo Assim**, que fica disponível por cerca de uma hora depois da
+  tentativa, e o instalador de um comando vem primeiro.
+
 ## [3.26.0] - 2026-11-18
 
 ### Adicionado

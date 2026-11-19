@@ -193,12 +193,21 @@ jobs:
           Atualizar**. Ele baixa este zip, confere a assinatura (`.sig`) e abre
           de novo já atualizado.
 
-          **Instalação:** Mac com Apple Silicon e macOS 14+. Baixe o zip,
-          descompacte e mova o app para Aplicativos. Esta versão tem assinatura
-          ad-hoc e **não é notarizada**: na primeira abertura, tente abrir, depois
-          vá em Ajustes do Sistema › Privacidade e Segurança › **Abrir Mesmo Assim**.
-          Depois de atualizar, o macOS pode pedir de novo as permissões do app.
-          Detalhes, riscos e a conferência do SHA-256 no
+          **Instalação:** Mac com Apple Silicon e macOS 14+. O jeito sem aviso do
+          macOS e sem senha é colar no Terminal:
+
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/francisco-efjr/mo-baile/main/tools/instalar.sh | bash
+          ```
+
+          Ele baixa este zip, confere o SHA-256, instala o app e o Python do
+          motor, e abre o Mo baile. Pelo zip: descompacte e mova o app para
+          Aplicativos. Esta versão tem assinatura ad-hoc e **não é notarizada**:
+          na primeira abertura, tente abrir, clique em OK e vá em Ajustes do
+          Sistema › Privacidade e Segurança › **Abrir Mesmo Assim** (o clique
+          direito › Abrir não funciona desde o macOS 15). Depois de atualizar, o
+          macOS pode pedir de novo as permissões do app. Detalhes, riscos e a
+          conferência do SHA-256 no
           [README](https://github.com/francisco-efjr/mo-baile#instalação).
           EOF
 
