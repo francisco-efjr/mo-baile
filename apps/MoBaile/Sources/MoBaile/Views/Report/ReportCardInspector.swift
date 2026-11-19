@@ -29,8 +29,10 @@ struct ReportCardInspector: View {
                         Label("Editar", systemImage: "pencil")
                     }
                     .controlSize(.small)
-                    .disabled(appState.reportOperation != nil)
-                    .help("Corrige os textos do card na spec, sem abrir o JSON")
+                    .disabled(appState.reportOperation != nil || appState.reportSpecEditor != nil)
+                    .help(appState.reportSpecEditor != nil
+                          ? "O editor da spec está aberto: edite o card \(result.cardIndex + 1) por lá"
+                          : "Corrige os textos do card na spec, sem abrir o JSON")
                 }
             }
             .padding(.horizontal, 14)
@@ -80,6 +82,9 @@ struct ReportCardInspector: View {
         .onChange(of: appState.selectedReportResult?.cardIndex) { _, novo in
             if let rascunho, rascunho.cardIndex != novo { self.rascunho = nil }
         }
+        // Um lugar de edição por vez: o editor de spec sabe que há um card aberto aqui.
+        .onChange(of: rascunho?.cardIndex) { _, novo in appState.reportCardEditing = novo }
+        .onDisappear { appState.reportCardEditing = nil }
     }
 
     private func linhas(_ result: ReportResult) -> [(key: String, value: String)] {

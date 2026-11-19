@@ -118,6 +118,9 @@ class AppState {
     /// Spec aberta no editor do app. Ocupa a área no lugar da auditoria.
     var reportSpecEditor: ReportSpecDraft? = nil
     var reportSpecEditorMode: ReportSpecEditorMode = .board
+    /// Card aberto no formulário do inspector. Enquanto houver um, o editor de
+    /// spec não abre: um lugar de edição por vez (RE-07).
+    var reportCardEditing: Int? = nil
     /// Exportação pedida: abre a folha opcional (versão, conta…) antes de gravar.
     var reportExportRequest: ReportExportRequest? = nil
 

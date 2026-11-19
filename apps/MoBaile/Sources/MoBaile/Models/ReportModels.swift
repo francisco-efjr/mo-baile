@@ -358,8 +358,12 @@ struct ReportCardDraft: Equatable, Sendable {
             "secao": .string(secao),
             "titulo": .string(titulo),
             "evento": .string(evento),
-            "params": .array(try params.map(Self.pair)),
-            "variacoes": .array(try variacoes.map { .array(try $0.fields.map(Self.pair)) }),
+            // Linha sem chave e sem valor sai (D3): "Adicionar" não vira erro.
+            "params": .array(try params.filter { !$0.isBlank }.map(Self.pair)),
+            "variacoes": .array(try variacoes
+                .map { $0.fields.filter { !$0.isBlank } }
+                .filter { !$0.isEmpty }
+                .map { .array(try $0.map(Self.pair)) }),
         ]
         if !obsPerFlow { card["obs"] = .string(obs) }
         return .object(card)
@@ -378,26 +382,17 @@ struct ReportCardDraft: Equatable, Sendable {
 extension ReportCardDraft {
     /// O que impede gravar o card, conferido a cada tecla no editor de spec. É
     /// a parte da validação do motor que não precisa do arquivo: evento vazio,
-    /// parâmetro sem nome ou repetido e JSON quebrado.
+    /// parâmetro sem nome ou repetido e JSON quebrado. Vem de `issues()`, que
+    /// diz o mesmo campo a campo; avisos (regra desconhecida) não entram.
     var problems: [String] {
-        var achados: [String] = []
-        if evento.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { achados.append("Evento vazio") }
-        let grupos = [("Parâmetros", params)] + variacoes.enumerated().map { ("Variação \($0.offset + 1)", $0.element.fields) }
-        for (nome, campos) in grupos {
-            var vistos: Set<String> = []
-            for campo in campos {
-                let chave = campo.key.trimmingCharacters(in: .whitespaces)
-                if chave.isEmpty {
-                    achados.append("\(nome): parâmetro sem nome")
-                } else if !vistos.insert(chave).inserted {
-                    achados.append("\(nome): \(chave) repetido")
-                }
-                if campo.isJSON, (try? JSONDecoder().decode(JSONValue.self, from: Data(campo.value.utf8))) == nil {
-                    achados.append("\(nome): \(chave.isEmpty ? "valor" : chave) não é JSON válido")
-                }
+        let achados = issues()
+        var linhas: [String] = achados.evento.map { [$0.message] } ?? []
+        for (id, grupo) in achados.order {
+            for problema in achados.rows[id]?.messages ?? [] where problema.blocking {
+                linhas.append("\(grupo): \(problema.message)")
             }
         }
-        return achados
+        return linhas
     }
 
     /// Título do card como o relatório mostra: o título, ou o evento.

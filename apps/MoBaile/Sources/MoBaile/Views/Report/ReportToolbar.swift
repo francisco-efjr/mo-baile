@@ -77,6 +77,7 @@ struct ReportToolbar: View {
                     Task { await session.openReportSpec(at: URL(fileURLWithPath: spec.path)) }
                 }
                 Button("Editar Spec") { ReportActions.editSpec(spec.path, appState, session) }
+                    .disabled(appState.reportCardEditing != nil)
                 Button("Abrir em Editor Externo") { Exporters.openFile(spec.path) }
                 Button("Mostrar no Finder") { Exporters.revealInFinder(spec.path) }
             }
@@ -260,7 +261,18 @@ enum ReportActions {
 
     /// Abre a spec no editor do app, no lugar da auditoria.
     static func editSpec(_ path: String, _ appState: AppState, _ session: EngineSession) {
+        guard appState.reportCardEditing == nil else {
+            appState.statusMessage = "Grave ou cancele a edição do card no inspector antes de abrir o editor da spec."
+            return
+        }
         Task { await session.openReportSpecEditor(path: path) }
+    }
+
+    /// Por que "Editar Spec" está desligado, ou o que ele faz.
+    static func editSpecHelp(_ appState: AppState) -> String {
+        appState.reportCardEditing != nil
+            ? "Grave ou cancele a edição do card no inspector"
+            : "Abre os cards da spec em quadro ou tabela para corrigir no app"
     }
 
     static func exportTo(_ appState: AppState) {

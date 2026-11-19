@@ -40,15 +40,15 @@ final class ReportSpecEditorTests: XCTestCase {
         spec.cards[0].params.append(.init(key: spec.cards[0].params[0].key, value: "x"))
         spec.cards[0].params.append(.init(key: "", value: "y"))
         let problemas = spec.cards[0].problems
-        XCTAssertTrue(problemas.contains("Evento vazio"), "\(problemas)")
-        XCTAssertTrue(problemas.contains { $0.hasSuffix("repetido") }, "\(problemas)")
-        XCTAssertTrue(problemas.contains { $0.hasSuffix("parâmetro sem nome") }, "\(problemas)")
+        XCTAssertTrue(problemas.contains("Informe o evento (ex.: purchase)."), "\(problemas)")
+        XCTAssertTrue(problemas.contains { $0.hasSuffix("Renomeie ou remova uma das linhas.") }, "\(problemas)")
+        XCTAssertTrue(problemas.contains { $0.hasSuffix("Dê um nome ao parâmetro ou remova a linha.") }, "\(problemas)")
         XCTAssertFalse(spec.canSave)
 
         var json = try self.spec()
         let items = try XCTUnwrap(json.cards[2].params.firstIndex { $0.isJSON })
         json.cards[2].params[items].value = "[{quebrado"
-        XCTAssertTrue(json.cards[2].problems.contains { $0.hasSuffix("não é JSON válido") })
+        XCTAssertTrue(json.cards[2].problems.contains { $0.contains("não é um JSON válido") })
     }
 
     func testCardApontadoPeloMotor() {

@@ -166,8 +166,8 @@ private struct ReportSpecCard: View {
                 HStack {
                     Spacer()
                     Button("Editar Spec") { ReportActions.editSpec(spec.path, appState, session) }
-                        .disabled(appState.reportOperation != nil)
-                        .help("Abre os cards da spec em quadro ou tabela para corrigir no app")
+                        .disabled(appState.reportOperation != nil || appState.reportCardEditing != nil)
+                        .help(ReportActions.editSpecHelp(appState))
                     Button("Auditar") {
                         Task { await session.runReport() }
                     }
@@ -373,6 +373,8 @@ struct ReportResultsTable: View {
 
     @State private var ordem = [KeyPathComparator(\ReportResult.id)]
     @State private var ordemExtras = [KeyPathComparator(\ReportExtra.id)]
+    /// Largura, ordem e visibilidade das colunas sobrevivem ao reabrir.
+    @SceneStorage("colunasRelatorio") private var colunas: TableColumnCustomization<ReportResult>
 
     var body: some View {
         if appState.reportFilter == .outOfSpec {
@@ -385,45 +387,56 @@ struct ReportResultsTable: View {
     private var resultados: some View {
         let theme = themeManager.current
         let linhas = appState.filteredReportResults.sorted(using: ordem)
-        return Table(linhas, selection: selecao, sortOrder: $ordem) {
+        // Evento e Divergências lado a lado e cedo: com sidebar e inspector
+        // sobram ~750 pt, e a coluna que diz o que fazer ficava fora da tela
+        // (RE-04). Horário e Disparos começam ocultos; a pessoa reexibe,
+        // reordena e redimensiona, e a escolha fica guardada.
+        return Table(linhas, selection: selecao, sortOrder: $ordem, columnCustomization: $colunas) {
             TableColumn("Status", value: \.statusRank) { r in
                 StatusIndicator(status: r.status.daemonState, label: r.status.displayName, mono: false)
                     .accessibilityLabel(r.accessibilitySummary)
             }
-            .width(min: 96, ideal: 116, max: 140)
-
-            TableColumn("Seção", value: \.section) { r in
-                Text(r.section).font(DSFont.callout).lineLimit(1).help(r.cardTitle)
-            }
-            .width(min: 70, ideal: 110)
-
-            TableColumn("Fluxo", value: \.flowText) { r in
-                Text(r.flowText).font(DSFont.callout).lineLimit(1)
-            }
-            .width(min: 60, ideal: 120)
+            .width(min: 88, ideal: 96, max: 140)
+            .customizationID("status")
 
             TableColumn("Evento", value: \.event) { r in
                 Text(r.event)
                     .font(DSFont.mono(11, weight: .medium))
                     .foregroundStyle(theme.accentText)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .help(r.event)
             }
-            .width(min: 120, ideal: 220)
+            .width(min: 110, ideal: 150)
+            .customizationID("evento")
 
-            TableColumn("Variação", value: \.variation) { r in
-                Text(r.variation).font(DSFont.mono(11)).lineLimit(1).help(r.variation)
-            }
-            .width(min: 100, ideal: 220)
-
-            TableColumn("Divergências", value: \.divergences) { r in
-                Text(r.status == .ok ? "" : r.divergences)
+            TableColumn("Divergências", value: \.failedChecks) { r in
+                Text(r.divergenceSummary)
                     .font(DSFont.callout)
                     .foregroundStyle(theme.labelSecondary)
                     .lineLimit(1)
-                    .help(r.divergences)
+                    .help(r.divergenceTooltip)
             }
-            .width(min: 120, ideal: 280)
+            .width(min: 140, ideal: 200)
+            .customizationID("divergencias")
+
+            TableColumn("Variação", value: \.variation) { r in
+                Text(r.variation).font(DSFont.mono(11)).lineLimit(1).truncationMode(.middle).help(r.variation)
+            }
+            .width(min: 100, ideal: 140)
+            .customizationID("variacao")
+
+            TableColumn("Seção", value: \.section) { r in
+                Text(r.section).font(DSFont.callout).lineLimit(1).help("\(r.section) · \(r.cardTitle)")
+            }
+            .width(min: 70, ideal: 84)
+            .customizationID("secao")
+
+            TableColumn("Fluxo", value: \.flowText) { r in
+                Text(r.flowText).font(DSFont.callout).lineLimit(1).truncationMode(.middle).help(r.flowText)
+            }
+            .width(min: 60, ideal: 90)
+            .customizationID("fluxo")
 
             TableColumn("Horário", value: \.timeText) { r in
                 Text(r.timeText)
@@ -431,6 +444,8 @@ struct ReportResultsTable: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 70, ideal: 96, max: 120)
+            .customizationID("horario")
+            .defaultVisibility(.hidden)
 
             TableColumn("Disparos", value: \.occurrences) { r in
                 Text("\(r.occurrences)")
@@ -438,6 +453,8 @@ struct ReportResultsTable: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 54, ideal: 64, max: 80)
+            .customizationID("disparos")
+            .defaultVisibility(.hidden)
         }
         .alternatingRowBackgrounds()
         .contextMenu(forSelectionType: ReportResult.ID.self) { ids in
@@ -477,11 +494,13 @@ struct ReportResultsTable: View {
                     .font(DSFont.mono(11, weight: .medium))
                     .foregroundStyle(theme.accentText)
                     .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(e.event)
             }
             .width(min: 120, ideal: 220)
 
             TableColumn("Tela", value: \.screenText) { e in
-                Text(e.screenText).font(DSFont.mono(11)).lineLimit(1).help(e.screenText)
+                Text(e.screenText).font(DSFont.mono(11)).lineLimit(1).truncationMode(.middle).help(e.screenText)
             }
             .width(min: 120, ideal: 260)
 
@@ -491,7 +510,7 @@ struct ReportResultsTable: View {
             .width(min: 70, ideal: 100)
 
             TableColumn("Detail", value: \.detailText) { e in
-                Text(e.detailText).font(DSFont.mono(11)).lineLimit(1).help(e.detailText)
+                Text(e.detailText).font(DSFont.mono(11)).lineLimit(1).truncationMode(.middle).help(e.detailText)
             }
             .width(min: 100, ideal: 200)
 

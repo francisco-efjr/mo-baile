@@ -36,9 +36,15 @@ from mobaile.domain.report import (
     VariantStatus,
 )
 from mobaile.services.report.rules import (
+    ITEMS_SUM,
+    ITEMS_SUM_TOLERANCE,
+    decimal_or_none,
     display_expected,
     expand_spec,
+    format_decimal,
     is_noise_event,
+    items_sum,
+    key_alternatives,
     literal_value,
     value_matches,
 )
@@ -55,6 +61,8 @@ def is_exported(key: str, exported: frozenset[str] | None) -> bool:
     """O log traz este parâmetro? Num logcat (`exported` None), sempre."""
     if exported is None:
         return True
+    if "|" in key:
+        return any(is_exported(alt, exported) for alt in key_alternatives(key))
     if key == "screen_name":
         return "screen_name" in exported or "ga_screen" in exported
     return key in exported
@@ -66,7 +74,9 @@ def check_params(
     """Confere cada parâmetro da spec. O que o export não traz vira "não exportado"."""
     checks: list[ParamCheck] = []
     for key, exp in expected.items():
-        if not is_exported(key, exported):
+        # A soma depende dos itens, que o export do GA4 nunca traz.
+        sum_without_items = _is_items_sum(exp) and not is_exported("items", exported)
+        if sum_without_items or not is_exported(key, exported):
             if key == "items" and isinstance(exp, list):
                 checks.extend(
                     ParamCheck(field=f"items[{i}].{k}", expected=display_expected(v), obtained=None, ok=True, exported=False)
@@ -79,9 +89,51 @@ def check_params(
         if key == "items" and isinstance(exp, list):
             checks.extend(check_items(exp, params.get("items")))
             continue
-        got = screen_of(params) if key == "screen_name" else params.get(key)
-        checks.append(ParamCheck(field=key, expected=display_expected(exp), obtained=got, ok=value_matches(exp, got)))
+        checks.append(check_value(key, key, exp, params, items=params.get("items"), event_level=True))
     return checks
+
+
+def _is_items_sum(expected: Any) -> bool:
+    return isinstance(expected, str) and expected.strip() == ITEMS_SUM
+
+
+def check_value(
+    field: str, key: str, expected: Any, source: dict[str, Any], *, items: Any = None, event_level: bool = False,
+) -> ParamCheck:
+    """Um parâmetro da spec contra o evento ou o item do log.
+
+    - Chave com ``|`` (``item_id|item_name``) passa se uma das alternativas
+      atende. O obtido mostra qual delas veio (``item_name=Tee``).
+    - ``[soma_itens]`` compara o número com a soma de ``price * quantity`` dos
+      itens do evento, com margem de um centavo.
+    """
+    if _is_items_sum(expected):
+        if not event_level:
+            return ParamCheck(field=field, expected="soma dos itens (só vale no evento)",
+                              obtained=source.get(key), ok=False)
+        return _check_items_sum(field, source.get(key), items)
+    alternatives = key_alternatives(key)
+    if len(alternatives) == 1:
+        got = screen_of(source) if event_level and key == "screen_name" else source.get(key)
+        return ParamCheck(field=field, expected=display_expected(expected), obtained=got,
+                          ok=value_matches(expected, got))
+    present: str | None = None
+    for alt in alternatives:
+        got = source.get(alt)
+        if value_matches(expected, got):
+            return ParamCheck(field=field, expected=display_expected(expected), obtained=f"{alt}={got}", ok=True)
+        if present is None and got not in (None, ""):
+            present = f"{alt}={got}"
+    return ParamCheck(field=field, expected=display_expected(expected), obtained=present, ok=False)
+
+
+def _check_items_sum(field: str, got: Any, items: Any) -> ParamCheck:
+    total, reason = items_sum(items)
+    if total is None:
+        return ParamCheck(field=field, expected=f"soma dos itens ({reason})", obtained=got, ok=False)
+    value = decimal_or_none(got)
+    ok = value is not None and abs(value - total) <= ITEMS_SUM_TOLERANCE
+    return ParamCheck(field=field, expected=f"soma dos itens: {format_decimal(total)}", obtained=got, ok=ok)
 
 
 def _item_rules(expected_items: list[Any]) -> list[dict[str, Any]]:
@@ -102,12 +154,9 @@ def check_items(expected_items: list[Any], got_items: Any) -> list[ParamCheck]:
     for i in range(max(len(rules), len(got))):
         rule = rules[min(i, len(rules) - 1)]
         item = got[i] if i < len(got) else {}
-        for item_key, item_exp in rule.items():
-            value = item.get(item_key)
-            checks.append(ParamCheck(
-                field=f"items[{i}].{item_key}", expected=display_expected(item_exp),
-                obtained=value, ok=value_matches(item_exp, value),
-            ))
+        checks.extend(
+            check_value(f"items[{i}].{item_key}", item_key, item_exp, item) for item_key, item_exp in rule.items()
+        )
     return checks
 
 

@@ -53,22 +53,24 @@ EVENTOS = {
 }
 MOEDA = "re:^[A-Z]{3}$"
 VALOR = r"re:^-?\d+(\.\d+)?$"
-ITEM = [{"item_id": "[preenchido]"}]
+SOMA = "[soma_itens]"
+# Regra do GA4 para cada item: item_id ou item_name (3.28.0).
+ITEM = [{"item_id|item_name": "[preenchido]"}]
 REGRAS = {
-    "add_payment_info": {"currency": MOEDA, "value": VALOR, "items": ITEM},
-    "add_shipping_info": {"currency": MOEDA, "value": VALOR, "items": ITEM},
-    "add_to_cart": {"currency": MOEDA, "value": VALOR, "items": ITEM},
-    "add_to_wishlist": {"currency": MOEDA, "value": VALOR, "items": ITEM},
-    "begin_checkout": {"currency": MOEDA, "value": VALOR, "items": ITEM},
-    "purchase": {"currency": MOEDA, "value": VALOR, "transaction_id": "[preenchido]", "items": ITEM},
+    "add_payment_info": {"currency": MOEDA, "value": SOMA, "items": ITEM},
+    "add_shipping_info": {"currency": MOEDA, "value": SOMA, "items": ITEM},
+    "add_to_cart": {"currency": MOEDA, "value": SOMA, "items": ITEM},
+    "add_to_wishlist": {"currency": MOEDA, "value": SOMA, "items": ITEM},
+    "begin_checkout": {"currency": MOEDA, "value": SOMA, "items": ITEM},
+    "purchase": {"currency": MOEDA, "value": SOMA, "transaction_id": "[preenchido]", "items": ITEM},
     "refund": {"currency": MOEDA, "value": VALOR, "transaction_id": "[preenchido]"},
-    "remove_from_cart": {"currency": MOEDA, "value": VALOR, "items": ITEM},
+    "remove_from_cart": {"currency": MOEDA, "value": SOMA, "items": ITEM},
     "select_item": {"items": ITEM},
     "select_promotion": {"items": ITEM},
-    "view_cart": {"currency": MOEDA, "value": VALOR, "items": ITEM},
-    "view_item": {"currency": MOEDA, "value": VALOR, "items": ITEM},
+    "view_cart": {"currency": MOEDA, "value": SOMA, "items": ITEM},
+    "view_item": {"currency": MOEDA, "value": SOMA, "items": ITEM},
     "view_item_list": {"items": ITEM},
-    "view_promotion": {"items": [{"item_name": "[preenchido]"}]},
+    "view_promotion": {"items": ITEM},
 }
 
 
@@ -148,11 +150,81 @@ class TestTodosOsItens(unittest.TestCase):
         self.assertEqual([(c.field, c.obtained, c.ok) for c in checks],
                          [("items[0].item_id", None, False), ("items[0].price", None, False)])
 
-    def test_segundo_item_sem_id_vira_erro_na_auditoria(self):
-        sem_id = bundle_item(item_name="Cap", price="21.01", quantity="2")
-        report = auditar({"begin_checkout": f"currency=USD, value=72.05, items=[{ITEM_1}, {sem_id}]"})
+    def test_segundo_item_sem_id_e_sem_nome_vira_erro_na_auditoria(self):
+        anonimo = bundle_item(price="21.01", quantity="2")
+        report = auditar({"begin_checkout": f"currency=USD, value=72.05, items=[{ITEM_1}, {anonimo}]"})
         self.assertEqual(report.results[0].status, VariantStatus.ERROR)
-        self.assertEqual(divergencias(report)["begin_checkout"], ["items[1].item_id"])
+        self.assertEqual(divergencias(report)["begin_checkout"], ["items[1].item_id|item_name"])
+
+
+REGRA_ID_OU_NOME = ({"item_id|item_name": "[preenchido]"},)
+
+
+class TestItemIdOuItemName(unittest.TestCase):
+    def setUp(self):
+        self.REGRA = list(REGRA_ID_OU_NOME)
+
+    def test_basta_uma_das_chaves(self):
+        checks = check_items(self.REGRA, [{"item_id": "SKU_1"}, {"item_name": "Tee"}, {"item_id": "", "item_name": "Cap"}])
+        self.assertEqual([(c.ok, c.obtained) for c in checks],
+                         [(True, "item_id=SKU_1"), (True, "item_name=Tee"), (True, "item_name=Cap")])
+
+    def test_sem_nenhuma_das_duas_diverge(self):
+        (check,) = check_items(self.REGRA, [{"price": "10.01"}])
+        self.assertEqual((check.field, check.obtained, check.ok), ("items[0].item_id|item_name", None, False))
+
+    def test_valor_presente_que_nao_atende_aparece_no_obtido(self):
+        (check,) = check_items([{"item_id|item_name": "re:^SKU_\\d+$"}], [{"item_id": "abc"}])
+        self.assertEqual((check.obtained, check.ok), ("item_id=abc", False))
+
+    def test_tambem_vale_no_nivel_do_evento(self):
+        report = auditar({"purchase": "currency=USD, promotion_id=P_1, transaction_id=T_1"},
+                         {"purchase": {"coupon|promotion_id": "[preenchido]"}})
+        self.assertEqual(report.results[0].status, VariantStatus.OK)
+        self.assertEqual(report.results[0].checks[0].obtained, "promotion_id=P_1")
+
+
+class TestSomaDosItens(unittest.TestCase):
+    def soma(self, corpo: str):
+        report = auditar({"view_cart": corpo}, {"view_cart": {"value": "[soma_itens]"}})
+        (check,) = report.results[0].checks
+        return check
+
+    def test_value_igual_a_soma_de_price_vezes_quantity(self):
+        check = self.soma(f"value=72.05, items=[{ITEM_1}, {ITEM_2}]")
+        self.assertEqual((check.expected, check.obtained, check.ok), ("soma dos itens: 72.05", "72.05", True))
+
+    def test_value_diferente_da_soma_diverge(self):
+        check = self.soma(f"value=999.99, items=[{ITEM_1}, {ITEM_2}]")
+        self.assertEqual((check.expected, check.ok), ("soma dos itens: 72.05", False))
+
+    def test_value_com_frete_e_imposto_diverge(self):
+        self.assertFalse(self.soma(f"value=76.49, items=[{ITEM_1}, {ITEM_2}]").ok)
+
+    def test_margem_de_um_centavo(self):
+        self.assertTrue(self.soma(f"value=72.06, items=[{ITEM_1}, {ITEM_2}]").ok)
+        self.assertFalse(self.soma(f"value=72.07, items=[{ITEM_1}, {ITEM_2}]").ok)
+
+    def test_quantity_ausente_vale_um(self):
+        item = bundle_item(item_id="A", price="9.90")
+        self.assertTrue(self.soma(f"value=19.8, items=[{item}, {item}]").ok)
+
+    def test_item_sem_price_impede_a_soma_e_diz_por_que(self):
+        check = self.soma("value=10, items=[" + bundle_item(item_id="A", quantity="1") + "]")
+        self.assertEqual((check.expected, check.ok), ("soma dos itens (items[0].price ausente ou não numérico)", False))
+
+    def test_sem_itens_diz_por_que(self):
+        check = self.soma("value=10")
+        self.assertEqual((check.expected, check.ok), ("soma dos itens (o evento não tem itens)", False))
+
+    def test_value_com_virgula_nao_e_numero(self):
+        self.assertFalse(self.soma(f"value=30,03, items=[{ITEM_1}]").ok)
+
+    def test_no_export_do_ga4_sem_itens_fica_nao_exportado(self):
+        from mobaile.services.report.audit import check_params
+
+        (check,) = check_params({"value": "[soma_itens]"}, {"value": "72.05"}, frozenset({"value"}))
+        self.assertEqual((check.exported, check.ok), (False, True))
 
 
 class TestOsCatorzeEventos(unittest.TestCase):

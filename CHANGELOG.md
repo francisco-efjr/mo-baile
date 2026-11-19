@@ -5,6 +5,82 @@ antiga. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 e a numeração segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A regra de quando e como subir a versão está em [docs/VERSIONAMENTO.md](docs/VERSIONAMENTO.md).
 
+## [3.28.0] - 2026-11-19
+
+Fecha a conferência dos eventos de vendas on-line do GA4 e refaz a edição e a
+leitura da aba Relatório com textos grandes. A análise de design, com as
+recomendações RE-01 a RE-08, está em
+[docs/melhorias/2026-11-19-relatorio-edicao/](docs/melhorias/2026-11-19-relatorio-edicao/),
+e os prints de antes e depois em `docs/design/telas/textos-grandes/`.
+
+### Adicionado
+
+- **Regras novas na spec** ([ajuda do Relatório](docs/ajuda/report.md)):
+  - **`item_id|item_name`**: uma chave com `|`, no evento ou no item, passa se
+    qualquer uma das chaves atender. É a regra do GA4 para cada item. O obtido
+    mostra qual chave veio (`item_name=Tee`).
+  - **`[soma_itens]`** no `value`: o valor tem de ser um número igual à soma de
+    `price × quantity` dos itens, sem frete nem imposto, com margem de um
+    centavo. Sem `quantity`, o item conta 1. Item sem `price` numérico diz o
+    motivo em vez de somar errado. No TSV do GA4, que não traz os itens, a
+    regra fica como "não exportado".
+- **Editor de JSON** para o valor `items` (RE-03): a célula mostra um resumo
+  ("lista · 2 itens · item_id, price") e abre uma folha com o JSON formatado.
+  - A folha confere o JSON a cada tecla e mostra a linha e a coluna do erro em
+    português.
+  - Aplicar (⌘↩) só fica ligado quando o JSON é válido.
+- **Inserir Regra** ao lado de cada valor e **Regras dos Valores** (?) no
+  cabeçalho do editor (RE-08).
+
+### Mudado
+
+- **Erro no próprio campo** (RE-02), no Quadro, na Tabela e no formulário do
+  inspector, com borda e frase logo abaixo.
+  - O erro só aparece depois que você sai do campo ou tenta gravar, e some
+    assim que o valor fica válido.
+  - As frases dizem o que fazer ("Dê um nome ao parâmetro ou remova a linha.").
+  - O cabeçalho do editor mostra "N para corrigir", que leva ao primeiro erro.
+  - A Tabela ganhou uma coluna de situação e uma barra com a frase da linha
+    escolhida e Próximo Problema (⌘').
+  - Regra digitada errada (`[soma_item]`) vira aviso amarelo, com a sugestão,
+    e não impede gravar.
+- **Linha vazia sai ao gravar** (D3): "Adicionar" não cria mais um erro antes
+  de você digitar.
+- **Linhas chave e valor que acompanham o texto** (RE-05):
+  - a largura da chave vem do conteúdo, e o valor quebra em até 4 linhas;
+  - no inspector estreito, chave e valor empilham;
+  - Seção, Título, Evento e Observação crescem com o texto;
+  - remover tem alvo de 24×22 pt.
+- **Teclado** (RE-06):
+  - Adicionar leva o foco para a linha nova;
+  - Return passa da chave ao valor e do valor à próxima linha;
+  - Esc num campo do formulário do inspector termina o campo em vez de
+    cancelar o card.
+- **Um lugar de edição por vez** (RE-07): com o editor da spec aberto, o
+  Editar do inspector fica desligado, e vice-versa, com o motivo no tooltip.
+  Antes os dois editavam o mesmo card sem se ver, com dois ⌘S.
+- **Validação agrupada por item** (RE-01):
+  - parâmetros do evento no topo e um grupo por item, que abre sozinho quando
+    diverge ("Item 4 · SKU-10004 · 2 de 2 divergem");
+  - recorte Todos | Divergentes, que começa em Divergentes quando há mais de
+    12 linhas;
+  - Parâmetro com largura fixa, e obtido e esperado empilham no painel
+    estreito;
+  - na aba Disparo, um grupo por item no lugar do JSON cortado em 3 linhas.
+- **Tabela da auditoria** (RE-04):
+  - Evento e Divergências vêm logo depois do Status;
+  - Divergências mostra um resumo ("value · items: 3 itens") e ordena pelo
+    número de falhas;
+  - Horário e Disparos começam ocultos;
+  - as colunas podem ser reexibidas, reordenadas e redimensionadas, e a
+    escolha fica guardada.
+
+### Corrigido
+
+- Disparos anteriores com dezenas de divergências viravam um parágrafo
+  enorme. Agora aparecem as 3 primeiras, e o resto fica no tooltip.
+
+
 ## [3.27.0] - 2026-11-19
 
 Correções que saíram da validação contra os eventos de vendas on-line do GA4

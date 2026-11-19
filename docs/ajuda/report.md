@@ -39,6 +39,7 @@ Você precisa auditar a tela de login do DemoApp contra os cards do Figma. Impor
 - **Filtros**: Todas, Pedem Ação, Divergentes, Não Disparadas, OK e Fora da Spec.
 - **Copiar Bug**: copia o modelo de bug do time para o app auditado.
 - **Exportar**: salva em HTML, Markdown, TSV e Excalidraw.
+- **Regras dos valores** (botão ? no editor): `[preenchido]`, `[numero]`, `[data]`, `[a|b]`, `re:…` e `{fluxo}`. `[soma_itens]` no `value` confere a soma de price × quantity dos itens. A chave `item_id|item_name` aceita uma das duas. Todos os itens de `items` são conferidos.
 
 ## Problemas comuns
 

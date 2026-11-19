@@ -13,6 +13,12 @@ Valores aceitos nos parâmetros da spec:
 - ``items``: lista de objetos cujos campos seguem as mesmas regras. Desde a
   3.27.0, todos os itens do log são conferidos: o item ``i`` segue o item ``i``
   da spec, e os que sobram seguem o último (`audit.check_items`).
+- chave com ``|``, no evento ou no item: ``item_id|item_name``. Basta uma das
+  chaves atender o valor. É a regra do GA4 para itens: ``item_id`` ou
+  ``item_name`` (3.28.0).
+- ``[soma_itens]``, só no valor inteiro: o parâmetro é um número igual à soma de
+  ``price * quantity`` dos itens do evento, sem frete nem imposto, como o GA4
+  pede para ``value``. ``quantity`` ausente vale 1 (3.28.0).
 
 ``{fluxo}`` é trocado por cada chave de ``fluxos``; ``params_por_fluxo``
 sobrescreve valores de um fluxo.
@@ -23,6 +29,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from typing import Any
 
@@ -31,6 +38,9 @@ from mobaile.domain.report import SpecCard, SpecTemplate, Variant
 NUMBER = "[numero]"
 DATE = "[data]"
 FILLED = "[preenchido]"
+ITEMS_SUM = "[soma_itens]"
+# Margem da soma dos itens: arredondamento de centavos entre o app e a conta.
+ITEMS_SUM_TOLERANCE = Decimal("0.01")
 
 _TOKEN_REGEX = {NUMBER: r"-?\d+(?:[.,]\d+)?", DATE: r"\d{2}/\d{2}/\d{4}", FILLED: r".+"}
 # Trechos "[a|b]" (alternância) ou "[numero]" / "[data]" / "[preenchido]" dentro de um valor.
@@ -166,6 +176,55 @@ def display_expected(expected: Any) -> str:
     """Texto curto do valor esperado, para relatório."""
     text = str(expected)
     return text[3:] if text.startswith("re:") else text
+
+
+# ------------------------------------------------------------- soma dos itens
+
+
+def decimal_or_none(value: Any) -> Decimal | None:
+    """Número do log como `Decimal`, ou `None`. Vírgula não vale: o GA4 pede número."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() else None
+
+
+def items_sum(items: Any) -> tuple[Decimal | None, str | None]:
+    """Soma de ``price * quantity`` dos itens, ou o motivo de não dar para somar.
+
+    ``quantity`` ausente vale 1, como no GA4. Item sem ``price`` numérico, ou com
+    ``quantity`` que não é número, impede a soma: o resultado diria um valor que
+    o app não mandou.
+    """
+    if not isinstance(items, list) or not items:
+        return None, "o evento não tem itens"
+    total = Decimal(0)
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            return None, f"items[{i}] não é um item"
+        price = decimal_or_none(item.get("price"))
+        if price is None:
+            return None, f"items[{i}].price ausente ou não numérico"
+        raw_quantity = item.get("quantity")
+        quantity = Decimal(1) if raw_quantity in (None, "") else decimal_or_none(raw_quantity)
+        if quantity is None:
+            return None, f"items[{i}].quantity não numérico"
+        total += price * quantity
+    return total, None
+
+
+def format_decimal(number: Decimal) -> str:
+    """``72.0500`` vira ``72.05``; ``30`` continua ``30``."""
+    text = format(number.normalize(), "f")
+    return text if "." not in text else text.rstrip("0").rstrip(".") or "0"
+
+
+def key_alternatives(key: str) -> list[str]:
+    """``item_id|item_name`` vira ``["item_id", "item_name"]``."""
+    return [part.strip() for part in key.split("|") if part.strip()] if "|" in key else [key]
 
 
 # ------------------------------------------------------------------- expansão
