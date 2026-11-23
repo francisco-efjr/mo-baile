@@ -33,7 +33,7 @@ maestro = ["PyYAML>=6.0"]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
-    "ruff==0.16.6",  # fixo: versão nova traz regra nova e quebra o CI sem mudança no código
+    "ruff==0.17.6",  # fixo: versão nova traz regra nova e quebra o CI sem mudança no código
     "bandit>=1.7.0",
     "pip-audit>=2.7.0",
     "PyYAML>=6.0",
